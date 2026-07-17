@@ -6,6 +6,7 @@ const { hashPassword } = require('../auth/password');
 const { generateToken, hashToken } = require('../auth/tokens');
 const { signJwt } = require('../auth/jwt');
 const { sendMail } = require('../mail/mailer');
+const { HttpError } = require('../errors');
 
 const CLAIM_TTL = "interval '24 hours'";
 
@@ -13,13 +14,6 @@ const KINDS = {
   company: { table: 'companies', tenantCol: 'company_id', adminRole: 'company_admin' },
   school: { table: 'schools', tenantCol: 'school_id', adminRole: 'school_admin' },
 };
-
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
 
 function kindConfig(kind) {
   const cfg = KINDS[kind];
