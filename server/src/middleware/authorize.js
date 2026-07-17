@@ -16,13 +16,17 @@ function requireRole(...roles) {
   };
 }
 
-// Operate-rights gate (§5.3): block users whose org is still pending a claim
-// (signed up against a placeholder but email not yet verified). Applied to data routes;
-// NOT to /auth/me or the verification endpoints, so a pending user can still see their
-// state and finish verifying. Fresh signups are born 'claimed' and pass straight through.
+// Operate-rights gate (§5.3). A user may operate only if BOTH hold:
+//   1. their org's claim is finalized ('claimed'), and
+//   2. their own account is confirmed (email_verified_at is set).
+// Clause 2 is essential: without it, a losing pending-claimant who stays attached to a
+// placeholder that someone ELSE later claims (after a 24h-expiry takeover) would inherit
+// operate-rights on that org without ever verifying their own email.
+// INVARIANT: every operational user must have email_verified_at set — fresh signups and
+// verified claimants do; admin-created drivers/staff (future slice) must stamp it at creation.
 function requireOperable(req, res, next) {
   if (!req.auth) return res.status(401).json({ error: 'unauthenticated' });
-  if (req.auth.orgClaimStatus !== 'claimed') {
+  if (req.auth.orgClaimStatus !== 'claimed' || !req.auth.emailVerifiedAt) {
     return res.status(403).json({ error: 'account pending email verification' });
   }
   next();
