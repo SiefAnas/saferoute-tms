@@ -20,7 +20,12 @@ module.exports = async function authenticate(req, res, next) {
     }
 
     const { rows } = await pool.query(
-      'SELECT id, role, company_id, school_id, is_active FROM users WHERE id = $1',
+      `SELECT u.id, u.role, u.company_id, u.school_id, u.is_active, u.email_verified_at,
+              COALESCE(c.claim_status, s.claim_status) AS org_claim_status
+         FROM users u
+         LEFT JOIN companies c ON c.id = u.company_id
+         LEFT JOIN schools   s ON s.id = u.school_id
+        WHERE u.id = $1`,
       [claims.sub]
     );
     const user = rows[0];
@@ -30,7 +35,16 @@ module.exports = async function authenticate(req, res, next) {
 
     const tenantType = tenantTypeForRole(user.role);
     const tenantId = tenantType === 'company' ? user.company_id : user.school_id;
-    req.auth = { userId: user.id, role: user.role, tenantType, tenantId };
+    req.auth = {
+      userId: user.id,
+      role: user.role,
+      tenantType,
+      tenantId,
+      // Operate-rights gate: a claim isn't finalized until the org is 'claimed'
+      // (pending_claim = signed up but email not yet verified). §5.3.
+      orgClaimStatus: user.org_claim_status,
+      emailVerifiedAt: user.email_verified_at,
+    };
     next();
   } catch (err) {
     next(err);

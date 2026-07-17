@@ -16,6 +16,18 @@ function requireRole(...roles) {
   };
 }
 
+// Operate-rights gate (§5.3): block users whose org is still pending a claim
+// (signed up against a placeholder but email not yet verified). Applied to data routes;
+// NOT to /auth/me or the verification endpoints, so a pending user can still see their
+// state and finish verifying. Fresh signups are born 'claimed' and pass straight through.
+function requireOperable(req, res, next) {
+  if (!req.auth) return res.status(401).json({ error: 'unauthenticated' });
+  if (req.auth.orgClaimStatus !== 'claimed') {
+    return res.status(403).json({ error: 'account pending email verification' });
+  }
+  next();
+}
+
 // Tables where a driver is limited to rows they own, and by which column.
 const DRIVER_OWNER_COLUMN = {
   sessions: 'user_id',
@@ -32,4 +44,4 @@ function ownerScope(req, table) {
   return null;
 }
 
-module.exports = { requireRole, ownerScope, DRIVER_OWNER_COLUMN };
+module.exports = { requireRole, requireOperable, ownerScope, DRIVER_OWNER_COLUMN };
