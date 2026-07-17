@@ -2,9 +2,12 @@
   "name": "saferoute-tms-server",
   "version": "0.1.0",
   "private": true,
-  "description": "SafeRoute TMS backend — Node/Express/PostgreSQL (schema & migrations)",
+  "description": "SafeRoute TMS backend — Node/Express/PostgreSQL",
   "license": "UNLICENSED",
+  "main": "src/index.js",
   "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
     "migrate": "node-pg-migrate --envPath .env",
     "migrate:up": "node-pg-migrate up --envPath .env",
     "migrate:down": "node-pg-migrate down --envPath .env",
@@ -12,7 +15,10 @@
     "migrate:create": "node-pg-migrate create --envPath .env"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
     "node-pg-migrate": "^7.9.1",
     "pg": "^8.13.1"
   }
