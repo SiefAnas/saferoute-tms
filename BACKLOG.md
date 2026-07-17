@@ -26,13 +26,11 @@ for things noticed while building that aren't in the spec's own backlog.
 - **`trip_count` bump isn't transactional** with the trip insert (two statements) — a failure
   between them could drift the per-shift count. Low severity.
 
-## Remaining Step 3 slices (build order, on hold pending review)
-- **Placeholder-creation endpoints** — the other side creating stubs (company_admin → school
-  stub, school_admin → company stub); wire the creator edit-rights guard into that flow.
-- **Resource routes** — Users, Sessions, Trips (two-way confirmation + 5-min auto-complete),
-  Assignments, PayRules.
-- **`school_staff` "granted-students-only" sub-scope** — needs a subquery against
-  `staff_student_access`; apply in the student/trip routes when built.
+## Step 3 status — COMPLETE
+- Placeholder creation (a3134ca), Users/Vans/Students/Sessions/Assignments/PayRules (a3134ca),
+  Trips with two-way confirmation + 5-min auto-complete (bb1bbf8). The `school_staff`
+  granted-students sub-scope landed with Trips (via the accessor's `ownerIn`).
+- Next: Step 4 (React frontend).
 
 ## Hardening (post-MVP or as time allows)
 - **Postgres RLS** as belt-and-suspenders on top of the app-layer scoped accessor.
