@@ -57,13 +57,26 @@ function scopeColumn(table, tenantType) {
 function createScopedDb(pool, tenant, actor) {
   // Build the WHERE fragment: always tenant, optionally an ownership sub-scope
   // (e.g. driver -> own rows), optionally extra equality filters.
-  const buildWhere = (table, { where = {}, owner = null } = {}) => {
+  // ownerIn implements a whitelisted subquery sub-scope, e.g. school_staff limited to their
+  // granted students: student_id IN (SELECT student_id FROM staff_student_access WHERE
+  // staff_user_id = $me). All identifiers are validated; the match value is parameterized.
+  const buildWhere = (table, { where = {}, owner = null, ownerIn = null } = {}) => {
     const col = scopeColumn(table, tenant.type);
     const clauses = [`${ident(col)} = $1`];
     const values = [tenant.id];
     if (owner) {
       values.push(owner.value);
       clauses.push(`${ident(owner.column)} = $${values.length}`);
+    }
+    if (ownerIn) {
+      const subClauses = [];
+      for (const [k, v] of Object.entries(ownerIn.match)) {
+        values.push(v);
+        subClauses.push(`${ident(k)} = $${values.length}`);
+      }
+      clauses.push(
+        `${ident(ownerIn.column)} IN (SELECT ${ident(ownerIn.refColumn)} FROM ${ident(ownerIn.table)} WHERE ${subClauses.join(' AND ')})`
+      );
     }
     for (const [k, v] of Object.entries(where)) {
       values.push(v);

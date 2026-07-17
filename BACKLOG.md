@@ -16,6 +16,16 @@ for things noticed while building that aren't in the spec's own backlog.
 - **Defense-in-depth on claim finalize** — beyond the `requireOperable` fix, consider
   deactivating losing pending-claimants when a claim is finalized.
 
+## From the Trips slice review (low-severity, non-exploitable — backlogged)
+- **Confirm/sweep race (cosmetic):** `confirmTrip` reads status then updates without an atomic
+  `WHERE status='pending'` guard. If the auto-complete sweep lands in the gap, a staff confirm
+  can write `staff_confirmed_at` onto an already-swept trip, leaving `auto_completed=true` *and*
+  both timestamps. End state is still a valid `complete` trip (proven by a regression test) —
+  only the `auto_completed` flag is cosmetically off. Hardening: conditional update on
+  `status='pending'` (needs a `where`/status option on the accessor's update).
+- **`trip_count` bump isn't transactional** with the trip insert (two statements) — a failure
+  between them could drift the per-shift count. Low severity.
+
 ## Remaining Step 3 slices (build order, on hold pending review)
 - **Placeholder-creation endpoints** — the other side creating stubs (company_admin → school
   stub, school_admin → company stub); wire the creator edit-rights guard into that flow.
