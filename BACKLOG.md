@@ -4,6 +4,32 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## Resolved
+- ~~Driver dashboard rendered in a collapsed near-zero-width column on desktop~~ — root
+  cause was a Tailwind v4 theme-token naming collision, not a missing responsive
+  breakpoint. `client/src/index.css`'s `@theme` block defines a custom 8px-rhythm spacing
+  scale (`--spacing-xs/sm/md/lg/xl`, for padding/gap utilities per DESIGN.md). Tailwind v4
+  resolved `DriverLayout.tsx`'s `max-w-lg` utility against that same `--spacing-lg: 24px`
+  token instead of its own built-in ~512px named max-width scale, compiling to
+  `.max-w-lg { max-width: var(--spacing-lg) }` (24px) — collapsing the driver shell's main
+  content column to near-zero width regardless of viewport size, so everything inside
+  (status cards, trip form, trip list) crammed together. Confirmed isolated to this one
+  instance (`grep` across `client/src` for any other `w-/max-w-/min-w-/h-/max-h-/min-h-`
+  utility using an `xs/sm/md/lg/xl` suffix found none). Fixed by using an explicit
+  arbitrary value (`max-w-[32rem]`) in `DriverLayout.tsx` instead of the ambiguous named
+  utility — preserves the original intended ~512px mobile-shell width without touching the
+  shared `--spacing-*` theme tokens other pages may depend on. Verified live: desktop-width
+  (1440px) render is now a properly centered ~512px column (unchanged design intent — this
+  is a deliberate mobile-first shell per the file's own comment, not a responsive-grid
+  page like Company/School admin), and the driver's actual trip data (check-in status,
+  student list, logged trips) displays correctly once un-crammed.
+  **Follow-up not done here** (out of scope for this fix): the underlying
+  `--spacing-{name}` vs. named max-width-scale collision could silently affect any
+  *future* use of a `w-`/`max-w-`/`min-w-`/`h-`-family utility with an `xs/sm/md/lg/xl`
+  suffix anywhere else in the app. Worth a follow-up to rename the custom spacing tokens
+  (e.g. `--spacing-gap-lg`) to avoid the collision at the source, rather than relying on
+  everyone remembering to use arbitrary values.
+
 ## Open — awaiting a decision from Anas
 - **No `GET /schools` endpoint for company_admin** — the new Students management page
   (`/company/students`) lets company_admin create a student against an *existing* school,

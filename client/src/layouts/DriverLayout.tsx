@@ -28,7 +28,7 @@ export function DriverLayout() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-lg flex-1 px-4 pt-2 pb-32">
+      <main className="mx-auto w-full max-w-[32rem] flex-1 px-4 pt-2 pb-32">
         <Outlet />
       </main>
 

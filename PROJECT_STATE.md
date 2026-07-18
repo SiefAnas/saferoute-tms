@@ -202,3 +202,12 @@ See **`BACKLOG.md`** — not duplicated here. As of this snapshot: 2 open items 
 RLS, real email transport, both listed above since they're also "remaining work"), 1
 item resolved-by-design (company linking), everything else from the Step 3/Trips/Step 4
 reviews and the hardening pass resolved and tested.
+
+**2026-07-18 addendum:** a live-deploy bug report (Driver dashboard rendering as a
+near-zero-width collapsed column on desktop) was investigated and fixed this session —
+see the new "Resolved" entry at the top of `BACKLOG.md` for the root cause (a Tailwind
+theme-token naming collision, not a missing responsive breakpoint) and verification.
+Note for future reference: this session's task prompt referenced a "Known-broken"
+section with a numbered list (this bug as "item #6") that does not exist anywhere in
+this repo's history — flagging the mismatch rather than fabricating that section, per
+this file's own precedent in §6 above.
