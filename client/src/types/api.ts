@@ -19,6 +19,30 @@ export interface LoginResponse {
   user: AuthUser
 }
 
+export type OrgKind = 'company' | 'school'
+
+// GET /signup/:kind/claimable — minimal fields only, no creator identity (§5.3).
+export interface ClaimCandidate {
+  id: string
+  name: string
+  address: string | null
+  addedByPartner: true
+}
+
+// POST /signup/:kind response is a union: a fresh org is immediately operational
+// (§5.2); a claim is pending until the claimant verifies their email (§5.3). NOTE:
+// the 'created' shape's `user` is intentionally NOT the same as AuthUser (no
+// full_name/tenantType/tenantId) — callers should follow up with a real login()
+// rather than trying to synthesize a full session from this alone.
+export type SignupResponse =
+  | { mode: 'created'; token: string; user: { id: string; email: string; role: Role } }
+  | { mode: 'pending_claim'; userId: string; email: string }
+
+export interface VerifyEmailResponse {
+  verified: boolean
+  claimFinalized: boolean
+}
+
 export interface PublicUser {
   id: string
   email: string

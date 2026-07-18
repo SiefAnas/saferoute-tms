@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { ROLE_HOME } from '../../lib/roleHome'
 import { Button } from '../../components/Button'
@@ -110,6 +110,10 @@ export function LoginPage() {
             )}
           </Button>
         </form>
+
+        <Link to="/register" className="text-label-md text-primary hover:underline">
+          New here? Register your company or school
+        </Link>
       </div>
     </main>
   )

@@ -11,13 +11,17 @@ interface NavItem {
 // DESIGN.md "Layout & Spacing": admin screens use a fluid 12-column grid with a fixed
 // sidebar shell — shared here across company_admin and (later) school_admin, parameterized
 // by title/nav so each role's own section list can differ without duplicating the shell.
+//
+// The subtitle line shows the authenticated user's own email rather than an org display
+// name: there's no API endpoint to look up a company/school's name by id, so a hardcoded
+// or guessed org name would silently show the WRONG organization for any user other than
+// the one it was hardcoded for (caught live: a freshly-registered company showed the
+// original seed company's name here). Revisit once such a lookup endpoint exists.
 export function AdminLayout({
   title,
-  subtitle,
   navItems,
 }: {
   title: string
-  subtitle: string
   navItems: NavItem[]
 }) {
   const { user, logout } = useAuth()
@@ -31,7 +35,7 @@ export function AdminLayout({
           </div>
           <div>
             <h1 className="text-headline-md font-bold text-primary">{title}</h1>
-            <p className="text-label-md text-secondary opacity-70">{subtitle}</p>
+            <p className="text-label-md text-secondary opacity-70">{user?.email}</p>
           </div>
         </div>
 

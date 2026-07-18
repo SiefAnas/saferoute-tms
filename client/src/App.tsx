@@ -5,6 +5,8 @@ import { ProtectedRoute } from './routes/ProtectedRoute'
 import { DriverLayout } from './layouts/DriverLayout'
 import { AdminLayout } from './layouts/AdminLayout'
 import { LoginPage } from './pages/login/LoginPage'
+import { RegisterPage } from './pages/register/RegisterPage'
+import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
 import { DriverDashboard } from './pages/driver/DriverDashboard'
 import { CompanyAdminDashboard } from './pages/company/CompanyAdminDashboard'
 import { ComingSoonPage } from './pages/ComingSoonPage'
@@ -21,6 +23,8 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       <Route element={<ProtectedRoute roles={['driver']} />}>
         <Route element={<DriverLayout />}>
@@ -29,7 +33,7 @@ function App() {
       </Route>
 
       <Route element={<ProtectedRoute roles={['company_admin']} />}>
-        <Route element={<AdminLayout title="Dispatcher Hub" subtitle="3 Bees Transportation" navItems={COMPANY_NAV} />}>
+        <Route element={<AdminLayout title="Dispatcher Hub" navItems={COMPANY_NAV} />}>
           <Route path="/company" element={<CompanyAdminDashboard />} />
         </Route>
       </Route>
