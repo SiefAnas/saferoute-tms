@@ -38,7 +38,7 @@ async function logTrip(req, body = {}) {
 
   // Insert + trip_count bump as one transaction (BACKLOG fix): previously two separate
   // pool.query calls, so a failure between them could drift the per-shift count.
-  return withTx(async (client) => {
+  const trip = await withTx(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO trips (session_id, company_id, student_id, school_id, trip_type, driver_confirmed_at, status)
        VALUES ($1, $2, $3, $4, $5, now(), 'pending')
@@ -51,6 +51,8 @@ async function logTrip(req, body = {}) {
     );
     return rows[0];
   });
+  const [enriched] = await attachDriverContact([trip]);
+  return enriched;
 }
 
 async function confirmTrip(req, id) {
@@ -72,17 +74,41 @@ async function confirmTrip(req, id) {
     { where: { status: 'pending' } }
   );
   if (!updated) throw new HttpError(409, 'trip already complete');
-  return updated;
+  const [enriched] = await attachDriverContact([updated]);
+  return enriched;
+}
+
+// Attach the driver's name + phone (name/phone only — no email/other PII) so school_staff
+// can see who they're handing a student to/from (§7.4). This is enrichment, not a new
+// authorization surface: the session_ids come from trip rows that already passed the
+// caller's scoped read above, so this lookup can't reveal a trip/driver the caller
+// shouldn't see — it only adds two fields to rows they were already allowed to read.
+async function attachDriverContact(trips) {
+  if (trips.length === 0) return trips;
+  const sessionIds = [...new Set(trips.map((t) => t.session_id))];
+  const { rows } = await pool.query(
+    `SELECT s.id AS session_id, u.full_name AS driver_name, u.phone AS driver_phone
+       FROM sessions s JOIN users u ON u.id = s.user_id
+      WHERE s.id = ANY($1::uuid[])`,
+    [sessionIds]
+  );
+  const bySession = new Map(rows.map((r) => [r.session_id, r]));
+  return trips.map((t) => {
+    const driver = bySession.get(t.session_id);
+    return { ...t, driver_name: driver?.driver_name ?? null, driver_phone: driver?.driver_phone ?? null };
+  });
 }
 
 async function listTrips(req) {
-  return req.db.findMany('trips', { ...readScope(req), orderBy: 'created_at' });
+  const trips = await req.db.findMany('trips', { ...readScope(req), orderBy: 'created_at' });
+  return attachDriverContact(trips);
 }
 
 async function getTrip(req, id) {
   const trip = await req.db.findById('trips', id, readScope(req));
   if (!trip) throw new HttpError(404, 'trip not found');
-  return trip;
+  const [enriched] = await attachDriverContact([trip]);
+  return enriched;
 }
 
 // Background sweep: complete half-confirmed trips older than the threshold. System-wide

@@ -38,7 +38,7 @@ async function main() {
     const A = await ins("INSERT INTO companies(name,claim_status,claimed_at) VALUES('Co A','claimed',now()) RETURNING id");
     const B = await ins("INSERT INTO companies(name,claim_status,claimed_at) VALUES('Co B','claimed',now()) RETURNING id");
     const S = await ins("INSERT INTO schools(name,claim_status,claimed_at) VALUES('School S','claimed',now()) RETURNING id");
-    const driverA = await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,email_verified_at) VALUES('drv@a.com',$1,'Drv','driver',$2,now()) RETURNING id", [h, A.id]);
+    const driverA = await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,phone,email_verified_at) VALUES('drv@a.com',$1,'Drv','driver',$2,'555-0100',now()) RETURNING id", [h, A.id]);
     await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,email_verified_at) VALUES('adm@a.com',$1,'Adm','company_admin',$2,now()) RETURNING id", [h, A.id]);
     await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,email_verified_at) VALUES('adm@b.com',$1,'AdmB','company_admin',$2,now()) RETURNING id", [h, B.id]);
     const staff1 = await ins("INSERT INTO users(email,password_hash,full_name,role,school_id,email_verified_at) VALUES('s1@s.com',$1,'Staff1','school_staff',$2,now()) RETURNING id", [h, S.id]);
@@ -67,6 +67,7 @@ async function main() {
       const t1 = await api('POST', '/trips', drv, { student_id: stu1.id, trip_type: 'pickup' });
       (t1.status === 201 && t1.body.status === 'pending' && t1.body.driver_confirmed_at && !t1.body.staff_confirmed_at)
         ? ok('log trip -> 201 pending, driver_confirmed set, staff not') : bad(`log: ${t1.status} ${JSON.stringify(t1.body)}`);
+      eq('log-trip response is also enriched with driver contact', t1.body.driver_name, 'Drv');
       const sess = (await api('GET', `/sessions/${ci.body.id}`, drv)).body;
       eq('session.trip_count incremented to 1', sess.trip_count, 1);
       eq('driver logging a student not in their company -> 404', (await api('POST', '/trips', drv, { student_id: stuB.id, trip_type: 'pickup' })).status, 404);
@@ -76,6 +77,7 @@ async function main() {
       const conf = await api('POST', `/trips/${t1.body.id}/confirm`, s1);
       (conf.status === 200 && conf.body.status === 'complete' && conf.body.staff_confirmed_at && conf.body.auto_completed === false)
         ? ok('granted staff confirms -> complete (both sides, not auto)') : bad(`confirm: ${conf.status} ${JSON.stringify(conf.body)}`);
+      eq('confirm response is also enriched with driver contact', conf.body.driver_phone, '555-0100');
       eq('confirming an already-complete trip -> 409', (await api('POST', `/trips/${t1.body.id}/confirm`, s1)).status, 409);
 
       console.log('\n--- 5-minute auto-complete (backdated, no real waiting) ---');
@@ -92,6 +94,12 @@ async function main() {
       console.log('\n--- Read sub-scopes ---');
       const staffTrips = (await api('GET', '/trips', s1)).body;
       (staffTrips.every((t) => t.student_id === stu1.id)) ? ok('school_staff sees only granted-student trips') : bad(`staff saw non-granted: ${staffTrips.map((t) => t.student_id)}`);
+      (staffTrips.length > 0 && staffTrips.every((t) => t.driver_name === 'Drv' && t.driver_phone === '555-0100'))
+        ? ok('trips enriched with driver name + phone for school_staff (§7.4)')
+        : bad(`driver contact missing/wrong: ${JSON.stringify(staffTrips.map((t) => ({ n: t.driver_name, p: t.driver_phone })))}`);
+      const oneStaffTrip = (await api('GET', `/trips/${staffTrips[0].id}`, s1)).body;
+      (oneStaffTrip.driver_name === 'Drv' && oneStaffTrip.driver_phone === '555-0100')
+        ? ok('GET /trips/:id also enriched with driver contact') : bad(`single-trip fetch missing driver contact: ${JSON.stringify(oneStaffTrip)}`);
       const drvTrips = (await api('GET', '/trips', drv)).body;
       eq('driver sees own 3 trips', drvTrips.length, 3);
       const adminTrips = (await api('GET', '/trips', adminA)).body;

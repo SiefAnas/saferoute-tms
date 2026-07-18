@@ -9,8 +9,8 @@ import type { Student, Trip } from '../../types/api'
 
 // School Staff dashboard (§7.4): view granted students, and confirm custody for their
 // pending trips — the staff half of the two-way driver/staff confirmation handshake.
-// Driver/company contact info is intentionally omitted this pass (no safe endpoint
-// exists yet for exposing driver PII to school_staff — see BACKLOG.md).
+// Driver contact (name + phone, enriched server-side via Trips — see services/trips.js)
+// is shown alongside each pending confirmation so staff know who they're handing off to.
 export function SchoolStaffDashboard() {
   const queryClient = useQueryClient()
 
@@ -57,6 +57,10 @@ export function SchoolStaffDashboard() {
                     <h3 className="text-title-lg capitalize">
                       {trip.trip_type} — {studentName(trip.student_id)}
                     </h3>
+                    <p className="text-body-md text-on-surface-variant">
+                      Driver: {trip.driver_name ?? 'Unknown'}
+                      {trip.driver_phone ? ` · ${trip.driver_phone}` : ''}
+                    </p>
                     <StatusBadge tone="active" label="Awaiting your confirmation" pulse />
                     {confirm.isError && confirm.variables === trip.id && (
                       <p className="mt-1 text-body-md text-error">

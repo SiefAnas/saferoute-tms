@@ -5,10 +5,6 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 for things noticed while building that aren't in the spec's own backlog.
 
 ## Open — awaiting a decision from Anas
-- **Driver contact info on School Staff's screen** — §7.4 wants driver/company contact info
-  alongside a granted student's trips. There's no safe endpoint today (`GET /users` is
-  admin-only); exposing driver PII to school_staff needs a scoped design decision (name-only
-  via a Trips join vs. a dedicated endpoint vs. dropping the requirement for good).
 - **Postgres RLS** — optional defense-in-depth on top of the app-layer scoped accessor.
   Large, invasive change (every table + per-request session-variable/role handling in the
   connection pool). Not started pending a go/no-go given its size relative to MVP.
@@ -46,9 +42,17 @@ for things noticed while building that aren't in the spec's own backlog.
 - ~~`trip_count` bump isn't transactional~~ — `logTrip`'s insert + session `trip_count`
   increment now run in one transaction (`src/db/tx.js`, extracted from `signup.js`'s
   `withTx` so both services share it) instead of two separate `pool.query` calls.
-- Full suite: **136/136** (`01`-`07`), including the new `07-hardening.test.cjs` (18) and the
-  extended `05-trips.test.cjs` regression. Verified live against Neon (health/login/claimable
-  search) in addition to the isolated embedded-Postgres suite.
+- ~~Driver contact info on School Staff's screen~~ — decided (name + phone, not a full
+  contact endpoint): `listTrips`/`getTrip`/`logTrip`/`confirmTrip` all enrich their trip
+  response with `driver_name`/`driver_phone`, looked up via the trip's already-scoped
+  `session_id` (enrichment on rows the caller already passed the scoped read for, not a new
+  general-purpose driver-lookup surface). Displayed on the School Staff dashboard next to
+  each pending confirmation. Verified live against Neon end-to-end (driver logs a trip via
+  the real API, staff sees "Driver: Marcus Rodriguez · 555-0187", confirms successfully).
+- Full suite: **140/140** (`01`-`07`), including `07-hardening.test.cjs` (18), the extended
+  `05-trips.test.cjs` regression, and its driver-contact-enrichment assertions (4 new).
+  Verified live against Neon (health/login/claimable search, and separately the driver-
+  contact feature end-to-end) in addition to the isolated embedded-Postgres suite.
 
 ## From the School Admin/Staff screens (Step 4) — deferred, agreed, no action needed
 - **"Company linking" is placeholder-creation only** — §7.3 says School Admin can "link" to

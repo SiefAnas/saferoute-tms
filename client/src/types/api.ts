@@ -108,6 +108,10 @@ export interface Trip {
   completed_at: string | null
   created_at: string
   updated_at: string
+  // Enriched server-side (name/phone only — no email/other PII) so school_staff can see
+  // who they're handing a student to/from (§7.4). Always present on GET responses.
+  driver_name: string | null
+  driver_phone: string | null
 }
 
 export interface Assignment {
