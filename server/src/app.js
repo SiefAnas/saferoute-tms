@@ -1,5 +1,7 @@
 // Express app wiring. Exported as a factory so tests can mount it without listening.
 const express = require('express');
+const cors = require('cors');
+const { allowedOrigins } = require('./config');
 const authRoutes = require('./routes/auth');
 const signupRoutes = require('./routes/signup');
 const placeholderRoutes = require('./routes/placeholders');
@@ -14,6 +16,11 @@ const staffAccessRoutes = require('./routes/staffAccess');
 
 function createApp() {
   const app = express();
+  // Dev (Vite proxy) and the embedded-Postgres test suite are same-origin/no-origin and
+  // need no CORS headers at all; production splits frontend (static site) and backend
+  // (web service) across origins, so ALLOWED_ORIGINS (comma-separated, set in Render env)
+  // opts in specific origins rather than reflecting every Origin header.
+  app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true }));
   app.use(express.json());
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));

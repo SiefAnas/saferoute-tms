@@ -11,4 +11,7 @@ module.exports = {
   // and how often the in-process sweep runs.
   autoCompleteMinutes: Number(process.env.AUTO_COMPLETE_MINUTES) || 5,
   sweepIntervalMs: Number(process.env.SWEEP_INTERVAL_MS) || 30000,
+  // Comma-separated list of origins allowed to call the API cross-origin (production
+  // frontend/backend split). Empty in dev/test, where requests are same-origin anyway.
+  allowedOrigins: (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
 };

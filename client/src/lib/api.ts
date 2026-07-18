@@ -1,7 +1,9 @@
 // Thin fetch wrapper: base /api (proxied to the Express API by Vite, see vite.config.ts),
 // attaches the JWT, and normalizes errors. A 401 clears the stored session — the caller
 // (ProtectedRoute) is responsible for redirecting, since this module has no router access.
-const API_BASE = '/api'
+// In production (frontend/backend on separate origins, no proxy), VITE_API_BASE_URL points
+// straight at the deployed API's origin; unset locally, where the Vite proxy handles /api.
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api'
 const TOKEN_KEY = 'saferoute_token'
 const USER_KEY = 'saferoute_user'
 

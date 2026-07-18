@@ -9,11 +9,21 @@ import { RegisterPage } from './pages/register/RegisterPage'
 import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
 import { DriverDashboard } from './pages/driver/DriverDashboard'
 import { CompanyAdminDashboard } from './pages/company/CompanyAdminDashboard'
+import { VansPage } from './pages/company/VansPage'
+import { AssignmentsPage } from './pages/company/AssignmentsPage'
+import { PayrollPage } from './pages/company/PayrollPage'
+import { CompanyStudentsPage } from './pages/company/StudentsPage'
 import { StudentsPage } from './pages/school-admin/StudentsPage'
 import { StaffAccessPage } from './pages/school-admin/StaffAccessPage'
 import { SchoolStaffDashboard } from './pages/school-staff/SchoolStaffDashboard'
 
-const COMPANY_NAV = [{ to: '/company', label: 'Dashboard', icon: 'dashboard', end: true }]
+const COMPANY_NAV = [
+  { to: '/company', label: 'Dashboard', icon: 'dashboard', end: true },
+  { to: '/company/vans', label: 'Fleet', icon: 'local_shipping' },
+  { to: '/company/assignments', label: 'Assignments', icon: 'assignment' },
+  { to: '/company/payroll', label: 'Payroll', icon: 'payments' },
+  { to: '/company/students', label: 'Students', icon: 'groups' },
+]
 const SCHOOL_ADMIN_NAV = [
   { to: '/school-admin', label: 'Students', icon: 'groups', end: true },
   { to: '/school-admin/staff', label: 'Staff & Access', icon: 'badge' },
@@ -42,6 +52,10 @@ function App() {
       <Route element={<ProtectedRoute roles={['company_admin']} />}>
         <Route element={<AdminLayout title="Dispatcher Hub" navItems={COMPANY_NAV} />}>
           <Route path="/company" element={<CompanyAdminDashboard />} />
+          <Route path="/company/vans" element={<VansPage />} />
+          <Route path="/company/assignments" element={<AssignmentsPage />} />
+          <Route path="/company/payroll" element={<PayrollPage />} />
+          <Route path="/company/students" element={<CompanyStudentsPage />} />
         </Route>
       </Route>
 
