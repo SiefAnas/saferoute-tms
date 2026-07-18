@@ -1,0 +1,166 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens ported verbatim from design-reference/DESIGN.md (the "Road & Logistics"
+ * Stitch design system) into Tailwind v4's CSS-first @theme, so `bg-primary-container`,
+ * `text-on-surface-variant`, `rounded-xl`, `p-md`, etc. all resolve to the exact tracked
+ * values instead of Tailwind's stock palette.
+ *
+ * Note: DESIGN.md's YAML frontmatter is used as the source of truth for radius values —
+ * it disagrees slightly with the inline JS config baked into the Stitch code.html mockups
+ * (e.g. "full" is 9999px here vs 0.75rem there), and DESIGN.md is the explicitly-designated
+ * design-system doc while the mockups are markup/styling reference.
+ */
+@theme {
+  --color-surface: #f7f9fb;
+  --color-surface-dim: #d8dadc;
+  --color-surface-bright: #f7f9fb;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f2f4f6;
+  --color-surface-container: #eceef0;
+  --color-surface-container-high: #e6e8ea;
+  --color-surface-container-highest: #e0e3e5;
+  --color-on-surface: #191c1e;
+  --color-on-surface-variant: #534434;
+  --color-inverse-surface: #2d3133;
+  --color-inverse-on-surface: #eff1f3;
+  --color-outline: #867461;
+  --color-outline-variant: #d8c3ad;
+  --color-surface-tint: #855300;
+  --color-primary: #855300;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #f59e0b;
+  --color-on-primary-container: #613b00;
+  --color-inverse-primary: #ffb95f;
+  --color-secondary: #545f73;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #d5e0f8;
+  --color-on-secondary-container: #586377;
+  --color-tertiary: #565e74;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #a9b0c9;
+  --color-on-tertiary-container: #3b4358;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  --color-primary-fixed: #ffddb8;
+  --color-primary-fixed-dim: #ffb95f;
+  --color-on-primary-fixed: #2a1700;
+  --color-on-primary-fixed-variant: #653e00;
+  --color-secondary-fixed: #d8e3fb;
+  --color-secondary-fixed-dim: #bcc7de;
+  --color-on-secondary-fixed: #111c2d;
+  --color-on-secondary-fixed-variant: #3c475a;
+  --color-tertiary-fixed: #dae2fd;
+  --color-tertiary-fixed-dim: #bec6e0;
+  --color-on-tertiary-fixed: #131b2e;
+  --color-on-tertiary-fixed-variant: #3f465c;
+  --color-background: #f7f9fb;
+  --color-on-background: #191c1e;
+  --color-surface-variant: #e0e3e5;
+
+  /* 8px linear rhythm (DESIGN.md "Layout & Spacing") */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 48px;
+  --spacing-gutter: 20px;
+
+  /* Shape language: 4px standard, 8px large containers, full pills */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-full: 9999px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    margin: 0;
+    background-color: var(--color-background);
+    color: var(--color-on-surface);
+    -webkit-font-smoothing: antialiased;
+  }
+  .material-symbols-outlined {
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 400,
+      'GRAD' 0,
+      'opsz' 24;
+    display: inline-block;
+    line-height: 1;
+  }
+}
+
+/*
+ * Typography scale (DESIGN.md "Typography"). Hand-written utility classes rather than
+ * Tailwind v4's newer nested --text-*--line-height theme keys, so the exact family/size/
+ * weight/leading/tracking combination from the design system is guaranteed regardless of
+ * Tailwind version behavior.
+ */
+@layer components {
+  .text-display-lg {
+    font-family: 'Public Sans', sans-serif;
+    font-size: 48px;
+    line-height: 56px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .text-headline-lg {
+    font-family: 'Public Sans', sans-serif;
+    font-size: 32px;
+    line-height: 40px;
+    font-weight: 600;
+  }
+  .text-headline-lg-mobile {
+    font-family: 'Public Sans', sans-serif;
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 600;
+  }
+  .text-headline-md {
+    font-family: 'Public Sans', sans-serif;
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 600;
+  }
+  .text-title-lg {
+    font-family: 'Inter', sans-serif;
+    font-size: 18px;
+    line-height: 28px;
+    font-weight: 600;
+  }
+  .text-body-lg {
+    font-family: 'Inter', sans-serif;
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 400;
+  }
+  .text-body-md {
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 400;
+  }
+  .text-label-md {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .text-data-mono {
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+}
