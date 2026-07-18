@@ -12,7 +12,9 @@
     "migrate:up": "node-pg-migrate up --envPath .env",
     "migrate:down": "node-pg-migrate down --envPath .env",
     "migrate:redo": "node-pg-migrate redo --envPath .env",
-    "migrate:create": "node-pg-migrate create --envPath .env"
+    "migrate:create": "node-pg-migrate create --envPath .env",
+    "test": "node test/run-all.cjs",
+    "test:neon": "node test/smoke-neon.cjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -21,5 +23,8 @@
     "jsonwebtoken": "^9.0.2",
     "node-pg-migrate": "^7.9.1",
     "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "embedded-postgres": "^18.4.0-beta.17"
   }
 }

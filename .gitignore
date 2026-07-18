@@ -22,3 +22,7 @@ Thumbs.db
 
 # Postgres volume (if bind-mounted locally)
 pgdata/
+
+# Embedded-Postgres test artifacts (server/test/*.test.cjs creates these per run)
+server/test/.tmp/
+logfile
