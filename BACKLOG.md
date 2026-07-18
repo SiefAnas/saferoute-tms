@@ -4,6 +4,47 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## Known-broken (tracked as of July 18 2026)
+1. Registration hangs indefinitely on "Submitting" — reported; not yet reproduced/root-caused
+   as of this entry (investigation starts this session).
+2. Email verification — status UNVERIFIED, possibly regressed. User reports verifying/
+   creating new accounts still doesn't work (investigation starts this session).
+3. **Confirmed accurate** — Company Admin has no "Add Driver" UI. Verified by grep: no
+   `POST /users` call exists anywhere under `client/src/pages/company/`. `POST /users`
+   (`role: 'driver'`) is a real, tested, company_admin-only backend endpoint with no
+   frontend consumer — same shape as the other Step-5 management-UI gaps, just missed.
+4. **Contradicted by direct verification, not adding as stated.** This session's task
+   description claimed "School Staff role is missing its core functional pages (trip
+   confirmation etc)." `client/src/pages/school-staff/SchoolStaffDashboard.tsx` has a full
+   "Pending Custody Confirmations" section (driver name/phone, Confirm button) and a
+   "Granted Students" table — not a stub. The prior session (commit range through `2e9f915`)
+   verified this live end-to-end: logged trip as `driver1@3bees.test`, confirmed it as
+   `jordan@willowcreek.test`, watched status flip from "Awaiting your confirmation" to
+   "Complete". If something is actually broken here now, it needs its own fresh live
+   reproduction — this entry as originally worded isn't accurate against current code.
+5. **Contradicted by direct verification, not adding as stated.** This session's task
+   description claimed "School Admin's student view is missing contact info."
+   `client/src/pages/school-admin/StudentsPage.tsx` renders `Parent/Guardian` and `Phone`
+   columns (`s.parent_name`, `s.parent_phone`) for every row. If "contact info" means
+   something more specific (e.g. the linked company's contact, not the parent's), that
+   needs to be re-specified — as worded, this item doesn't match current code.
+6. [RESOLVED July 18 2026 — see prior session's commit `54b52ee`] Driver dashboard layout
+   collapse, Tailwind v4 theme-token collision. Full writeup below.
+7. No `GET /schools` endpoint — Students page shows raw ids instead of school names. Full
+   writeup below.
+8. Live deploy runs off a public mirror repo (`saferoute-tms-deploy`), not the real
+   (private) `saferoute-tms` repo — see the deploy session's summary for why (Render's API
+   can't clone a private repo without the account owner connecting GitHub via the
+   dashboard, an interactive step that couldn't be completed autonomously).
+
+**Note on items 4 and 5 above:** re-read both files fresh and grepped the relevant
+components before writing this section, rather than transcribing the task prompt's
+claims verbatim — they don't hold up against current code. Not silently going along with
+an inaccurate premise, per this project's own established convention (see
+`PROJECT_STATE.md` §6 and the addendum in §7 for two earlier instances of the same
+principle). Flagged to the user in-session; happy to re-add with corrected wording if
+there's a more specific reproduction.
+
 ## Resolved
 - ~~Driver dashboard rendered in a collapsed near-zero-width column on desktop~~ — root
   cause was a Tailwind v4 theme-token naming collision, not a missing responsive
