@@ -2,7 +2,7 @@
 // (chosen — this is what links a company to a school, §4 derived relationship).
 // company_admin creates/updates/deletes; any operable user reads within their tenant scope
 // (a company sees its students; a school sees students at its school — same accessor, different
-// tenant column). School-staff's "granted students only" narrowing lands in the Trips slice.
+// tenant column), EXCEPT school_staff, who are narrowed to their granted students only (§7.4).
 const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
@@ -14,6 +14,15 @@ router.use(authenticate, requireOperable, attachScopedDb);
 const companyAdmin = requireRole('company_admin');
 
 const mapFk = (err) => (err.code === '23503' ? new HttpError(400, 'school_id not found') : err);
+
+// school_staff -> only students granted via staff_student_access (§7.4); everyone else
+// (company_admin, school_admin) gets the full tenant scope. Same pattern as Trips' readScope.
+function readScope(req) {
+  if (req.auth.role === 'school_staff') {
+    return { ownerIn: { column: 'id', table: 'staff_student_access', refColumn: 'student_id', match: { staff_user_id: req.auth.userId } } };
+  }
+  return {};
+}
 
 router.post('/', companyAdmin, async (req, res, next) => {
   try {
@@ -30,13 +39,13 @@ router.get('/', async (req, res, next) => {
   try {
     const where = {};
     if (req.query.grade) where.grade = req.query.grade;
-    res.json(await req.db.findMany('students', { where, orderBy: 'full_name' }));
+    res.json(await req.db.findMany('students', { ...readScope(req), where, orderBy: 'full_name' }));
   } catch (e) { next(e); }
 });
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const row = await req.db.findById('students', req.params.id);
+    const row = await req.db.findById('students', req.params.id, readScope(req));
     if (!row) throw new HttpError(404, 'student not found');
     res.json(row);
   } catch (e) { next(e); }
