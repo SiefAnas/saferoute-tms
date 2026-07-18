@@ -26,6 +26,17 @@ for things noticed while building that aren't in the spec's own backlog.
 - **`trip_count` bump isn't transactional** with the trip insert (two statements) — a failure
   between them could drift the per-shift count. Low severity.
 
+## From the School Admin/Staff screens (Step 4) — deferred, agreed
+- **Driver contact info on School Staff's screen** — §7.4 wants driver/company contact info
+  alongside a granted student's trips. Deferred: there's no safe endpoint today (`GET /users`
+  is admin-only), and exposing driver PII to school_staff needs a deliberate, scoped design
+  (name only? via a Trips join, or a dedicated endpoint?) rather than a rushed addition.
+  School Staff screen ships without it for this pass.
+- **"Company linking" is placeholder-creation only** — §7.3 says School Admin can "link" to
+  an existing company, but per §4 there's no join table; the company↔school relationship is
+  derived from `Students.company_id`. There's no real "link" action to build beyond creating
+  a Company placeholder (mirrors the existing company_admin→school placeholder flow).
+
 ## Step 3 status — COMPLETE
 - Placeholder creation (a3134ca), Users/Vans/Students/Sessions/Assignments/PayRules (a3134ca),
   Trips with two-way confirmation + 5-min auto-complete (bb1bbf8). The `school_staff`

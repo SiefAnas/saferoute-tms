@@ -9,9 +9,16 @@ import { RegisterPage } from './pages/register/RegisterPage'
 import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
 import { DriverDashboard } from './pages/driver/DriverDashboard'
 import { CompanyAdminDashboard } from './pages/company/CompanyAdminDashboard'
-import { ComingSoonPage } from './pages/ComingSoonPage'
+import { StudentsPage } from './pages/school-admin/StudentsPage'
+import { StaffAccessPage } from './pages/school-admin/StaffAccessPage'
+import { SchoolStaffDashboard } from './pages/school-staff/SchoolStaffDashboard'
 
 const COMPANY_NAV = [{ to: '/company', label: 'Dashboard', icon: 'dashboard', end: true }]
+const SCHOOL_ADMIN_NAV = [
+  { to: '/school-admin', label: 'Students', icon: 'groups', end: true },
+  { to: '/school-admin/staff', label: 'Staff & Access', icon: 'badge' },
+]
+const SCHOOL_STAFF_NAV = [{ to: '/school-staff', label: 'My Students', icon: 'groups', end: true }]
 
 function RootRedirect() {
   const { user, token } = useAuth()
@@ -39,10 +46,16 @@ function App() {
       </Route>
 
       <Route element={<ProtectedRoute roles={['school_admin']} />}>
-        <Route path="/school-admin" element={<ComingSoonPage title="School Admin" />} />
+        <Route element={<AdminLayout title="School Hub" navItems={SCHOOL_ADMIN_NAV} />}>
+          <Route path="/school-admin" element={<StudentsPage />} />
+          <Route path="/school-admin/staff" element={<StaffAccessPage />} />
+        </Route>
       </Route>
+
       <Route element={<ProtectedRoute roles={['school_staff']} />}>
-        <Route path="/school-staff" element={<ComingSoonPage title="School Staff" />} />
+        <Route element={<AdminLayout title="School Hub" navItems={SCHOOL_STAFF_NAV} />}>
+          <Route path="/school-staff" element={<SchoolStaffDashboard />} />
+        </Route>
       </Route>
 
       <Route path="/" element={<RootRedirect />} />

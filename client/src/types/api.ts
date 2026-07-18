@@ -144,3 +144,29 @@ export interface PaySummary {
   adjustments_cents: number
   total_pay_cents: number
 }
+
+// Which School Staff member can see which student, granted by a School Admin (§7.3).
+export interface StaffAccessGrant {
+  id: string
+  staff_user_id: string
+  student_id: string
+  school_id: string
+  granted_by_user_id: string | null
+  created_at: string
+}
+
+export interface Company {
+  id: string
+  name: string
+  address: string | null
+  claim_status: 'claimed' | 'unclaimed' | 'pending_claim'
+  created_by_user_id: string | null
+}
+
+export interface School {
+  id: string
+  name: string
+  address: string | null
+  claim_status: 'claimed' | 'unclaimed' | 'pending_claim'
+  created_by_user_id: string | null
+}
