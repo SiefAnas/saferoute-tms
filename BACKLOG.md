@@ -32,8 +32,14 @@ for things noticed while building that aren't in the spec's own backlog.
   granted-students sub-scope landed with Trips (via the accessor's `ownerIn`).
 - Next: Step 4 (React frontend).
 
+## Testing infra status — RESOLVED
+- ~~Persistent local Postgres~~ — resolved via Neon (free tier). `server/.env` (gitignored)
+  points DATABASE_URL at a live Neon instance; all 8 migrations applied.
+- ~~No real `npm test`~~ — resolved. `server/test/*.test.cjs` (105/105) run against isolated
+  embedded PostgreSQL instances, one distinct port each (5450-5454) to avoid a Windows
+  port-release race. `npm run test:neon` (5/5) smoke-checks the live Neon DB separately
+  and cleans up after itself — not part of `npm test` since it touches shared state.
+
 ## Hardening (post-MVP or as time allows)
 - **Postgres RLS** as belt-and-suspenders on top of the app-layer scoped accessor.
 - **Real email transport** (SMTP / provider) to replace the dev mailer.
-- **Persistent local Postgres** (Docker or hosted) so the dev server can actually run
-  DB-backed routes; embedded Postgres is currently test-only.
