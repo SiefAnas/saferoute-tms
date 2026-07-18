@@ -20,6 +20,7 @@
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.6.0",
     "jsonwebtoken": "^9.0.2",
     "node-pg-migrate": "^7.9.1",
     "pg": "^8.13.1"

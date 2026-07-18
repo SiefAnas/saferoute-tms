@@ -137,6 +137,15 @@ function createScopedDb(pool, tenant, actor) {
         values.push(opts.owner.value);
         sql += ` AND ${ident(opts.owner.column)} = $${values.length}`;
       }
+      // Extra equality guards, e.g. { status: 'pending' } to make an update conditional on
+      // the row not having moved out from under the caller (a concurrent sweep/other writer).
+      // A guard that doesn't match returns null (not found) rather than clobbering the row.
+      if (opts.where) {
+        for (const [k, v] of Object.entries(opts.where)) {
+          values.push(v);
+          sql += ` AND ${ident(k)} = $${values.length}`;
+        }
+      }
       sql += ' RETURNING *';
       return (await pool.query(sql, values)).rows[0] ?? null;
     },

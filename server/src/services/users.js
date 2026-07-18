@@ -4,6 +4,7 @@
 // upholds the requireOperable invariant (every operational user must be verified).
 const { hashPassword } = require('../auth/password');
 const { HttpError } = require('../errors');
+const { assertValidEmail, assertPasswordStrength, assertMaxLength } = require('../validate');
 
 // Which roles a given admin role may create (same tenant side).
 const CREATABLE = {
@@ -18,6 +19,10 @@ async function createUser(req, body = {}) {
   if (!email || !password || !fullName || !role) {
     throw new HttpError(400, 'email, password, fullName and role are required');
   }
+  assertValidEmail(email);
+  assertPasswordStrength(password);
+  assertMaxLength(fullName, 200, 'fullName');
+  assertMaxLength(phone, 30, 'phone');
   if (!allowed.includes(role)) {
     throw new HttpError(403, `a ${req.auth.role} cannot create a ${role}`);
   }
@@ -59,6 +64,8 @@ async function updateUser(req, id, body = {}) {
     if (body[key] !== undefined) patch[key] = body[key];
   }
   if (Object.keys(patch).length === 0) throw new HttpError(400, 'nothing to update');
+  assertMaxLength(patch.full_name, 200, 'full_name');
+  assertMaxLength(patch.phone, 30, 'phone');
   const row = await req.db.update('users', id, patch);
   if (!row) throw new HttpError(404, 'user not found');
   return publicUser(row);

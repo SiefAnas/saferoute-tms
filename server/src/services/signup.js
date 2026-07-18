@@ -2,11 +2,13 @@
 // not in the route handlers (§4). Uses the raw pool: signup has no tenant context yet,
 // and claiming/placeholder rows are tenant-root records the scoped accessor won't touch.
 const pool = require('../db/pool');
+const { withTx } = require('../db/tx');
 const { hashPassword } = require('../auth/password');
 const { generateToken, hashToken } = require('../auth/tokens');
 const { signJwt } = require('../auth/jwt');
 const { sendMail } = require('../mail/mailer');
 const { HttpError } = require('../errors');
+const { assertValidEmail, assertPasswordStrength, assertMaxLength } = require('../validate');
 
 const CLAIM_TTL = "interval '24 hours'";
 
@@ -19,21 +21,6 @@ function kindConfig(kind) {
   const cfg = KINDS[kind];
   if (!cfg) throw new HttpError(400, `unknown kind: ${kind}`);
   return cfg;
-}
-
-async function withTx(fn) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
 }
 
 // Fuzzy-match unclaimed (or expired-pending) placeholders to suggest as claim candidates.
@@ -138,6 +125,11 @@ async function signupClaim(kind, claimId, { fullName, email, password }) {
 async function signup(kind, body = {}) {
   const { orgName, fullName, email, password, address, claimId } = body;
   if (!fullName || !email || !password) throw new HttpError(400, 'fullName, email and password are required');
+  assertValidEmail(email);
+  assertPasswordStrength(password);
+  assertMaxLength(fullName, 200, 'fullName');
+  assertMaxLength(orgName, 200, 'orgName');
+  assertMaxLength(address, 500, 'address');
   if (claimId) return signupClaim(kind, claimId, { fullName, email, password });
   if (!orgName) throw new HttpError(400, 'orgName is required for a new organization');
   return signupFresh(kind, { orgName, address, fullName, email, password });
@@ -148,7 +140,7 @@ async function verifyEmail(rawToken) {
   if (!rawToken) throw new HttpError(400, 'token is required');
   const tokenHash = hashToken(rawToken);
 
-  const finalized = await withTx(async (client) => {
+  const claimedOrg = await withTx(async (client) => {
     const consumed = await client.query(
       `UPDATE email_verification_tokens
           SET consumed_at = now()
@@ -162,7 +154,8 @@ async function verifyEmail(rawToken) {
     const u = (await client.query('UPDATE users SET email_verified_at = now() WHERE id = $1 RETURNING company_id, school_id', [userId])).rows[0];
 
     // Finalize the pending claim in whichever org this user belongs to.
-    let claimedOrg = null;
+    let claimed = null;
+    let orgCol = null;
     for (const [col, table] of [['company_id', 'companies'], ['school_id', 'schools']]) {
       if (!u[col]) continue;
       const done = await client.query(
@@ -172,40 +165,66 @@ async function verifyEmail(rawToken) {
           RETURNING id, name, created_by_user_id`,
         [u[col], userId]
       );
-      if (done.rowCount > 0) claimedOrg = done.rows[0];
+      if (done.rowCount > 0) { claimed = done.rows[0]; orgCol = col; }
     }
-    return claimedOrg;
+
+    // Defense-in-depth (BACKLOG): a 24h-expiry takeover can leave a losing, never-verified
+    // claimant still attached to this org. requireOperable already blocks them (no
+    // email_verified_at), but deactivate them outright too, so they can't even authenticate.
+    if (claimed && orgCol) {
+      await client.query(
+        `UPDATE users SET is_active = false
+          WHERE ${orgCol} = $1 AND id <> $2 AND email_verified_at IS NULL AND is_active = true`,
+        [u[orgCol], userId]
+      );
+    }
+    return claimed;
   });
 
   // Notify the original placeholder creator (outside the tx).
-  if (finalized && finalized.created_by_user_id) {
-    const creator = (await pool.query('SELECT email FROM users WHERE id = $1', [finalized.created_by_user_id])).rows[0];
+  if (claimedOrg && claimedOrg.created_by_user_id) {
+    const creator = (await pool.query('SELECT email FROM users WHERE id = $1', [claimedOrg.created_by_user_id])).rows[0];
     if (creator) {
       await sendMail({
         to: creator.email,
-        subject: `A placeholder you created was claimed: ${finalized.name}`,
-        text: `The organization "${finalized.name}" you added on SafeRoute has been claimed by its owner. You no longer have edit rights on its core details.`,
+        subject: `A placeholder you created was claimed: ${claimedOrg.name}`,
+        text: `The organization "${claimedOrg.name}" you added on SafeRoute has been claimed by its owner. You no longer have edit rights on its core details.`,
       });
     }
   }
 
-  return { verified: true, claimFinalized: Boolean(finalized) };
+  return { verified: true, claimFinalized: Boolean(claimedOrg) };
 }
 
 async function resendVerification(email) {
   if (!email) throw new HttpError(400, 'email is required');
+  assertValidEmail(email);
   const user = (await pool.query(
-    'SELECT id, email, email_verified_at FROM users WHERE lower(email) = lower($1)',
+    'SELECT id, email, email_verified_at, company_id, school_id FROM users WHERE lower(email) = lower($1)',
     [email]
   )).rows[0];
-  // Don't reveal whether the email exists / is already verified.
+  // Don't reveal whether the email exists, is already verified, or has no active claim.
   if (!user || user.email_verified_at) return { ok: true };
 
-  const { raw, hash } = generateToken();
-  await pool.query(
-    `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, now() + ${CLAIM_TTL})`,
-    [user.id, hash]
-  );
+  const [col, table] = user.company_id ? ['company_id', 'companies'] : ['school_id', 'schools'];
+  const org = (await pool.query(`SELECT claim_status FROM ${table} WHERE id = $1`, [user[col]])).rows[0];
+  if (!org || org.claim_status !== 'pending_claim') return { ok: true };
+
+  const raw = await withTx(async (client) => {
+    // Invalidate any still-valid prior tokens first — only the newest link should work,
+    // so an old, possibly-leaked email can't be used to verify after a resend.
+    await client.query(
+      'UPDATE email_verification_tokens SET consumed_at = now() WHERE user_id = $1 AND consumed_at IS NULL',
+      [user.id]
+    );
+    const { raw: newRaw, hash } = generateToken();
+    await client.query(
+      `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, now() + ${CLAIM_TTL})`,
+      [user.id, hash]
+    );
+    return newRaw;
+  });
+
   await sendMail({ to: user.email, subject: 'Your SafeRoute verification link', text: `token: ${raw}\nExpires in 24 hours.` });
   return { ok: true };
 }

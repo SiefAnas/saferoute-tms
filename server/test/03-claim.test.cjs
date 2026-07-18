@@ -148,9 +148,11 @@ async function main() {
       bClaim.status === 201 ? ok('B takes over expired pending claim -> 201') : bad(`takeover failed: ${bClaim.status}`);
       await post('/auth/verify-email', { token: tokenFor('b@maple.edu') });
       // A (never verified, still attached to the now-claimed org) must NOT get operate-rights.
-      const aLogin = await j(await post('/auth/login', { email: 'a@maple.edu', password: PW }));
-      const aAccess = await get('/t/students', bearer(aLogin.token));
-      aAccess.status === 403 ? ok('losing unverified claimant A blocked from claimed org (403)') : bad(`A wrongly operable: ${aAccess.status}`);
+      // Since the defense-in-depth fix (BACKLOG), the losing claimant is deactivated outright
+      // on finalize, so login itself now fails (401) rather than succeeding and being blocked
+      // downstream by requireOperable (403, the pre-fix behavior) — a strictly stronger result.
+      const aLogin = await post('/auth/login', { email: 'a@maple.edu', password: PW });
+      aLogin.status === 401 ? ok('losing claimant A deactivated -> cannot even log in (401)') : bad(`A unexpectedly logged in: ${aLogin.status}`);
       const bLogin = await j(await post('/auth/login', { email: 'b@maple.edu', password: PW }));
       const bAccess = await get('/t/students', bearer(bLogin.token));
       bAccess.status === 200 ? ok('winning verified claimant B operates (200)') : bad(`B blocked: ${bAccess.status}`);

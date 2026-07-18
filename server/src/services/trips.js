@@ -3,6 +3,7 @@
 // half (driver_confirmed_at set at creation), so a pending trip is always awaiting staff.
 // If staff doesn't confirm within N minutes, an in-process sweep auto-completes it.
 const pool = require('../db/pool');
+const { withTx } = require('../db/tx');
 const { HttpError } = require('../errors');
 const { autoCompleteMinutes } = require('../config');
 
@@ -35,16 +36,21 @@ async function logTrip(req, body = {}) {
   const student = await req.db.findById('students', student_id);
   if (!student) throw new HttpError(404, 'student not found in your company');
 
-  const trip = await req.db.insert('trips', {
-    session_id: open.id,
-    student_id,
-    school_id: student.school_id,
-    trip_type,
-    driver_confirmed_at: new Date().toISOString(),
-    status: 'pending',
+  // Insert + trip_count bump as one transaction (BACKLOG fix): previously two separate
+  // pool.query calls, so a failure between them could drift the per-shift count.
+  return withTx(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO trips (session_id, company_id, student_id, school_id, trip_type, driver_confirmed_at, status)
+       VALUES ($1, $2, $3, $4, $5, now(), 'pending')
+       RETURNING *`,
+      [open.id, req.auth.tenantId, student_id, student.school_id, trip_type]
+    );
+    await client.query(
+      'UPDATE sessions SET trip_count = trip_count + 1 WHERE id = $1 AND company_id = $2',
+      [open.id, req.auth.tenantId]
+    );
+    return rows[0];
   });
-  await pool.query('UPDATE sessions SET trip_count = trip_count + 1 WHERE id = $1 AND company_id = $2', [open.id, req.auth.tenantId]);
-  return trip;
 }
 
 async function confirmTrip(req, id) {
@@ -56,7 +62,17 @@ async function confirmTrip(req, id) {
 
   const now = new Date().toISOString();
   // Driver half is set at creation, so staff confirmation completes it (both sides present).
-  return req.db.update('trips', id, { staff_confirmed_at: now, status: 'complete', completed_at: now });
+  // Guarded by status='pending' (BACKLOG fix) so a concurrent auto-complete sweep landing in
+  // the gap between the findById above and this update can't have its result silently
+  // overwritten — the update simply no-ops (returns null) instead of clobbering the row.
+  const updated = await req.db.update(
+    'trips',
+    id,
+    { staff_confirmed_at: now, status: 'complete', completed_at: now },
+    { where: { status: 'pending' } }
+  );
+  if (!updated) throw new HttpError(409, 'trip already complete');
+  return updated;
 }
 
 async function listTrips(req) {

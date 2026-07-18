@@ -22,8 +22,22 @@ function requireRole(...roles) {
 // Clause 2 is essential: without it, a losing pending-claimant who stays attached to a
 // placeholder that someone ELSE later claims (after a 24h-expiry takeover) would inherit
 // operate-rights on that org without ever verifying their own email.
+//
+// BACKLOG note — email_verified_at is deliberately overloaded across three signup paths,
+// each setting it for a DIFFERENT reason, but all three are treated identically by this
+// gate (any of them means "operable") because that's the correct behavior in each case:
+//   1. Fresh org signup  (signupFresh)   -> stamped immediately: verification WAIVED (§5.2,
+//      no verification required for a brand-new self-serve org).
+//   2. Claim signup      (verifyEmail)   -> stamped only after a real token round-trip:
+//      email ACTUALLY PROVEN before the claim finalizes (§5.3).
+//   3. Admin-created user (users.js)     -> stamped at creation time: the creating admin
+//      VOUCHES for them (a company_admin/school_admin already had to prove their own
+//      email via path 1 or 2, so accounts they create inherit that trust).
+// Normalizing this into separate columns (e.g. a verification_method enum) was considered
+// and rejected as disproportionate — there's no code path that needs to distinguish WHY a
+// user is verified, only THAT they are.
 // INVARIANT: every operational user must have email_verified_at set — fresh signups and
-// verified claimants do; admin-created drivers/staff (future slice) must stamp it at creation.
+// verified claimants do; admin-created drivers/staff must stamp it at creation.
 function requireOperable(req, res, next) {
   if (!req.auth) return res.status(401).json({ error: 'unauthenticated' });
   if (req.auth.orgClaimStatus !== 'claimed' || !req.auth.emailVerifiedAt) {

@@ -115,13 +115,20 @@ async function main() {
         },
       };
       const staffReq = { auth: { role: 'school_staff', userId: staff1.id, tenantType: 'school', tenantId: S.id }, db: racingDb };
-      try { await confirmTrip(staffReq, tr.id); } catch { /* either outcome is fine; we assert on end state */ }
+      // Now that the race is fixed (status='pending' guard on the update), confirmTrip must
+      // deterministically throw 409 rather than silently overwrite the already-swept row.
+      let raced = null;
+      try { await confirmTrip(staffReq, tr.id); bad('confirmTrip did not throw despite losing the race to the sweep'); }
+      catch (e) { raced = e; }
+      (raced && raced.status === 409 && /already complete/.test(raced.message))
+        ? ok('confirmTrip on an already-swept trip -> 409 "trip already complete" (deterministic, not silent)')
+        : bad(`unexpected error: ${raced ? `${raced.status} ${raced.message}` : 'none'}`);
       const fin = (await pool.query(
-        'SELECT status, driver_confirmed_at, staff_confirmed_at FROM trips WHERE id = $1', [tr.id]
+        'SELECT status, auto_completed, driver_confirmed_at, staff_confirmed_at FROM trips WHERE id = $1', [tr.id]
       )).rows[0];
-      (fin.status === 'complete' && fin.driver_confirmed_at !== null && fin.staff_confirmed_at !== null)
-        ? ok('post-race end state: still complete, BOTH timestamps present (no corruption/revert)')
-        : bad(`race corrupted state: ${JSON.stringify(fin)}`);
+      (fin.status === 'complete' && fin.auto_completed === true && fin.driver_confirmed_at !== null && fin.staff_confirmed_at === null)
+        ? ok('post-race end state: complete via the sweep, staff_confirmed_at correctly NOT set by the blocked confirm')
+        : bad(`unexpected end state: ${JSON.stringify(fin)}`);
     } finally {
       server.close();
     }

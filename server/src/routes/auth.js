@@ -6,10 +6,11 @@ const { signJwt } = require('../auth/jwt');
 const { tenantTypeForRole } = require('../db/scoped');
 const authenticate = require('../middleware/authenticate');
 const { verifyEmail, resendVerification } = require('../services/signup');
+const { loginLimiter, verifyLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) {
@@ -49,7 +50,7 @@ router.post('/login', async (req, res, next) => {
 router.get('/me', authenticate, (req, res) => res.json({ user: req.auth }));
 
 // Finalize a claim by verifying the claimant's email (§5.3).
-router.post('/verify-email', async (req, res, next) => {
+router.post('/verify-email', verifyLimiter, async (req, res, next) => {
   try {
     res.json(await verifyEmail((req.body || {}).token));
   } catch (err) {
@@ -57,7 +58,7 @@ router.post('/verify-email', async (req, res, next) => {
   }
 });
 
-router.post('/resend-verification', async (req, res, next) => {
+router.post('/resend-verification', verifyLimiter, async (req, res, next) => {
   try {
     res.json(await resendVerification((req.body || {}).email));
   } catch (err) {

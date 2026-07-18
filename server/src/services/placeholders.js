@@ -7,6 +7,7 @@
 // so it uses the raw pool with an explicit ownership+state guard rather than req.db.
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
+const { assertMaxLength } = require('../validate');
 
 const KINDS = { company: 'companies', school: 'schools' };
 
@@ -23,6 +24,8 @@ async function createPlaceholder(actor, kind, { name, address } = {}) {
     throw new HttpError(403, `only a ${CREATOR_ROLE[kind]} may create a ${kind} placeholder`);
   }
   if (!name) throw new HttpError(400, 'name is required');
+  assertMaxLength(name, 200, 'name');
+  assertMaxLength(address, 500, 'address');
 
   const { rows } = await pool.query(
     `INSERT INTO ${table} (name, address, claim_status, created_by_user_id)
@@ -51,6 +54,8 @@ async function editPlaceholder(actorUserId, kind, id, patch = {}) {
   }
 
   // Only name/address are editable core info.
+  assertMaxLength(patch.name, 200, 'name');
+  assertMaxLength(patch.address, 500, 'address');
   const fields = [];
   const values = [];
   for (const key of ['name', 'address']) {
