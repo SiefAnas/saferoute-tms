@@ -231,3 +231,14 @@ indistinguishable from the one being fixed. Caught before this session closed be
 verification step actually watched the live page to completion instead of stopping once
 the staged messages appeared in the right order — a reminder that "the messages showed up
 correctly" and "the flow actually finishes" are two different checks.
+
+**2026-07-19 addendum #3:** item #9 (`trust proxy`) is now fixed — `app.set('trust proxy',
+3)`, not the commonly-assumed `1`. Checked live against a real production request rather
+than trusting the "Render = 1 hop" assumption: Render fronts this app with Cloudflare *in
+addition to* its own internal routing, so the real `X-Forwarded-For` was 3 hops deep, and
+`trust=1` was resolving `req.ip` to Render's own internal private address, not any real
+client. Full verification (diagnostic exposed live, warning confirmed gone, rate limiting
+confirmed to still trip correctly per real IP, all 4 roles still log in, CORS unchanged) is
+in `BACKLOG.md`. Same theme as addendum #2: an assumption that sounded reasonable (single
+reverse-proxy hop) didn't hold up against the live system, and checking directly — not
+trusting the commonly-cited default — is what caught it.

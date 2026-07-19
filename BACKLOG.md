@@ -88,9 +88,50 @@ for things noticed while building that aren't in the spec's own backlog.
    (private) `saferoute-tms` repo — see the deploy session's summary for why (Render's API
    can't clone a private repo without the account owner connecting GitHub via the
    dashboard, an interactive step that couldn't be completed autonomously).
-9. `trust proxy` not set — `express-rate-limit` logs an `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`
-   warning on every production request behind Render's proxy; likely keying rate limits on
-   the wrong IP. Noticed while investigating #2, not fixed (out of scope for that session).
+9. [RESOLVED July 19 2026 — see commits `156375d`, `8589c6d`] `trust proxy` not set —
+   `express-rate-limit` logged an `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` warning on every
+   production request behind Render's proxy, and was keying rate limits off an unreliable
+   IP resolution. Fix: `app.set('trust proxy', 3)` in `server/src/app.js`.
+   **The "1 hop" assumption commonly cited for Render was checked live and found wrong for
+   this deployment, not applied on faith.** A temporary diagnostic (first a console.log,
+   switched to exposing it directly in `/health`'s JSON response after Render's log-query
+   API proved too slow to check against reliably) captured a real production request's raw
+   `X-Forwarded-For`: `"<real client>, <cloudflare edge>, <render internal hop>"` — 3
+   entries, not 1. Render fronts this app with Cloudflare (confirmed separately via the
+   `Server: cloudflare` header present on every response from both this API and the static
+   site) *in addition to* its own internal routing layer. Tested `trust=1` through `trust=4`
+   directly against Express's own `req.ip` resolution logic (not just reasoning about it):
+   `trust=1` resolved to the Render-internal hop's private `10.x` address (wrong — an
+   internal address, not any client); `trust=3` correctly resolved to the real client's
+   public IP; `trust=4` also worked (over-trusting by one hop is harmless once the real
+   count is met/exceeded, but `3` is the precise, non-inflated value). Deliberately not
+   `true` — that would trust the entire `X-Forwarded-For` chain unconditionally, letting a
+   client spoof its own IP by prepending fake entries to its own header.
+   **Verified live**: (1) confirmed via the same `/health`-exposed diagnostic that `req.ip`
+   now resolves to the real client IP, not an internal address; (2) removed the diagnostic,
+   redeployed, sent 5 real requests through the search-claimable endpoint, and confirmed
+   *zero* `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` warnings in Render's logs afterward (previously
+   one per request); (3) confirmed rate limiting still actually works, keyed correctly by
+   real IP — hit the search endpoint 60 times from this one real client (no `X-Forwarded-For`
+   spoofing) and got a `429` with `ratelimit-limit: 60`, `ratelimit-policy: 60;w=900`,
+   matching the configured `RATE_LIMIT_SEARCH_MAX`/window exactly; (4) confirmed no
+   collateral damage — logged in successfully as all 4 seed roles (company_admin, driver,
+   school_admin, school_staff) and confirmed CORS still correctly allows the production
+   frontend origin; `req.ip`/`req.ips` aren't referenced anywhere else in the codebase
+   (grepped), so the change's blast radius is exactly rate-limiting, nothing else. 140/140
+   tests pass throughout (the test environment sends no `X-Forwarded-For` header, so the
+   trust-proxy value doesn't affect it).
+   **Caveat for the future, noted in the code comment**: this is a fixed hop count based on
+   what Render's infrastructure does *today*. If Render changes its internal routing (adds
+   or removes a hop), this would need re-verifying the same way — temporarily exposing
+   `req.ip`/the raw header and checking a live request — not just adjusting the number on
+   assumption.
+   **Also noticed during this session**: Render's log-query API (`GET /v1/logs`) was
+   unreliable for checking recent application `console.log` output against in near-real-time
+   — repeated identical-looking responses despite new requests, and no visible propagation
+   for several minutes in one instance. Exposing diagnostic info directly in an HTTP response
+   was far more reliable for this kind of live verification. Not a product bug to fix, just
+   a note for future sessions doing similar live checks.
 
 **Note on items 4 and 5 above:** re-read both files fresh and grepped the relevant
 components before writing this section, rather than transcribing the task prompt's
