@@ -264,4 +264,29 @@ being public unblocks anonymous clones (manual/API-triggered deploys work fine) 
 push-webhook path, which still needs Render's GitHub App installed via the same interactive
 dashboard step that was the original blocker. Per the task's own instruction, the mirror
 repo was **not** deleted, since the replacement isn't fully proven. Full writeup, including
-what Anas needs to do to get real auto-deploy working, in `BACKLOG.md`.
+what Anas needs to do to get real auto-deploy working, in `BACKLOG.md`. *Update, same day:*
+Anas connected GitHub for `saferoute-tms`, and a later session's plain `git push` auto-
+deployed both services on its own (Render's own record: `trigger: "new_commit"`) — this
+item is now genuinely fully resolved. See `BACKLOG.md` item #8.
+
+**2026-07-19 addendum #5:** item #3 (Add Driver UI) is resolved — see `BACKLOG.md`. Backend
+needed nothing new (`POST /users` already existed, already scoped, already tested; added
+one previously-uncovered test) and no new invite mechanism was needed (admin-created
+accounts are already stamped verified at creation, same as school_admin's existing
+Staff & Access page). New "Add Driver" card on `CompanyAdminDashboard.tsx`. Verified live,
+full loop: created a real driver as `admin@3bees.test`, logged in *as that driver*
+immediately after, landed on a working Driver dashboard; confirmed tenant isolation
+directly against the live API from a different company. Toward the end of this session, a
+distinct part of `BACKLOG.md` item #8 also got its final confirmation (auto-deploy from a
+plain push now genuinely works, after Anas connected GitHub in Render's dashboard).
+
+With #3 resolved, every item in `BACKLOG.md`'s "Known-broken" section is now either
+resolved, investigated-with-no-bug-found, or was never accurate to begin with (#4, #5 —
+see the note already on those). Flagging rather than silently confirming: this session's
+task closing instructions referenced "the parked Stitch design-polish pass" as the one
+remaining exception — no such item exists anywhere in this repo (`BACKLOG.md`,
+`PROJECT_STATE.md`, or git history). The only "Stitch" reference at all is §4's note that
+the Company Admin dashboard deliberately omits the mockup's live-map/fleet-health/alerts
+panels — a documented scope decision from Step 4, not a tracked polish-pass item. If one
+exists, it isn't written down anywhere I can find, and needs its own entry before a future
+session can act on it.

@@ -237,6 +237,20 @@ an inaccurate premise, per this project's own established convention (see
 principle). Flagged to the user in-session; happy to re-add with corrected wording if
 there's a more specific reproduction.
 
+**Status as of July 19 2026, after item #3**: every numbered item above is now either
+resolved (1, 3, 6, 7, 8, 9), investigated with no code bug found (2), or contradicted by
+current code and not real to begin with (4, 5). Nothing is currently open in this
+Known-broken list.
+One thing worth flagging rather than silently confirming: this session's task closing
+instructions asked to "confirm this was the last open item... except the parked Stitch
+design-polish pass" — there is no such item tracked anywhere in this list, in
+`PROJECT_STATE.md`, or in git history. The only "Stitch" reference in either file is
+`PROJECT_STATE.md`'s note that the Company Admin dashboard deliberately omits the Stitch
+mockup's live-map/fleet-health/alerts panels (§4, since that data doesn't exist yet) — a
+documented scope decision, not an open or parked backlog item. If there's a real, separate
+polish pass in mind, it needs its own entry here (or wherever it's actually tracked)
+before a future session can act on it.
+
 ## Resolved
 - ~~Driver dashboard rendered in a collapsed near-zero-width column on desktop~~ — root
   cause was a Tailwind v4 theme-token naming collision, not a missing responsive
