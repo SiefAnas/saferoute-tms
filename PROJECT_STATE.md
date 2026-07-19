@@ -290,3 +290,50 @@ the Company Admin dashboard deliberately omits the mockup's live-map/fleet-healt
 panels — a documented scope decision from Step 4, not a tracked polish-pass item. If one
 exists, it isn't written down anywhere I can find, and needs its own entry before a future
 session can act on it.
+
+**2026-07-19 addendum #6 — unplanned merge of PR #1 into `main`, audited (report only, no
+corrective action taken).** Outside any Claude Code session, Anas and another AI assistant
+merged `overnight/deploy-and-finish` into `main` locally (`git merge` + `git push`, not
+through GitHub's PR UI) while working on Render's GitHub App permissions — not a deliberate
+decision to ship PR #1, a side effect of that other work.
+
+What was actually confirmed (this session, audit only):
+- **Exactly what changed**: `main` went from `251d30c` (the last commit before this whole
+  multi-session engagement began — "docs: add PROJECT_STATE.md — full handoff snapshot") to
+  `a31356d`. Diffed the exact commit-hash sets: the range `251d30c..a31356d` on `main` is
+  **byte-for-byte identical** (same commit hashes, not just similar diffs) to
+  `overnight/deploy-and-finish`'s own history over that same range. Nothing extra rode
+  along, nothing is missing, nothing was reordered or squashed — a clean linear
+  fast-forward, confirmed by hash comparison, not assumed.
+- **PR #1's actual GitHub state** (queried via the API, not guessed): `state: "closed"`,
+  `merged: true`, `merged_at: 2026-07-19T21:27:36Z`, `merged_by: "SiefAnas"`. GitHub
+  auto-detected that the direct push to `main` already contained every commit from PR #1
+  and closed it as merged on its own — this is standard GitHub behavior for a
+  fast-forward push, not something anyone had to click.
+- **The two commits in that range not already covered by this file's own session
+  addendums** (`12cea0f "test render auto deploy"`, `6153270 "test real render auto
+  deploy"`): both are docs-only (`BACKLOG.md`, plus one trailing blank line in
+  `README.md`), authored by Anas testing the Render/GitHub connection directly. No code
+  changes, no secrets. Scanned the entire merged range for anything secret-looking (`.env`,
+  keys, credentials) — the only match is `client/.env.example`, a placeholder template
+  file created earlier in this engagement, not a real secret.
+- **Is `main`'s current state safe to be live?** Yes, and provably so, not just "probably
+  fine": since `main`'s new content is hash-identical to `overnight/deploy-and-finish`,
+  and *that* branch is exactly what Render has been deploying and what every prior session
+  individually live-verified (driver layout fix, staged registration UX including the
+  caught-and-fixed `requestAnimationFrame` regression, `trust proxy` checked against real
+  traffic, `GET /schools`, Add Driver UI — all with live browser/API verification recorded
+  in `BACKLOG.md`), there is nothing in `main` right now that hasn't already been
+  individually tested live. One asymmetry worth noting: this session's own docs edits
+  landed as one additional local commit that's on `overnight/deploy-and-finish` (pushed)
+  but *not yet* pushed to `origin/main` — deliberately left that way, since advancing
+  `main` further is not this session's call to make.
+- **Render's deploy target is unaffected by this merge**: both services are configured to
+  track the `overnight/deploy-and-finish` branch specifically, not `main`. This merge makes
+  the two branches equal in content right now, but does not change what Render actually
+  watches — if `main` and `overnight/deploy-and-finish` diverge going forward (e.g.
+  something is committed only to `main`), it will not go live on its own.
+
+No revert, force-push, or PR action was taken — this was audit-only, as instructed. Whether
+anything needs to be undone (it's not clear anything does — the content is identical to
+what's already live and tested) is Anas's call.
