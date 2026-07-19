@@ -16,15 +16,21 @@ const staffAccessRoutes = require('./routes/staffAccess');
 
 function createApp() {
   const app = express();
-  // Render puts exactly one reverse proxy hop in front of a web service (per Render's own
-  // docs/community guidance; cross-checked live against a real production request's raw
-  // X-Forwarded-For header — see BACKLOG.md). `1` tells Express to trust that one hop's
-  // X-Forwarded-For entry for req.ip/req.ips — NOT `true`, which would trust the whole
-  // chain and let a client spoof its own IP by sending its own X-Forwarded-For header.
-  // Without this, express-rate-limit logged ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every
-  // request and fell back to keying limits off Express's default (unreliable behind any
-  // proxy) IP resolution.
-  app.set('trust proxy', 1);
+  // NOT 1 hop, despite that being the commonly-cited default for "behind Render." A real
+  // production request's raw X-Forwarded-For header was 3 entries deep:
+  // "<real client>, <cloudflare edge>, <render internal hop>" — Render fronts every web
+  // service with Cloudflare (confirmed separately: `Server: cloudflare` on every response
+  // from this app) in addition to its own internal routing layer, so there are two
+  // untrusted-but-legitimate hops before the request reaches this process, not one.
+  // Verified directly against express's own req.ip resolution (not just reasoning about
+  // it): trust=1 resolved to the Render-internal hop's private 10.x address (wrong);
+  // trust=3 resolved to the real client IP (right) — see BACKLOG.md item #9 for the exact
+  // values. `3`, not `true`: `true` trusts the entire chain unconditionally, which would
+  // let a client spoof its own IP by sending its own X-Forwarded-For header with extra
+  // fake entries prepended. If Render ever changes its internal hop count this may need
+  // re-verifying the same way (temporarily exposing req.ip/xff and checking a live
+  // request), not just bumping the number on faith.
+  app.set('trust proxy', 3);
   // Dev (Vite proxy) and the embedded-Postgres test suite are same-origin/no-origin and
   // need no CORS headers at all; production splits frontend (static site) and backend
   // (web service) across origins, so ALLOWED_ORIGINS (comma-separated, set in Render env)
