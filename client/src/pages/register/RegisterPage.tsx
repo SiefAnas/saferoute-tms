@@ -17,6 +17,24 @@ import type { ClaimCandidate, OrgKind, SignupResponse } from '../../types/api'
 //  - "Claim existing": fuzzy-search an unclaimed placeholder (reuses the Step-1 trigram
 //    index), lock it, and require email verification before it's operational
 //    (mode: 'pending_claim') — see VerifyEmailPage.
+//
+// BACKLOG "Registration hangs" investigation: the "Create new" path's onSuccess chains
+// signup -> login -> navigate under one mutation, so submit.isPending (and therefore the
+// button) stays busy for the whole chain, not just the signup call. That's real latency
+// (measured ~7.4s warm; a Render free-tier cold start can stretch it to 30-90s+), not a
+// deadlock — but a static "Submitting…" the whole time is indistinguishable from actually
+// stuck. `stage` gives each leg its own label instead, and `showColdStartHint` surfaces a
+// reassurance message if the whole thing is still pending past ~9s. Deliberately NOT
+// touching the signup/login/navigate sequencing itself, or the "Claim existing" path
+// (investigated separately, confirmed working) — this is a loading-state label only.
+type SubmitStage = 'creating' | 'logging-in' | 'loading-dashboard'
+
+const STAGE_LABEL: Record<SubmitStage, string> = {
+  creating: 'Creating your account…',
+  'logging-in': 'Logging you in…',
+  'loading-dashboard': 'Loading your dashboard…',
+}
+
 export function RegisterPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
@@ -36,6 +54,8 @@ export function RegisterPage() {
 
   const [error, setError] = useState<string | null>(null)
   const [pendingClaimEmail, setPendingClaimEmail] = useState<string | null>(null)
+  const [stage, setStage] = useState<SubmitStage>('creating')
+  const [showColdStartHint, setShowColdStartHint] = useState(false)
 
   // Reset the "which side / which mode" state when either toggle changes, so a stale
   // claimId from a previous kind/mode can't leak into a submit.
@@ -66,7 +86,14 @@ export function RegisterPage() {
       }),
     onSuccess: async (res) => {
       if (res.mode === 'created') {
+        setStage('logging-in')
         const user = await login(email, password)
+        setStage('loading-dashboard')
+        // Give React a frame to actually paint the "loading your dashboard" label before
+        // the route change below unmounts this page — navigate() still fires immediately
+        // after login resolves, same order as before, just after a paint instead of in
+        // the same tick (otherwise this stage would never be visible).
+        await new Promise((resolve) => requestAnimationFrame(resolve))
         navigate(ROLE_HOME[user.role], { replace: true })
       } else {
         setPendingClaimEmail(res.email)
@@ -75,6 +102,18 @@ export function RegisterPage() {
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Registration failed. Please try again.'),
   })
 
+  // Reassurance for a cold-started backend/DB: if the whole submit (any leg) is still
+  // pending past ~9s, say so explicitly instead of leaving a static button label that
+  // looks identical to a genuine hang.
+  useEffect(() => {
+    if (!submit.isPending) {
+      setShowColdStartHint(false)
+      return
+    }
+    const id = setTimeout(() => setShowColdStartHint(true), 9000)
+    return () => clearTimeout(id)
+  }, [submit.isPending])
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
@@ -82,6 +121,7 @@ export function RegisterPage() {
       setError('Select an organization to claim from the search results below.')
       return
     }
+    setStage('creating')
     submit.mutate()
   }
 
@@ -233,8 +273,13 @@ export function RegisterPage() {
           )}
 
           <Button type="submit" disabled={submit.isPending} className="w-full">
-            {submit.isPending ? 'Submitting…' : claiming ? 'Claim & Register' : 'Create Account'}
+            {submit.isPending ? STAGE_LABEL[stage] : claiming ? 'Claim & Register' : 'Create Account'}
           </Button>
+          {submit.isPending && showColdStartHint && (
+            <p className="text-center text-label-md text-on-surface-variant">
+              First request may take up to a minute while the server wakes up…
+            </p>
+          )}
         </form>
 
         <Link to="/login" className="text-center text-label-md text-primary hover:underline">
