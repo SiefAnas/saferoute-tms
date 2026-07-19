@@ -1,28 +1,21 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
-import type { Student } from '../../types/api'
+import type { SchoolSummary, Student } from '../../types/api'
 
 // Company Admin — Student creation (§4/§9 frontend gap): POST /students is
 // company_admin-only and stamps company_id from the caller, but still needs a school_id
-// (the other half of the dual-tenant row). There is no GET /schools endpoint (schools are
-// root tenant entities with no cross-tenant read exposed to company_admin), so an existing
-// school can only be offered here as "whichever school_id already appears on one of this
-// company's students" — no name, since none is available. For a genuinely new school, this
-// creates an unclaimed placeholder first (mirrors school_admin's "Add a Company" panel) and
-// uses its id, which DOES come back with a name from POST /placeholders/school.
+// (the other half of the dual-tenant row). GET /schools (BACKLOG #7) lists real names for
+// schools this company already has a student at. For a genuinely new school, this creates
+// an unclaimed placeholder first (mirrors school_admin's "Add a Company" panel) and uses
+// its id, which also comes back with a name from POST /placeholders/school.
 export function CompanyStudentsPage() {
   const queryClient = useQueryClient()
   const studentsQuery = useQuery({ queryKey: ['students'], queryFn: () => api.get<Student[]>('/students') })
-
-  const knownSchools = useMemo(() => {
-    const byId = new Map<string, number>()
-    for (const s of studentsQuery.data ?? []) byId.set(s.school_id, (byId.get(s.school_id) ?? 0) + 1)
-    return Array.from(byId.entries()).map(([id, count]) => ({ id, count }))
-  }, [studentsQuery.data])
+  const schoolsQuery = useQuery({ queryKey: ['schools'], queryFn: () => api.get<SchoolSummary[]>('/schools') })
 
   const [fullName, setFullName] = useState('')
   const [grade, setGrade] = useState('')
@@ -68,6 +61,8 @@ export function CompanyStudentsPage() {
     },
     onSuccess: (student) => {
       queryClient.invalidateQueries({ queryKey: ['students'] })
+      // A "new school" submission just linked a school that GET /schools should now list.
+      if (schoolMode === 'new') queryClient.invalidateQueries({ queryKey: ['schools'] })
       setFormMsg(`Added ${student.full_name}.`)
       resetForm()
     },
@@ -164,16 +159,16 @@ export function CompanyStudentsPage() {
             </div>
 
             {schoolMode === 'existing' ? (
-              knownSchools.length === 0 ? (
+              (schoolsQuery.data ?? []).length === 0 ? (
                 <p className="text-body-md text-on-surface-variant">
-                  No known schools yet — switch to "New school" to add one.
+                  {schoolsQuery.isLoading ? 'Loading schools…' : 'No known schools yet — switch to "New school" to add one.'}
                 </p>
               ) : (
                 <select required value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className={selectClass}>
                   <option value="">Select a school…</option>
-                  {knownSchools.map((s) => (
+                  {(schoolsQuery.data ?? []).map((s) => (
                     <option key={s.id} value={s.id}>
-                      School {s.id.slice(0, 8)}… ({s.count} student{s.count === 1 ? '' : 's'})
+                      {s.name}
                     </option>
                   ))}
                 </select>

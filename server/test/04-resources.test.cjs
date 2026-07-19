@@ -81,6 +81,15 @@ async function main() {
       schoolView.body.some((s) => s.id === stu.body.id) ? ok('school_admin sees the student via school scope (cross-side read)') : bad('school_admin cannot see its student');
       (await api('GET', '/students', adminB)).body.length === 0 ? ok('admin B sees no Company A students (isolation)') : bad('student leaked to Company B');
 
+      console.log('\n--- Schools (cross-tenant read, company_admin only, BACKLOG #7) ---');
+      const schoolsA = await api('GET', '/schools', adminA);
+      (schoolsA.status === 200 && schoolsA.body.length === 1 && schoolsA.body[0].id === S.id && schoolsA.body[0].name === 'School S')
+        ? ok('company_admin sees the name of a school it has a student at') : bad(`schools A: ${schoolsA.status} ${JSON.stringify(schoolsA.body)}`);
+      (await api('GET', '/schools', adminB)).body.length === 0 ? ok('admin B (no students anywhere) sees no schools') : bad('school leaked to Company B with no relationship');
+      eq('school_admin GET /schools -> 403 (company_admin only)', (await api('GET', '/schools', schoolAdmin)).status, 403);
+      eq('driver GET /schools -> 403 (company_admin only)', (await api('GET', '/schools', driverA)).status, 403);
+      eq('unauthenticated GET /schools -> 401', (await api('GET', '/schools', null)).status, 401);
+
       console.log('\n--- Sessions (driver shifts) ---');
       const ci = await api('POST', '/sessions/checkin', driverA, { check_in_lat: 42.3, check_in_lng: -71.1 });
       ci.status === 201 ? ok('driver check-in -> 201') : bad(`checkin ${ci.status}`);

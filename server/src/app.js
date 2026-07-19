@@ -7,6 +7,7 @@ const signupRoutes = require('./routes/signup');
 const placeholderRoutes = require('./routes/placeholders');
 const userRoutes = require('./routes/users');
 const vanRoutes = require('./routes/vans');
+const schoolRoutes = require('./routes/schools');
 const studentRoutes = require('./routes/students');
 const sessionRoutes = require('./routes/sessions');
 const tripRoutes = require('./routes/trips');
@@ -44,6 +45,7 @@ function createApp() {
   app.use('/placeholders', placeholderRoutes);
   app.use('/users', userRoutes);
   app.use('/vans', vanRoutes);
+  app.use('/schools', schoolRoutes);
   app.use('/students', studentRoutes);
   app.use('/sessions', sessionRoutes);
   app.use('/trips', tripRoutes);

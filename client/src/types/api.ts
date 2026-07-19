@@ -174,3 +174,10 @@ export interface School {
   claim_status: 'claimed' | 'unclaimed' | 'pending_claim'
   created_by_user_id: string | null
 }
+
+// GET /schools (BACKLOG #7) — company_admin-only, id+name only, scoped to schools the
+// caller's company already has a student at. Not the full School shape above.
+export interface SchoolSummary {
+  id: string
+  name: string
+}
