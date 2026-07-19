@@ -1,5 +1,8 @@
 # Backlog
 
+<!-- Live test: confirming Anas connected saferoute-tms to Render via the dashboard, so a
+     plain push actually auto-deploys (see BACKLOG item #8 for why this didn't work before). -->
+
 Deferred items surfaced during implementation. Spec §9 already tracks the broader v2 list
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
