@@ -89,11 +89,15 @@ export function RegisterPage() {
         setStage('logging-in')
         const user = await login(email, password)
         setStage('loading-dashboard')
-        // Give React a frame to actually paint the "loading your dashboard" label before
+        // Give React a tick to actually paint the "loading your dashboard" label before
         // the route change below unmounts this page — navigate() still fires immediately
         // after login resolves, same order as before, just after a paint instead of in
-        // the same tick (otherwise this stage would never be visible).
-        await new Promise((resolve) => requestAnimationFrame(resolve))
+        // the same tick (otherwise this stage would never be visible). Deliberately a
+        // setTimeout, NOT requestAnimationFrame: confirmed live that rAF callbacks never
+        // fire at all for a backgrounded/non-visible tab, which would make a successful
+        // registration hang forever on this exact screen — the bug this fix exists to
+        // solve, reintroduced by the "fix" itself. setTimeout(0) always fires.
+        await new Promise((resolve) => setTimeout(resolve, 0))
         navigate(ROLE_HOME[user.role], { replace: true })
       } else {
         setPendingClaimEmail(res.email)
