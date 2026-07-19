@@ -222,3 +222,12 @@ the real user-facing gap is the already-tracked missing real email transport, no
 regression); #1 is real but not infinite (a latency + undifferentiated-loading-state
 issue, not a deadlock) and was intentionally left unfixed per the one-fix-per-session
 convention — see `BACKLOG.md` for full writeups of both.
+
+**2026-07-19 addendum #2:** item #1 (registration loading UX) is now fixed — see
+`BACKLOG.md`'s updated entry. Worth flagging on its own: the first implementation used
+`requestAnimationFrame` to sequence a UI transition, and live verification caught that rAF
+never fires in a backgrounded browser tab, which would have shipped a *new* hang
+indistinguishable from the one being fixed. Caught before this session closed because the
+verification step actually watched the live page to completion instead of stopping once
+the staged messages appeared in the right order — a reminder that "the messages showed up
+correctly" and "the flow actually finishes" are two different checks.

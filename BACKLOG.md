@@ -5,25 +5,37 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 for things noticed while building that aren't in the spec's own backlog.
 
 ## Known-broken (tracked as of July 18 2026)
-1. [INVESTIGATED July 19 2026 — root cause found, NOT fixed this session (out of scope,
-   see item #2's session for why)] Registration "hangs" on "Submitting" for the *"Create
-   new" org* path only (not the claim path — see #2). Reproduced live 3x against the real
-   deployed backend: `POST /signup/:kind` always succeeded (201), immediately followed by
-   `RegisterPage.tsx`'s `onSuccess` doing `await login(...)` then `navigate(...)` — and
-   the Button's `disabled={submit.isPending}` stays true for the *entire* chain (signup +
-   login + the new dashboard's first round of queries), not just the signup call, because
-   TanStack Query's mutation doesn't flip to settled until its `onSuccess` callback's
-   promise resolves. Measured ~7.4s end-to-end on a warm backend (signup ~3.5s, login
-   ~2.3s, dashboard queries ~1.5s) — not infinite, it always completed. But Render's free
-   tier can cold-start 30-90s+ (already flagged in the deploy session's summary), and
-   during that whole window the button shows the same static "Submitting…" text with zero
-   differentiated feedback ("creating account" vs. "logging you in" vs. "loading your
-   dashboard") and no timeout/error surface if any leg fails. That combination is very
-   plausibly what a real user experienced as "hangs indefinitely" — not a deadlock, a
-   latency + UX-feedback gap. Suggested fix (not applied): give the mutation's `onSuccess`
-   phases distinct button text, and/or stop chaining `login()` inside `onSuccess` at all.
-   Deliberately not fixed in the email-verification session that investigated this,
-   per this project's one-fix-per-session convention — needs its own session.
+1. [RESOLVED July 19 2026 — see commits `e1dba8d`, `c330c08`] Registration "hangs" on
+   "Submitting" for the *"Create new" org* path (not the claim path — see #2, untouched).
+   Root cause (from the prior investigation session): `RegisterPage.tsx`'s `onSuccess`
+   chains `signup -> login -> navigate` under one mutation, so `submit.isPending` (and the
+   button) stays busy for the whole chain, not just the signup call — measured ~7.4s warm,
+   with Render free-tier cold starts able to stretch that past a minute, all behind one
+   static "Submitting…" label with zero differentiated feedback. Not a deadlock — a
+   latency + UX-feedback gap. Fix: added a `stage` state (`'creating' | 'logging-in' |
+   'loading-dashboard'`) giving each leg its own button label ("Creating your account…" /
+   "Logging you in…" / "Loading your dashboard…"), plus a `showColdStartHint` reassurance
+   message ("First request may take up to a minute while the server wakes up…") if the
+   whole submit is still pending past ~9s. Signup/login/navigate sequencing itself is
+   unchanged, per the task's own constraint.
+   **Caught and fixed a real regression the fix itself introduced, before this session
+   closed**: the first version used `requestAnimationFrame` to let React paint the
+   "loading-dashboard" label for one frame before `navigate()`. Verified live that `rAF`
+   callbacks never fire at all in a backgrounded/non-visible browser tab — confirmed
+   directly (scheduled one, it never ran) — which meant a fully successful registration
+   would hang forever on "Loading your dashboard…", never navigating: the exact class of
+   bug this fix exists to solve, reintroduced by the fix. Swapped to `setTimeout(resolve,
+   0)`, confirmed to always fire in the same live test, then re-verified the full flow
+   end-to-end.
+   **Verified live** (twice, against the real deployed backend/Neon DB, via a
+   `MutationObserver` on the submit button capturing every label change with timestamps):
+   run 1 (naturally slow/cold) showed all three stages in order plus the cold-start hint,
+   then hung forever on "Loading your dashboard…" — that was the rAF bug, caught here, not
+   shipped as the final state. Run 2, after the `setTimeout` fix, showed all three stages
+   in order (~3.4s signup, ~2.4s login) with no cold-start hint needed (under 9s), then
+   correctly landed on `/company` with the new company_admin logged in and the dashboard's
+   real (empty, brand-new-org) data rendered — no functional regression. Test accounts/
+   companies from both verification runs deleted directly from Neon afterward.
 2. [INVESTIGATED July 19 2026 — no code bug found] Email verification. Reproduced the full
    pipeline live end-to-end against the real deployed backend and Neon DB: created a
    school placeholder → claimed it via `/register` (kind=school, claiming) → confirmed via
