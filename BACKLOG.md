@@ -5,10 +5,50 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 for things noticed while building that aren't in the spec's own backlog.
 
 ## Known-broken (tracked as of July 18 2026)
-1. Registration hangs indefinitely on "Submitting" — reported; not yet reproduced/root-caused
-   as of this entry (investigation starts this session).
-2. Email verification — status UNVERIFIED, possibly regressed. User reports verifying/
-   creating new accounts still doesn't work (investigation starts this session).
+1. [INVESTIGATED July 19 2026 — root cause found, NOT fixed this session (out of scope,
+   see item #2's session for why)] Registration "hangs" on "Submitting" for the *"Create
+   new" org* path only (not the claim path — see #2). Reproduced live 3x against the real
+   deployed backend: `POST /signup/:kind` always succeeded (201), immediately followed by
+   `RegisterPage.tsx`'s `onSuccess` doing `await login(...)` then `navigate(...)` — and
+   the Button's `disabled={submit.isPending}` stays true for the *entire* chain (signup +
+   login + the new dashboard's first round of queries), not just the signup call, because
+   TanStack Query's mutation doesn't flip to settled until its `onSuccess` callback's
+   promise resolves. Measured ~7.4s end-to-end on a warm backend (signup ~3.5s, login
+   ~2.3s, dashboard queries ~1.5s) — not infinite, it always completed. But Render's free
+   tier can cold-start 30-90s+ (already flagged in the deploy session's summary), and
+   during that whole window the button shows the same static "Submitting…" text with zero
+   differentiated feedback ("creating account" vs. "logging you in" vs. "loading your
+   dashboard") and no timeout/error surface if any leg fails. That combination is very
+   plausibly what a real user experienced as "hangs indefinitely" — not a deadlock, a
+   latency + UX-feedback gap. Suggested fix (not applied): give the mutation's `onSuccess`
+   phases distinct button text, and/or stop chaining `login()` inside `onSuccess` at all.
+   Deliberately not fixed in the email-verification session that investigated this,
+   per this project's one-fix-per-session convention — needs its own session.
+2. [INVESTIGATED July 19 2026 — no code bug found] Email verification. Reproduced the full
+   pipeline live end-to-end against the real deployed backend and Neon DB: created a
+   school placeholder → claimed it via `/register` (kind=school, claiming) → confirmed via
+   Render's live app logs that the dev-mailer actually logged the verification email
+   (`[mail] to=... | Verify your email...`) with a real, working token → visited
+   `/verify-email?token=...` → got "Email verified / Your claim is confirmed and your
+   account is now active" → logged in successfully as the new school_admin, correctly
+   scoped to that school. Also confirmed the token is properly single-use: revisiting the
+   same link afterward correctly showed "Verification failed / invalid or expired token"
+   with a working resend form. The "Phase 4 StrictMode/useMutation fix" this session's
+   task prompt referenced *is* real — it's documented in `VerifyEmailPage.tsx`'s own
+   comment (the `useQuery`-keyed-by-token pattern, not a `useMutation` fired from a
+   `useEffect`) — and it holds up correctly on this fresh live re-test; not a regression.
+   **The actual reason a real end-user can't verify on the live deployment**: there is no
+   real email transport (already tracked below, "Real email transport"). The verification
+   token only ever appears in Render's private server console logs — a real person
+   registering on the public live site has no way to see it. This isn't a code defect to
+   fix; it's the pre-existing, already-known email-transport gap manifesting as "doesn't
+   work" from a real user's point of view. No code change made — nothing was broken to fix.
+   **Unrelated issue noticed while investigating** (not fixed, flagging only): every
+   request logs an `express-rate-limit` `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` warning in
+   production — Render sits behind a proxy and sets `X-Forwarded-For`, but the Express app
+   never calls `app.set('trust proxy', ...)`. Confirmed non-fatal (didn't block any request
+   in this session's testing) but worth fixing since it also means the rate limiter may be
+   keying on the wrong IP behind Render's proxy, weakening its actual protection.
 3. **Confirmed accurate** — Company Admin has no "Add Driver" UI. Verified by grep: no
    `POST /users` call exists anywhere under `client/src/pages/company/`. `POST /users`
    (`role: 'driver'`) is a real, tested, company_admin-only backend endpoint with no
@@ -36,6 +76,9 @@ for things noticed while building that aren't in the spec's own backlog.
    (private) `saferoute-tms` repo — see the deploy session's summary for why (Render's API
    can't clone a private repo without the account owner connecting GitHub via the
    dashboard, an interactive step that couldn't be completed autonomously).
+9. `trust proxy` not set — `express-rate-limit` logs an `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR`
+   warning on every production request behind Render's proxy; likely keying rate limits on
+   the wrong IP. Noticed while investigating #2, not fixed (out of scope for that session).
 
 **Note on items 4 and 5 above:** re-read both files fresh and grepped the relevant
 components before writing this section, rather than transcribing the task prompt's

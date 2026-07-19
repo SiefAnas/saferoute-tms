@@ -211,3 +211,14 @@ Note for future reference: this session's task prompt referenced a "Known-broken
 section with a numbered list (this bug as "item #6") that does not exist anywhere in
 this repo's history — flagging the mismatch rather than fabricating that section, per
 this file's own precedent in §6 above.
+
+**2026-07-19 addendum:** the "Known-broken" section referenced above now genuinely
+exists in `BACKLOG.md` (added this session, as explicitly requested). Two of its items
+(#4 School Staff, #5 School Admin contact info) were corrected on the spot — they
+contradicted current code/prior live testing, so they were annotated rather than
+transcribed as fact. Items #1 (registration hang) and #2 (email verification) were
+investigated live this session: #2 has no code bug (fully reproduced working end-to-end;
+the real user-facing gap is the already-tracked missing real email transport, not a
+regression); #1 is real but not infinite (a latency + undifferentiated-loading-state
+issue, not a deadlock) and was intentionally left unfixed per the one-fix-per-session
+convention — see `BACKLOG.md` for full writeups of both.
