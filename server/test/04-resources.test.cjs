@@ -57,6 +57,7 @@ async function main() {
       (mk.status === 201 && mk.body.email_verified_at) ? ok('company_admin creates driver, email_verified stamped (invariant)') : bad(`user create: ${mk.status} ${JSON.stringify(mk.body)}`);
       const driverAId = mk.body.id;
       eq('company_admin creating a school_staff -> 403 (cross-side role)', (await api('POST', '/users', adminA, { role: 'school_staff', email: 'x@x.com', fullName: 'x', password: PW })).status, 403);
+      eq('school_admin creating a driver -> 403 (cross-side role, reverse direction, BACKLOG #3)', (await api('POST', '/users', schoolAdmin, { role: 'driver', email: 'y@y.com', fullName: 'y', password: PW })).status, 403);
       eq('duplicate email -> 409', (await api('POST', '/users', adminA, { role: 'driver', email: 'drvA@co.com', fullName: 'dup', password: PW })).status, 409);
       const drvB = await api('POST', '/users', adminB, { role: 'driver', email: 'drvB@co.com', fullName: 'Driver B', password: PW });
       const driverBId = drvB.body.id;

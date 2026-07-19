@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { isToday, formatDuration, formatMoney } from '../../lib/format'
 import { Card, CardHeader } from '../../components/Card'
+import { Button } from '../../components/Button'
+import { Input } from '../../components/Input'
 import { StatusBadge } from '../../components/StatusBadge'
 import type { DriverSession, PaySummary, PayRule, PublicUser, Van } from '../../types/api'
 
@@ -14,6 +16,7 @@ import type { DriverSession, PaySummary, PayRule, PublicUser, Van } from '../../
 // MVP, no incident/alerts system, no dispatcher-team concept). Faking those would misrepresent
 // what the product currently does.
 export function CompanyAdminDashboard() {
+  const queryClient = useQueryClient()
   const [, setTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 30_000)
@@ -24,6 +27,43 @@ export function CompanyAdminDashboard() {
     queryKey: ['users', 'driver'],
     queryFn: () => api.get<PublicUser[]>('/users?role=driver'),
   })
+
+  // Add Driver (BACKLOG #3): POST /users already existed, company_admin-only, tenant-scoped
+  // via req.db — the same endpoint school_admin's Staff & Access page uses for school_staff.
+  // No invite/claim flow: admin-created accounts are stamped email_verified_at immediately
+  // (see src/services/users.js), so the driver can log in the moment this form succeeds.
+  const [driverName, setDriverName] = useState('')
+  const [driverEmail, setDriverEmail] = useState('')
+  const [driverPhone, setDriverPhone] = useState('')
+  const [driverPassword, setDriverPassword] = useState('')
+  const [addDriverError, setAddDriverError] = useState<string | null>(null)
+  const [addDriverMsg, setAddDriverMsg] = useState<string | null>(null)
+  const addDriver = useMutation({
+    mutationFn: () =>
+      api.post<PublicUser>('/users', {
+        role: 'driver',
+        fullName: driverName,
+        email: driverEmail,
+        phone: driverPhone || undefined,
+        password: driverPassword,
+      }),
+    onSuccess: (driver) => {
+      queryClient.invalidateQueries({ queryKey: ['users', 'driver'] })
+      setAddDriverMsg(`${driver.full_name} can now sign in with the password you set.`)
+      setDriverName('')
+      setDriverEmail('')
+      setDriverPhone('')
+      setDriverPassword('')
+    },
+    onError: (err) => setAddDriverError(err instanceof ApiError ? err.message : 'Could not create driver account.'),
+  })
+
+  function handleAddDriver(e: FormEvent) {
+    e.preventDefault()
+    setAddDriverError(null)
+    setAddDriverMsg(null)
+    addDriver.mutate()
+  }
   const sessionsQuery = useQuery({
     queryKey: ['sessions', 'all'],
     // company_admin's read has no owner sub-scope, so this returns every driver's shifts.
@@ -106,6 +146,45 @@ export function CompanyAdminDashboard() {
         </Card>
 
         <div className="col-span-12 flex flex-col gap-5 lg:col-span-4">
+          <Card className="p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-title-lg text-primary">Add Driver</h2>
+              <span className="material-symbols-outlined text-secondary">person_add</span>
+            </div>
+            <form className="flex flex-col gap-3" onSubmit={handleAddDriver}>
+              <Input required placeholder="Full name" value={driverName} onChange={(e) => setDriverName(e.target.value)} />
+              <Input
+                required
+                type="email"
+                placeholder="Email address"
+                value={driverEmail}
+                onChange={(e) => setDriverEmail(e.target.value)}
+              />
+              <Input
+                placeholder="Phone (optional)"
+                value={driverPhone}
+                onChange={(e) => setDriverPhone(e.target.value)}
+              />
+              <Input
+                required
+                type="password"
+                minLength={8}
+                placeholder="Temporary password"
+                value={driverPassword}
+                onChange={(e) => setDriverPassword(e.target.value)}
+              />
+              <Button type="submit" variant="secondary" disabled={addDriver.isPending}>
+                {addDriver.isPending ? 'Creating…' : 'Add Driver'}
+              </Button>
+              {addDriverMsg && <p className="text-body-md text-on-surface-variant">{addDriverMsg}</p>}
+              {addDriverError && (
+                <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
+                  {addDriverError}
+                </p>
+              )}
+            </form>
+          </Card>
+
           <Card className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-title-lg text-primary">Fleet</h2>
