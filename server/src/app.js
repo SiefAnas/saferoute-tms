@@ -38,16 +38,7 @@ function createApp() {
   app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true }));
   app.use(express.json());
 
-  // TEMPORARY — verifying the trust-proxy hop count against real Render traffic before
-  // relying on it; remove this block once confirmed (see BACKLOG.md item #9). Exposed
-  // directly in /health's response instead of only console.log, since Render's log
-  // query API proved too slow/unreliable to check against during this investigation.
-  app.get('/health', (req, res) =>
-    res.json({
-      status: 'ok',
-      _trustProxyCheck: { xff: req.headers['x-forwarded-for'] ?? null, ip: req.ip, ips: req.ips },
-    }),
-  );
+  app.get('/health', (req, res) => res.json({ status: 'ok' }));
   app.use('/auth', authRoutes);
   app.use('/signup', signupRoutes);
   app.use('/placeholders', placeholderRoutes);
