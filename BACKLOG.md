@@ -176,9 +176,14 @@ for things noticed while building that aren't in the spec's own backlog.
    after each push. Per the task's own instruction not to delete the mirror until the
    replacement is *proven*, not just configured — it isn't, for the auto-deploy path
    specifically — **the mirror repo (`saferoute-tms-deploy`) was deliberately NOT deleted**.
-   It's currently redundant (nothing is pushed to it going forward, and nothing points
-   Render at it anymore) but costs nothing to leave alone as a fallback until Anas decides
-   between (a) and (b) above.
+   **Update, same day**: Anas connected GitHub for `saferoute-tms` in Render's dashboard.
+   Confirmed live: a plain `git push origin overnight/deploy-and-finish` (commit `e641ad6`,
+   this session's Add Driver work) auto-deployed both services on its own
+   (`trigger: "new_commit"` in Render's own deploy record, no manual API call involved) —
+   the option-(a) path above is now live, resolving the last open piece of this item. The
+   mirror repo (`saferoute-tms-deploy`) still hasn't been deleted — it's inert (nothing
+   pushes to it or points Render at it) and costs nothing to leave as a fallback; deleting
+   it wasn't part of this session's task.
 9. [RESOLVED July 19 2026 — see commits `156375d`, `8589c6d`] `trust proxy` not set —
    `express-rate-limit` logged an `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` warning on every
    production request behind Render's proxy, and was keying rate limits off an unreliable
