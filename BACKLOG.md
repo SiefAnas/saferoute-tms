@@ -102,29 +102,51 @@ for things noticed while building that aren't in the spec's own backlog.
    live deployed site, opened the Students page's "Add a Student" form, and the "existing
    school" dropdown showed **"Willow Creek Elementary"** — a real name, not a raw id. Zero
    console errors.
-8. [RESOLVED July 19 2026] Live deploy ran off a public mirror repo
-   (`saferoute-tms-deploy`), not the real `saferoute-tms` repo — see item history below.
+8. [PARTIALLY RESOLVED July 19 2026 — mirror repo NOT deleted, see why below] Live deploy
+   ran off a public mirror repo (`saferoute-tms-deploy`), not the real `saferoute-tms` repo.
    `saferoute-tms` was private when the mirror was created (Render's API can't clone a
-   private repo without the account owner connecting GitHub via the dashboard, an
-   interactive step that couldn't be completed autonomously at the time); it has since been
-   made public, removing that blocker. **What was done**: confirmed `saferoute-tms` is
-   genuinely public (unauthenticated GitHub API call: `"private": false`; unauthenticated
-   `git ls-remote` succeeds) — checked directly rather than assumed. `PATCH
-   /v1/services/{id}` on both the backend web service and the frontend static site updated
-   their `repo`/`branch` fields to `https://github.com/SiefAnas/saferoute-tms` /
-   `overnight/deploy-and-finish` (the still-unmerged PR branch — NOT `main`, since PR #1
-   isn't merged and `main` doesn't have any of this work) — same service ids, same
-   `onrender.com` URLs, no recreation needed. Manually triggered a deploy on both
-   immediately after repointing; Render's own deploy logs show `Cloning from
-   https://github.com/SiefAnas/saferoute-tms` (the real repo, not the mirror). **Verified
-   live** before touching the mirror: backend `/health` → `{"status":"ok"}`, frontend root →
-   200, and a real login (`admin@3bees.test`) succeeded — all still working after the
-   repoint. **Auto-deploy-from-a-normal-push specifically verified** (not just the manual
-   API trigger above): this very commit was pushed with a plain `git push origin
-   overnight/deploy-and-finish` — no push to the mirror — and Render's webhook
-   (`autoDeployTrigger: "commit"`) picked it up and deployed on its own; see the note right
-   below this list for the exact before/after deploy ids. Only once all of the above was
-   confirmed working was the mirror repo (`saferoute-tms-deploy`) deleted.
+   private repo without the account owner connecting GitHub via the dashboard); it has
+   since been made public. **What was done and verified working**: confirmed
+   `saferoute-tms` is genuinely public (unauthenticated GitHub API call: `"private":
+   false`; unauthenticated `git ls-remote` succeeds). `PATCH /v1/services/{id}` on both the
+   backend web service and the frontend static site updated their `repo`/`branch` fields to
+   `https://github.com/SiefAnas/saferoute-tms` / `overnight/deploy-and-finish` (the still-
+   unmerged PR branch — not `main`, which doesn't have this work) — same service ids, same
+   `onrender.com` URLs. Manually triggered a deploy on both immediately after repointing;
+   Render's own logs show `Cloning from https://github.com/SiefAnas/saferoute-tms` (the
+   real repo). Live sanity pass afterward: backend `/health` → `{"status":"ok"}`, frontend
+   root → 200, a real login (`admin@3bees.test`) succeeded.
+   **What did NOT work, caught before claiming success**: the task explicitly asked to
+   verify that "a normal push... triggers auto-deploy correctly," as its own separate check
+   from the manual API-triggered deploy above — and it doesn't. Pushed a real commit with a
+   plain `git push origin overnight/deploy-and-finish` (no push to the mirror) and waited
+   ~6 minutes; no deploy was ever auto-triggered, despite the service's own config showing
+   `autoDeploy: "yes"`, `autoDeployTrigger: "commit"`. Checked why rather than assuming it
+   was just slow: `GET /repos/SiefAnas/saferoute-tms/hooks` returns `[]` — no webhook
+   registered on the real repo at all (the mirror's `/hooks` is *also* `[]`, so Render
+   doesn't use classic per-repo webhooks; it uses its own GitHub App's installation-level
+   event delivery instead, invisible to that endpoint — but the practical, observed fact
+   stands regardless of mechanism: pushes to `saferoute-tms` don't trigger anything, pushes
+   to the mirror always did). This points to the same root cause as the original private-
+   repo blocker: Render's GitHub App was never installed/authorized for `saferoute-tms`
+   specifically (being public only unblocks anonymous clones for manual/API-triggered
+   deploys, not the push-webhook path, which needs the App installed regardless of
+   visibility) — and installing it is the same interactive dashboard step (Connect GitHub →
+   grant access to this repo) that was flagged as un-doable autonomously in the original
+   deploy session.
+   **Net result**: both services now genuinely run off the real repo's code (verified: a
+   manual deploy trigger works, logs confirm the clone source, the site is live and
+   functional) — a real improvement, no longer serving a public copy of otherwise-private
+   code. But going forward, a plain push to `saferoute-tms` will **not** auto-deploy; either
+   (a) Anas does the one-time "Connect GitHub" step in Render's dashboard for
+   `saferoute-tms`, after which auto-deploy should work the normal way, or (b) deploys need
+   a manual trigger (Render dashboard's "Manual Deploy" button, or the API call used here)
+   after each push. Per the task's own instruction not to delete the mirror until the
+   replacement is *proven*, not just configured — it isn't, for the auto-deploy path
+   specifically — **the mirror repo (`saferoute-tms-deploy`) was deliberately NOT deleted**.
+   It's currently redundant (nothing is pushed to it going forward, and nothing points
+   Render at it anymore) but costs nothing to leave alone as a fallback until Anas decides
+   between (a) and (b) above.
 9. [RESOLVED July 19 2026 — see commits `156375d`, `8589c6d`] `trust proxy` not set —
    `express-rate-limit` logged an `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` warning on every
    production request behind Render's proxy, and was keying rate limits off an unreliable
