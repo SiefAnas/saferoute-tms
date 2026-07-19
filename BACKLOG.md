@@ -64,10 +64,39 @@ for things noticed while building that aren't in the spec's own backlog.
    never calls `app.set('trust proxy', ...)`. Confirmed non-fatal (didn't block any request
    in this session's testing) but worth fixing since it also means the rate limiter may be
    keying on the wrong IP behind Render's proxy, weakening its actual protection.
-3. **Confirmed accurate** — Company Admin has no "Add Driver" UI. Verified by grep: no
-   `POST /users` call exists anywhere under `client/src/pages/company/`. `POST /users`
-   (`role: 'driver'`) is a real, tested, company_admin-only backend endpoint with no
-   frontend consumer — same shape as the other Step-5 management-UI gaps, just missed.
+3. [RESOLVED July 19 2026 — see commit `e641ad6`] Company Admin had no "Add Driver" UI.
+   **Backend needed nothing new** — checked first rather than assumed: `POST /users`
+   already existed, already company_admin-only (`requireRole('company_admin',
+   'school_admin')` + a `CREATABLE` map restricting company_admin to `driver`/
+   `company_admin`), already tenant-scoped (inserts through `req.db`, which stamps the
+   caller's `company_id`), already tested (creation, duplicate-email 409, cross-side-role
+   403, list/read isolation, driver-can't-list-users 403) — the exact same endpoint
+   `StaffAccessPage.tsx` already uses for school_admin creating school_staff. Added the one
+   gap that wasn't covered: `school_admin creating a driver -> 403` (the reverse cross-
+   side-role direction; only the company_admin-creating-school_staff direction existed
+   before). 146/146 backend tests.
+   **No invite/claim flow needed or built** — checked the existing pattern rather than
+   inventing a new mechanism: admin-created accounts (via `POST /users`) are stamped
+   `email_verified_at` immediately at creation (`src/services/users.js`: "admin-vouched"),
+   so a newly-created driver can log in the moment the form succeeds, with the temporary
+   password the admin set. This is the same mechanism school_admin's Staff & Access page
+   already uses for school_staff — not the separate claim/placeholder + email-verification
+   flow (that's only for self-serve org registration, §5.3, unrelated to admin-created
+   accounts).
+   **Frontend**: new "Add Driver" card on `CompanyAdminDashboard.tsx` (full name, email,
+   phone, temporary password), mirroring `StaffAccessPage.tsx`'s create-staff form.
+   Invalidates the `['users', 'driver']` query on success so the existing "Live Driver
+   Status" table and the Payroll Summary driver dropdown both pick up the new driver
+   immediately, with no other page changes needed.
+   **Verified live, full loop**: logged in as `admin@3bees.test`, submitted the Add Driver
+   form with a real test account — it appeared instantly in Live Driver Status and the
+   Payroll dropdown, with a confirmation message ("... can now sign in with the password
+   you set"). Logged out, logged back in *as the new driver* with that exact password —
+   landed on a fully working Driver dashboard (check-in button, correct tenant's students
+   in the trip-logging dropdown), zero console errors. Confirmed tenant isolation directly
+   against the live API: `GET /users?role=driver` as `jamie@greenvalley.test` (a different
+   company) returned `[]` — the new driver is invisible outside its own company. Test
+   driver account deleted from Neon afterward.
 4. **Contradicted by direct verification, not adding as stated.** This session's task
    description claimed "School Staff role is missing its core functional pages (trip
    confirmation etc)." `client/src/pages/school-staff/SchoolStaffDashboard.tsx` has a full

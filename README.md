@@ -40,3 +40,4 @@ npm run migrate:down          # roll back the most recent migration
 2. Auth & RBAC middleware (tenant scoping by `company_id` / `school_id`)
 3. Core Express API routes
 4. React frontend (reusing the Stitch design system)
+  
