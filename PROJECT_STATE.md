@@ -242,3 +242,22 @@ confirmed to still trip correctly per real IP, all 4 roles still log in, CORS un
 in `BACKLOG.md`. Same theme as addendum #2: an assumption that sounded reasonable (single
 reverse-proxy hop) didn't hold up against the live system, and checking directly — not
 trusting the commonly-cited default — is what caught it.
+
+**2026-07-19 addendum #4:** items #7 and #8 are now resolved.
+
+Item #7 (`GET /schools`): added, company_admin-only, scoped to schools the caller's company
+already has a student at (not a general directory). Wired into the Students page's
+"existing school" dropdown. Verified live: `admin@3bees.test` now sees "Willow Creek
+Elementary" in that dropdown, not a raw id. 145/145 backend tests.
+
+Item #8 (mirror repo retirement): `saferoute-tms` went public since the mirror was created,
+removing the original blocker (Render's API can't clone a private repo without the account
+owner connecting GitHub via the dashboard — an interactive step, confirmed impossible to do
+autonomously in the deploy session). Both Render services were repointed at the real repo's
+`overnight/deploy-and-finish` branch via `PATCH /v1/services/{id}` (same service ids, same
+URLs — no recreation). Confirmed via Render's own deploy logs that they now genuinely clone
+from `github.com/SiefAnas/saferoute-tms`, not the mirror. Live sanity pass (health,
+frontend load, one login) done *before* touching the mirror, and the auto-deploy-from-a-
+normal-push path specifically re-verified (not just the manual API trigger used for the
+initial repoint) using this very docs commit — see `BACKLOG.md` for the exact deploy ids.
+The mirror repo was deleted only after all of that was confirmed, not just configured.

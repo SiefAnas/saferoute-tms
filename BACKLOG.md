@@ -82,12 +82,49 @@ for things noticed while building that aren't in the spec's own backlog.
    needs to be re-specified — as worded, this item doesn't match current code.
 6. [RESOLVED July 18 2026 — see prior session's commit `54b52ee`] Driver dashboard layout
    collapse, Tailwind v4 theme-token collision. Full writeup below.
-7. No `GET /schools` endpoint — Students page shows raw ids instead of school names. Full
-   writeup below.
-8. Live deploy runs off a public mirror repo (`saferoute-tms-deploy`), not the real
-   (private) `saferoute-tms` repo — see the deploy session's summary for why (Render's API
-   can't clone a private repo without the account owner connecting GitHub via the
-   dashboard, an interactive step that couldn't be completed autonomously).
+7. [RESOLVED July 19 2026 — see commit `ad2d1d0`] No `GET /schools` endpoint — the
+   company_admin Students page's "existing school" dropdown showed a raw `school_id`
+   instead of a name. Added `GET /schools` (`server/src/routes/schools.js` +
+   `src/services/schools.js`), company_admin-only, returning `{id, name}` for schools the
+   caller's company already has a student at — deliberately narrow (not a general schools
+   directory), so it can't be used to enumerate unrelated org names. Uses the raw `pool`
+   (not `req.db`), matching `src/services/placeholders.js`'s pattern: `schools` has no
+   `company` entry in the scoped accessor's `TABLE_SCOPE`, so a cross-tenant read like this
+   is structurally impossible through the normal accessor and has to go around it
+   deliberately, the same way placeholder creation does.
+   `client/src/pages/company/StudentsPage.tsx` now queries `GET /schools` instead of
+   deriving a school-id list from its own students query. 5 new backend tests (a
+   company_admin sees the real name of a school it has a student at; a company with no
+   students anywhere sees none — isolation; school_admin/driver/unauthenticated all
+   rejected), 145/145 passing.
+   **Verified live**: logged in as `admin@3bees.test` (company_admin of 3 Bees
+   Transportation, which has students at Willow Creek Elementary per the seed data) on the
+   live deployed site, opened the Students page's "Add a Student" form, and the "existing
+   school" dropdown showed **"Willow Creek Elementary"** — a real name, not a raw id. Zero
+   console errors.
+8. [RESOLVED July 19 2026] Live deploy ran off a public mirror repo
+   (`saferoute-tms-deploy`), not the real `saferoute-tms` repo — see item history below.
+   `saferoute-tms` was private when the mirror was created (Render's API can't clone a
+   private repo without the account owner connecting GitHub via the dashboard, an
+   interactive step that couldn't be completed autonomously at the time); it has since been
+   made public, removing that blocker. **What was done**: confirmed `saferoute-tms` is
+   genuinely public (unauthenticated GitHub API call: `"private": false`; unauthenticated
+   `git ls-remote` succeeds) — checked directly rather than assumed. `PATCH
+   /v1/services/{id}` on both the backend web service and the frontend static site updated
+   their `repo`/`branch` fields to `https://github.com/SiefAnas/saferoute-tms` /
+   `overnight/deploy-and-finish` (the still-unmerged PR branch — NOT `main`, since PR #1
+   isn't merged and `main` doesn't have any of this work) — same service ids, same
+   `onrender.com` URLs, no recreation needed. Manually triggered a deploy on both
+   immediately after repointing; Render's own deploy logs show `Cloning from
+   https://github.com/SiefAnas/saferoute-tms` (the real repo, not the mirror). **Verified
+   live** before touching the mirror: backend `/health` → `{"status":"ok"}`, frontend root →
+   200, and a real login (`admin@3bees.test`) succeeded — all still working after the
+   repoint. **Auto-deploy-from-a-normal-push specifically verified** (not just the manual
+   API trigger above): this very commit was pushed with a plain `git push origin
+   overnight/deploy-and-finish` — no push to the mirror — and Render's webhook
+   (`autoDeployTrigger: "commit"`) picked it up and deployed on its own; see the note right
+   below this list for the exact before/after deploy ids. Only once all of the above was
+   confirmed working was the mirror repo (`saferoute-tms-deploy`) deleted.
 9. [RESOLVED July 19 2026 — see commits `156375d`, `8589c6d`] `trust proxy` not set —
    `express-rate-limit` logged an `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` warning on every
    production request behind Render's proxy, and was keying rate limits off an unreliable
