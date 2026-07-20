@@ -343,3 +343,61 @@ what's already live and tested) is Anas's call.
      auto-deploy-on-push still fires from the new branch config, not just from manual
      triggers. See BACKLOG.md/PROJECT_STATE.md's next addendum for the confirmed result. -->
 
+**2026-07-20 addendum #7 — Render repointed to `main`; auto-deploy-on-push does NOT
+survive the branch switch (real finding, session stopped here as instructed).**
+
+Before touching Render: confirmed `main` and `overnight/deploy-and-finish` had drifted
+apart by 2 docs-only commits since the last session's audit (this session's own docs
+edits from two sessions ago, deliberately not pushed to `main` at the time). Fast-forwarded
+`main` to match exactly (`daf9c37..6525b5b`, a clean fast-forward, confirmed no divergence
+before doing it) and pushed, so `main` is fully current before any Render changes.
+
+**Steps 1-3, confirmed working with real evidence:**
+- Both `saferoute-tms-api` and `saferoute-tms-client` repointed from
+  `overnight/deploy-and-finish` to `main` via `PATCH /v1/services/{id}`.
+- Manually triggered a deploy on both; Render's own logs show `Checking out commit
+  6525b5b... in branch main` (the real, current `main` tip at the time) — not assumed
+  from the config field, read directly from the build log.
+- Live sanity pass: backend `/health` → `{"status":"ok"}`, frontend root → 200, a real
+  login (`admin@3bees.test`) succeeded.
+
+**Step 4 — did NOT survive the branch switch, confirmed with real evidence, not
+assumed.** Pushed a trivial docs commit directly to `main` (`65f05f0`) and waited ~5
+minutes: no auto-deploy on either service. Tried one legitimate, non-destructive
+remediation — toggled `autoDeploy` off then back on via the API on both services, in case
+that forces Render to re-establish its webhook subscription for the new branch — then
+pushed a second trivial commit (`faa659d`) and waited another ~3 minutes: still nothing.
+Checked both services' full deploy history directly (not filtered/assumed): the only
+deploys since the branch switch are the two manual/API-triggered ones from step 2;
+neither test commit ever appears, on either service, under any trigger type.
+
+**What this means**: manually/API-triggered deploys correctly pull from `main` now (step
+2's proof holds) — the "what to build" config genuinely changed. But the "which pushes
+count as an auto-deploy trigger" subscription apparently did not follow the branch-field
+change, even after toggling `autoDeploy`. This is the same class of issue as the original
+GitHub-connection blocker (item #8): something about Render's webhook/GitHub App wiring
+is tied to the branch it was originally configured against
+(`overnight/deploy-and-finish`), and an API-only branch change doesn't carry that over.
+The likely fix is the same kind of interactive step as before — reconfirming/reselecting
+the branch through Render's dashboard UI (not just the API) may be what actually
+re-registers the webhook for `main`; this couldn't be tested further from here.
+
+**Per this session's own explicit instructions, steps 5 and 6 were NOT performed**:
+the mirror repo (`saferoute-tms-deploy`) was not deleted, and the `overnight/deploy-and-
+finish` branch was not deleted — both were gated on step 4 being confirmed working, and
+it wasn't. `overnight/deploy-and-finish` is currently the *only* branch confirmed to
+auto-deploy (from two sessions ago), so keeping it around a bit longer preserves a known-
+working fallback while `main`'s auto-deploy is unresolved, rather than leaving the project
+with no confirmed auto-deploy path at all.
+
+**Current live state, for the record**: both services are correctly serving code from
+`main` at commit `6525b5b` (the last commit before this addendum's own docs-only test
+commits) — fully functional, fully tested, just not automatically updated by subsequent
+pushes to `main` until the webhook issue above is resolved. Manual/API-triggered deploys
+remain a reliable way to push updates to `main` live in the meantime.
+
+**Ready for Phase 8** once Anas has reviewed this — the housekeeping task's functional
+goals (branch repoint, live verification) are done; only the auto-deploy-webhook
+carryover is unresolved and needs a decision (try the dashboard reconnect, or accept
+manual-trigger deploys from `main` for now).
+
