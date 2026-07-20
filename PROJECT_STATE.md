@@ -337,3 +337,8 @@ What was actually confirmed (this session, audit only):
 No revert, force-push, or PR action was taken — this was audit-only, as instructed. Whether
 anything needs to be undone (it's not clear anything does — the content is identical to
 what's already live and tested) is Anas's call.
+
+<!-- Trivial marker commit: both Render services were just repointed from
+     overnight/deploy-and-finish to main; this line's own push is the live test that
+     auto-deploy-on-push still fires from the new branch config, not just from manual
+     triggers. See BACKLOG.md/PROJECT_STATE.md's next addendum for the confirmed result. -->
