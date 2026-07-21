@@ -6,7 +6,14 @@ import { useAuth } from '../../lib/auth'
 import { ROLE_HOME } from '../../lib/roleHome'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
+import { StateAutocomplete } from '../../components/StateAutocomplete'
+import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter'
 import type { ClaimCandidate, OrgKind, SignupResponse } from '../../types/api'
+
+// The "claim existing" flow is parked, not deleted: kept fully working server-side and in
+// this file (the search UI, the pending-claim screen, everything below still works) in
+// case it's needed again. This flag is the single switch to bring the toggle back.
+const CLAIM_FLOW_ENABLED = false
 
 // Self-serve registration (§5.2/§5.3) — only Company and School orgs self-register
 // (as company_admin / school_admin); drivers and school_staff are admin-invited, so
@@ -48,9 +55,14 @@ export function RegisterPage() {
 
   const [orgName, setOrgName] = useState('')
   const [address, setAddress] = useState('')
+  const [zip, setZip] = useState('')
+  const [state, setState] = useState('')
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const [error, setError] = useState<string | null>(null)
   const [pendingClaimEmail, setPendingClaimEmail] = useState<string | null>(null)
@@ -82,7 +94,7 @@ export function RegisterPage() {
         fullName,
         email,
         password,
-        ...(claiming ? { claimId } : { orgName, address: address || undefined }),
+        ...(claiming ? { claimId } : { orgName, address, zip, state }),
       }),
     onSuccess: async (res) => {
       if (res.mode === 'created') {
@@ -123,6 +135,10 @@ export function RegisterPage() {
     setError(null)
     if (claiming && !claimId) {
       setError('Select an organization to claim from the search results below.')
+      return
+    }
+    if (!claiming && password !== confirmPassword) {
+      setError('Passwords do not match.')
       return
     }
     setStage('creating')
@@ -173,22 +189,24 @@ export function RegisterPage() {
           ))}
         </div>
 
-        <div className="flex gap-2 text-body-md">
-          <button
-            type="button"
-            onClick={() => setClaiming(false)}
-            className={`flex-1 rounded-lg px-4 py-2 transition-colors ${!claiming ? 'bg-secondary text-on-secondary' : 'text-on-surface-variant hover:bg-surface-container'}`}
-          >
-            Create new
-          </button>
-          <button
-            type="button"
-            onClick={() => setClaiming(true)}
-            className={`flex-1 rounded-lg px-4 py-2 transition-colors ${claiming ? 'bg-secondary text-on-secondary' : 'text-on-surface-variant hover:bg-surface-container'}`}
-          >
-            Claim existing
-          </button>
-        </div>
+        {CLAIM_FLOW_ENABLED && (
+          <div className="flex gap-2 text-body-md">
+            <button
+              type="button"
+              onClick={() => setClaiming(false)}
+              className={`flex-1 rounded-lg px-4 py-2 transition-colors ${!claiming ? 'bg-secondary text-on-secondary' : 'text-on-surface-variant hover:bg-surface-container'}`}
+            >
+              Create new
+            </button>
+            <button
+              type="button"
+              onClick={() => setClaiming(true)}
+              className={`flex-1 rounded-lg px-4 py-2 transition-colors ${claiming ? 'bg-secondary text-on-secondary' : 'text-on-surface-variant hover:bg-surface-container'}`}
+            >
+              Claim existing
+            </button>
+          </div>
+        )}
 
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           {claiming ? (
@@ -238,9 +256,23 @@ export function RegisterPage() {
               </label>
               <Input id="orgName" required value={orgName} onChange={(e) => setOrgName(e.target.value)} />
               <label className="text-label-md text-on-surface-variant" htmlFor="address">
-                Address <span className="normal-case text-on-surface-variant/70">(optional)</span>
+                Address
               </label>
-              <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
+              <Input id="address" required value={address} onChange={(e) => setAddress(e.target.value)} />
+              <div className="flex gap-2">
+                <div className="flex flex-1 flex-col gap-2">
+                  <label className="text-label-md text-on-surface-variant" htmlFor="zip">
+                    Zip code
+                  </label>
+                  <Input id="zip" required value={zip} onChange={(e) => setZip(e.target.value)} placeholder="02139" />
+                </div>
+                <div className="flex flex-1 flex-col gap-2">
+                  <label className="text-label-md text-on-surface-variant" htmlFor="state">
+                    State
+                  </label>
+                  <StateAutocomplete id="state" required value={state} onChange={setState} />
+                </div>
+              </div>
             </div>
           )}
 
@@ -260,14 +292,53 @@ export function RegisterPage() {
             <label className="text-label-md text-on-surface-variant" htmlFor="reg-password">
               Password
             </label>
-            <Input
-              id="reg-password"
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative flex items-center">
+              <Input
+                id="reg-password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-4 text-outline hover:text-secondary"
+              >
+                <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
+              </button>
+            </div>
+            <p className="text-label-md text-on-surface-variant">
+              Must be at least 8 characters, with an uppercase letter, a lowercase letter, and a special character.
+            </p>
+            <PasswordStrengthMeter password={password} />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-label-md text-on-surface-variant" htmlFor="reg-confirm-password">
+              Confirm password
+            </label>
+            <div className="relative flex items-center">
+              <Input
+                id="reg-confirm-password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((v) => !v)}
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-4 text-outline hover:text-secondary"
+              >
+                <span className="material-symbols-outlined">{showConfirmPassword ? 'visibility_off' : 'visibility'}</span>
+              </button>
+            </div>
           </div>
 
           {error && (

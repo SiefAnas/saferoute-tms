@@ -125,10 +125,42 @@ async function main() {
       (await post('/auth/verify-email', { token: rawToken })).status === 400 ? ok('reused token -> 400') : bad('reused token accepted');
 
       console.log('\n--- Fresh signup (no claim) -> operational immediately ---');
-      const fresh = await post('/signup/company', { orgName: '3 Bees Transport', fullName: 'Owner', email: 'owner@3bees.com', password: PW });
+      const freshBase = { orgName: '3 Bees Transport', address: '1 Main St', zip: '02139', state: 'MA', fullName: 'Owner', password: PW };
+      const fresh = await post('/signup/company', { ...freshBase, email: 'owner@3bees.com' });
       const freshBody = await j(fresh);
       (fresh.status === 201 && freshBody.mode === 'created' && freshBody.token) ? ok('fresh signup -> 201 created + token (operational)') : bad(`fresh signup wrong: ${fresh.status} ${JSON.stringify(freshBody)}`);
-      (await post('/signup/company', { orgName: 'Dup', fullName: 'x', email: 'owner@3bees.com', password: PW })).status === 409 ? ok('duplicate email -> 409') : bad('duplicate email allowed');
+      (await post('/signup/company', { orgName: 'Dup', address: '1 Main St', zip: '02139', state: 'MA', fullName: 'x', email: 'owner@3bees.com', password: PW })).status === 409 ? ok('duplicate email -> 409') : bad('duplicate email allowed');
+
+      console.log('\n--- Fresh signup: address/zip/state now required ---');
+      (await post('/signup/company', { ...freshBase, address: undefined, email: 'noaddr@3bees.com' })).status === 400
+        ? ok('missing address -> 400') : bad('missing address accepted');
+      (await post('/signup/company', { ...freshBase, zip: undefined, email: 'nozip@3bees.com' })).status === 400
+        ? ok('missing zip -> 400') : bad('missing zip accepted');
+      (await post('/signup/company', { ...freshBase, state: undefined, email: 'nostate@3bees.com' })).status === 400
+        ? ok('missing state -> 400' ) : bad('missing state accepted');
+      (await post('/signup/company', { ...freshBase, zip: 'abc', email: 'badzip@3bees.com' })).status === 400
+        ? ok('invalid zip format -> 400') : bad('invalid zip accepted');
+      (await post('/signup/company', { ...freshBase, state: 'ZZ', email: 'badstate@3bees.com' })).status === 400
+        ? ok('invalid state code -> 400') : bad('invalid state accepted');
+
+      console.log('\n--- Fresh signup: lowercase state code normalized to uppercase ---');
+      const lower = await post('/signup/company', { ...freshBase, state: 'ma', email: 'lowerstate@3bees.com' });
+      const lowerBody = await j(lower);
+      lower.status === 201 ? ok('lowercase state code accepted -> 201') : bad(`lowercase state rejected: ${lower.status}`);
+      const storedState = (await pool.query('SELECT state FROM companies WHERE created_by_user_id IS NULL AND name=$1 ORDER BY created_at DESC LIMIT 1', ['3 Bees Transport'])).rows[0]?.state;
+      storedState === 'MA' ? ok('state normalized to uppercase in DB') : bad(`state stored as: ${storedState}`);
+
+      console.log('\n--- Fresh signup: password complexity enforced ---');
+      (await post('/signup/company', { ...freshBase, password: 'alllower1!', email: 'noupper@3bees.com' })).status === 400
+        ? ok('password missing uppercase -> 400') : bad('password missing uppercase accepted');
+      (await post('/signup/company', { ...freshBase, password: 'ALLUPPER1!', email: 'nolower@3bees.com' })).status === 400
+        ? ok('password missing lowercase -> 400') : bad('password missing lowercase accepted');
+      (await post('/signup/company', { ...freshBase, password: 'NoSpecial1', email: 'nospecial@3bees.com' })).status === 400
+        ? ok('password missing special character -> 400') : bad('password missing special character accepted');
+      (await post('/signup/company', { ...freshBase, password: 'Sh0rt!', email: 'tooshort@3bees.com' })).status === 400
+        ? ok('password too short -> 400') : bad('short password accepted');
+      (await post('/signup/company', { ...freshBase, email: 'goodpw@3bees.com' })).status === 201
+        ? ok('valid complex password -> 201') : bad('valid complex password rejected');
 
       console.log('\n--- Claimed placeholder no longer appears in search ---');
       const search2 = await j(await get('/signup/school/claimable?name=willow%20creek%20elem'));

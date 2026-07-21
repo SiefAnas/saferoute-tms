@@ -8,7 +8,13 @@ const { generateToken, hashToken } = require('../auth/tokens');
 const { signJwt } = require('../auth/jwt');
 const { sendMail } = require('../mail/mailer');
 const { HttpError } = require('../errors');
-const { assertValidEmail, assertPasswordStrength, assertMaxLength } = require('../validate');
+const {
+  assertValidEmail,
+  assertPasswordStrength,
+  assertValidZip,
+  assertValidState,
+  assertMaxLength,
+} = require('../validate');
 
 const CLAIM_TTL = "interval '24 hours'";
 
@@ -63,13 +69,13 @@ async function createAdminUser(client, cfg, orgId, { fullName, email, password }
 }
 
 // Fresh signup: brand-new org, operational immediately (no email verification, §5.2).
-async function signupFresh(kind, { orgName, address, fullName, email, password }) {
+async function signupFresh(kind, { orgName, address, zip, state, fullName, email, password }) {
   const cfg = kindConfig(kind);
   const user = await withTx(async (client) => {
     const { rows } = await client.query(
-      `INSERT INTO ${cfg.table} (name, address, claim_status, claimed_at)
-       VALUES ($1, $2, 'claimed', now()) RETURNING id`,
-      [orgName, address ?? null]
+      `INSERT INTO ${cfg.table} (name, address, zip_code, state, claim_status, claimed_at)
+       VALUES ($1, $2, $3, $4, 'claimed', now()) RETURNING id`,
+      [orgName, address, zip, state]
     );
     return createAdminUser(client, cfg, rows[0].id, { fullName, email, password }, true);
   });
@@ -123,16 +129,21 @@ async function signupClaim(kind, claimId, { fullName, email, password }) {
 }
 
 async function signup(kind, body = {}) {
-  const { orgName, fullName, email, password, address, claimId } = body;
+  const { orgName, fullName, email, password, address, zip, state, claimId } = body;
   if (!fullName || !email || !password) throw new HttpError(400, 'fullName, email and password are required');
   assertValidEmail(email);
   assertPasswordStrength(password);
   assertMaxLength(fullName, 200, 'fullName');
+  if (claimId) return signupClaim(kind, claimId, { fullName, email, password });
+  // Fresh (create-new-org) path only: address/zip/state are new required fields (the
+  // "claim existing" path never collects org fields at all, so it's unaffected).
+  if (!orgName) throw new HttpError(400, 'orgName is required for a new organization');
+  if (!address) throw new HttpError(400, 'address is required for a new organization');
   assertMaxLength(orgName, 200, 'orgName');
   assertMaxLength(address, 500, 'address');
-  if (claimId) return signupClaim(kind, claimId, { fullName, email, password });
-  if (!orgName) throw new HttpError(400, 'orgName is required for a new organization');
-  return signupFresh(kind, { orgName, address, fullName, email, password });
+  assertValidZip(zip);
+  const normalizedState = assertValidState(state);
+  return signupFresh(kind, { orgName, address, zip, state: normalizedState, fullName, email, password });
 }
 
 // Verify email; if the user has a pending claim, finalize it and notify the placeholder creator.

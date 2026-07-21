@@ -1,10 +1,12 @@
 // Shared input validation helpers (BACKLOG: no cross-cutting validation layer existed).
 // Deliberately minimal — MVP-reasonable checks, not an exhaustive validation framework.
 const { HttpError } = require('./errors');
+const { US_STATE_CODES } = require('./usStates');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LEN = 254; // RFC 5321 practical limit
-const MIN_PASSWORD_LEN = 8; // matches the frontend's existing minLength=8
+const MIN_PASSWORD_LEN = 8; // matches the frontend's minLength=8
+const ZIP_RE = /^\d{5}(-\d{4})?$/;
 
 function assertValidEmail(email, field = 'email') {
   if (typeof email !== 'string' || email.length > MAX_EMAIL_LEN || !EMAIL_RE.test(email)) {
@@ -12,10 +14,35 @@ function assertValidEmail(email, field = 'email') {
   }
 }
 
+// Length + character-class complexity (registration rework): at least one uppercase,
+// one lowercase, one non-alphanumeric character, matching the frontend's requirements text.
 function assertPasswordStrength(password, field = 'password') {
-  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LEN) {
-    throw new HttpError(400, `${field} must be at least ${MIN_PASSWORD_LEN} characters`);
+  if (
+    typeof password !== 'string' ||
+    password.length < MIN_PASSWORD_LEN ||
+    !/[A-Z]/.test(password) ||
+    !/[a-z]/.test(password) ||
+    !/[^A-Za-z0-9]/.test(password)
+  ) {
+    throw new HttpError(
+      400,
+      `${field} must be at least ${MIN_PASSWORD_LEN} characters and include an uppercase letter, a lowercase letter, and a special character`
+    );
   }
+}
+
+function assertValidZip(zip, field = 'zip') {
+  if (typeof zip !== 'string' || !ZIP_RE.test(zip)) {
+    throw new HttpError(400, `${field} must be a valid US zip code`);
+  }
+}
+
+// Returns the normalized (uppercased) code so callers can store the canonical form.
+function assertValidState(state, field = 'state') {
+  if (typeof state !== 'string' || !US_STATE_CODES.has(state.toUpperCase())) {
+    throw new HttpError(400, `${field} must be a valid two-letter US state code`);
+  }
+  return state.toUpperCase();
 }
 
 // Only enforced when the value is present — required-ness is a separate check.
@@ -25,4 +52,10 @@ function assertMaxLength(value, max, field) {
   }
 }
 
-module.exports = { assertValidEmail, assertPasswordStrength, assertMaxLength };
+module.exports = {
+  assertValidEmail,
+  assertPasswordStrength,
+  assertValidZip,
+  assertValidState,
+  assertMaxLength,
+};

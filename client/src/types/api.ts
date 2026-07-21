@@ -163,6 +163,8 @@ export interface Company {
   id: string
   name: string
   address: string | null
+  zip_code: string | null
+  state: string | null
   claim_status: 'claimed' | 'unclaimed' | 'pending_claim'
   created_by_user_id: string | null
 }
@@ -171,6 +173,8 @@ export interface School {
   id: string
   name: string
   address: string | null
+  zip_code: string | null
+  state: string | null
   claim_status: 'claimed' | 'unclaimed' | 'pending_claim'
   created_by_user_id: string | null
 }

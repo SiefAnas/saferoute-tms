@@ -7,6 +7,29 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-07-21 — Registration rework: claim flow parked, new required fields, password rules
+
+Per direct request: `/register`'s "Create new" / "Claim existing" mode toggle is hidden
+(`CLAIM_FLOW_ENABLED = false` in `RegisterPage.tsx`) — self-serve registration now only
+creates brand-new orgs, no toggle shown. The claim/email-verification backend
+(`signupClaim`, `verifyEmail`, `resendVerification`, `searchClaimable`) and the frontend's
+claim-search UI and "check your email" screen are **not deleted**, just unreachable — flip
+the flag back if this is needed again. Since the only reachable path (`signupFresh`)
+already stamped `email_verified_at` immediately with no verification step, this also
+satisfies "no verification required for a new org" with zero new bypass logic — that
+behavior already existed, hiding the claim path was the only change needed.
+
+New required fields on fresh org signup: `address` (was optional, now required), plus two
+new fields, `zip` and `state` (validated as a real 2-letter US state code, normalized to
+uppercase). New nullable `zip_code`/`state` columns on `companies`/`schools`
+(migration `1752624000009`). `placeholders.js` (the Add-a-Company/Add-a-School flow inside
+the dashboards) is unchanged — still free-text address only, deliberately out of scope.
+
+Password complexity tightened: min 8 chars **and** at least one uppercase, one lowercase,
+one special character (`assertPasswordStrength` in `validate.js`). Frontend adds a
+show/hide toggle, a live strength meter (Weak/Fair/Good), the rules as visible text under
+the field, and a confirm-password field with a client-side match check.
+
 ## Known-broken (tracked as of July 18 2026)
 1. [RESOLVED July 19 2026 — see commits `e1dba8d`, `c330c08`] Registration "hangs" on
    "Submitting" for the *"Create new" org* path (not the claim path — see #2, untouched).
