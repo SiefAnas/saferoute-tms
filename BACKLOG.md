@@ -7,6 +7,43 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-07-23 — Driver dashboard rework: real daily schedule, student/school detail, pay visibility
+
+Driver's dashboard now shares the same sidebar shell (`AdminLayout`) as the other 3 roles —
+`DriverLayout.tsx` is deleted (not parked; this one was a straight replacement, not a
+"might need it later" decision).
+
+New "Today's Schedule" (`GET /schedule/today`, driver-only) replaces the old free-form
+"pick any student, log a trip" form: shows each of a driver's currently-active assignments
+with the student's usual pickup/dropoff time, a Pickup/Drop-off toggle (a status marker
+only), and a Confirm action that calls the existing `POST /trips` unchanged. A one-off
+per-date "schedule override" (`assignment_schedule_overrides`, one row per assignment+date)
+is the only exception mechanism built now — a full recurring weekly pattern is explicitly
+V2. An overridden time renders in red on the driver's view; `skip: true` shows "No
+pickup/dropoff today" instead.
+
+Clicking a student name opens a detail modal: parent info, new `age`/`address`/`notes`
+fields, additional contacts (new `student_contacts` table — the primary contact stays on
+`students.parent_name/parent_phone` per migration 004's original decision; this is for
+*additional* contacts beyond that one), and a month calendar of **actual trip history**
+(derived client-side from the driver's already-fetched trips, not a new endpoint). Clicking
+a school name opens a similar modal (new `phone`/`hours`/`website` columns on `schools`,
+read via a new `GET /schools/:id` scoped the same way as the existing company_admin-only
+`GET /schools` — only reachable for a school the caller's company has a student at).
+
+Check-in now also shows a pay-rate-aware "This Month" card (hours+pay if hourly, days-only+
+pay if daily, via the existing `GET /payroll/summary/:driverId`) and a "Worked this month"
+calendar (from the already-fetched sessions, no new endpoint).
+
+New admin surfaces to actually populate the above: student create/edit gained the new
+fields plus a contacts manager (`CompanyStudentsPage`, previously create-only); assignments
+gained inline time editing and an overrides manager (`AssignmentsPage`); a brand-new
+`SchoolProfilePage` (`/school-admin/profile`) lets school_admin edit their own org's info at
+all for the first time — previously not even the address set at claim time was editable.
+
+Migration `1752624000010`. Scope boundary: this doesn't touch the placeholder-creation
+flow (`placeholders.js`) — that's still free-text address only.
+
 ## 2026-07-21 — Registration rework: claim flow parked, new required fields, password rules
 
 Per direct request: `/register`'s "Create new" / "Claim existing" mode toggle is hidden

@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 import { ROLE_HOME } from './lib/roleHome'
 import { ProtectedRoute } from './routes/ProtectedRoute'
-import { DriverLayout } from './layouts/DriverLayout'
 import { AdminLayout } from './layouts/AdminLayout'
 import { LoginPage } from './pages/login/LoginPage'
 import { RegisterPage } from './pages/register/RegisterPage'
@@ -15,6 +14,7 @@ import { PayrollPage } from './pages/company/PayrollPage'
 import { CompanyStudentsPage } from './pages/company/StudentsPage'
 import { StudentsPage } from './pages/school-admin/StudentsPage'
 import { StaffAccessPage } from './pages/school-admin/StaffAccessPage'
+import { SchoolProfilePage } from './pages/school-admin/SchoolProfilePage'
 import { SchoolStaffDashboard } from './pages/school-staff/SchoolStaffDashboard'
 
 const COMPANY_NAV = [
@@ -27,8 +27,10 @@ const COMPANY_NAV = [
 const SCHOOL_ADMIN_NAV = [
   { to: '/school-admin', label: 'Students', icon: 'groups', end: true },
   { to: '/school-admin/staff', label: 'Staff & Access', icon: 'badge' },
+  { to: '/school-admin/profile', label: 'School Profile', icon: 'school' },
 ]
 const SCHOOL_STAFF_NAV = [{ to: '/school-staff', label: 'My Students', icon: 'groups', end: true }]
+const DRIVER_NAV = [{ to: '/driver', label: 'Dashboard', icon: 'dashboard', end: true }]
 
 function RootRedirect() {
   const { user, token } = useAuth()
@@ -44,7 +46,7 @@ function App() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       <Route element={<ProtectedRoute roles={['driver']} />}>
-        <Route element={<DriverLayout />}>
+        <Route element={<AdminLayout title="Driver Portal" navItems={DRIVER_NAV} />}>
           <Route path="/driver" element={<DriverDashboard />} />
         </Route>
       </Route>
@@ -63,6 +65,7 @@ function App() {
         <Route element={<AdminLayout title="School Hub" navItems={SCHOOL_ADMIN_NAV} />}>
           <Route path="/school-admin" element={<StudentsPage />} />
           <Route path="/school-admin/staff" element={<StaffAccessPage />} />
+          <Route path="/school-admin/profile" element={<SchoolProfilePage />} />
         </Route>
       </Route>
 

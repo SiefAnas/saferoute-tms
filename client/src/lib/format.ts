@@ -20,3 +20,12 @@ export function formatClock(iso: string): string {
 export function formatMoney(cents: number): string {
   return (cents / 100).toLocaleString(undefined, { style: 'currency', currency: 'USD' })
 }
+
+// Postgres `time` columns come back as "HH:MM:SS" — render as a friendly clock time.
+export function formatTimeOfDay(time: string | null): string {
+  if (!time) return '—'
+  const [h, m] = time.split(':')
+  const d = new Date()
+  d.setHours(Number(h), Number(m), 0, 0)
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}

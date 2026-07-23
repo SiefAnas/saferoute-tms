@@ -33,6 +33,8 @@ const TABLE_SCOPE = {
   staff_student_access: { school: 'school_id' },
   pay_rules: { company: 'company_id' },
   pay_adjustments: { company: 'company_id' },
+  student_contacts: { company: 'company_id', school: 'school_id' }, // dual-tenant, like students
+  assignment_schedule_overrides: { company: 'company_id' }, // scoped like its parent assignments
 };
 
 const IDENT = /^[a-z_][a-z0-9_]*$/;

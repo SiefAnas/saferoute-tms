@@ -71,8 +71,25 @@ export interface Student {
   grade: string | null
   parent_name: string | null
   parent_phone: string | null
+  age: number | null
+  address: string | null
+  notes: string | null
   created_at: string
   updated_at: string
+  // Only present on GET /students/:id (merged server-side), not on the list endpoint.
+  contacts?: StudentContact[]
+}
+
+// Additional contacts beyond the student's primary parent_name/parent_phone.
+export interface StudentContact {
+  id: string
+  company_id: string
+  school_id: string
+  student_id: string
+  name: string
+  phone: string | null
+  relationship: string | null
+  created_at: string
 }
 
 export interface DriverSession {
@@ -122,8 +139,42 @@ export interface Assignment {
   van_id: string
   start_date: string
   end_date: string | null
+  pickup_time: string | null // "HH:MM:SS", Postgres time formatting
+  dropoff_time: string | null
   created_at: string
   updated_at: string
+}
+
+// A single day's exception on an assignment's usual pickup/dropoff time — a different
+// time and/or a full skip. Not a recurring weekly pattern (deferred to V2).
+export interface ScheduleOverride {
+  id: string
+  company_id: string
+  assignment_id: string
+  override_date: string
+  pickup_time: string | null
+  dropoff_time: string | null
+  skip: boolean
+  note: string | null
+  created_at: string
+  updated_at: string
+}
+
+// GET /schedule/today — a driver's active assignments for today, enriched with
+// student/school summaries and today's resolved override (if any).
+export interface TodayScheduleItem {
+  assignment_id: string
+  pickup_time: string | null
+  dropoff_time: string | null
+  student: {
+    id: string
+    name: string
+    grade: string | null
+    parent_name: string | null
+    parent_phone: string | null
+  }
+  school: { id: string; name: string }
+  override: { pickup_time: string | null; dropoff_time: string | null; skip: boolean; note: string | null } | null
 }
 
 export type RateType = 'hourly' | 'daily'
@@ -175,8 +226,24 @@ export interface School {
   address: string | null
   zip_code: string | null
   state: string | null
+  phone: string | null
+  hours: string | null
+  website: string | null
   claim_status: 'claimed' | 'unclaimed' | 'pending_claim'
   created_by_user_id: string | null
+}
+
+// GET /schools/:id (company_admin/driver) — a narrower shape than the full School row
+// (no claim_status/created_by_user_id, since the caller isn't the school's own tenant).
+export interface SchoolDetail {
+  id: string
+  name: string
+  address: string | null
+  zip_code: string | null
+  state: string | null
+  phone: string | null
+  hours: string | null
+  website: string | null
 }
 
 // GET /schools (BACKLOG #7) — company_admin-only, id+name only, scoped to schools the

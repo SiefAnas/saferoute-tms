@@ -20,4 +20,19 @@ async function listCompanySchools(companyId) {
   return rows;
 }
 
-module.exports = { listCompanySchools };
+// Full school detail (name/address/zip/state/phone/hours/website) for a company-side
+// caller (company_admin or driver, § Driver dashboard rework) — same narrow invariant as
+// listCompanySchools: only reachable if the caller's company actually has a student at
+// that school, so this can't be used to probe/enumerate unrelated schools.
+async function getCompanySchool(companyId, schoolId) {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT s.id, s.name, s.address, s.zip_code, s.state, s.phone, s.hours, s.website
+       FROM schools s
+       JOIN students st ON st.school_id = s.id
+      WHERE st.company_id = $1 AND s.id = $2`,
+    [companyId, schoolId],
+  );
+  return rows[0] ?? null;
+}
+
+module.exports = { listCompanySchools, getCompanySchool };

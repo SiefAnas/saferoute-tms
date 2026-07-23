@@ -7,6 +7,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LEN = 254; // RFC 5321 practical limit
 const MIN_PASSWORD_LEN = 8; // matches the frontend's minLength=8
 const ZIP_RE = /^\d{5}(-\d{4})?$/;
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 function assertValidEmail(email, field = 'email') {
   if (typeof email !== 'string' || email.length > MAX_EMAIL_LEN || !EMAIL_RE.test(email)) {
@@ -52,10 +53,18 @@ function assertMaxLength(value, max, field) {
   }
 }
 
+// 24h "HH:MM" — used for assignments' pickup_time/dropoff_time and schedule overrides.
+function assertValidTime(value, field = 'time') {
+  if (typeof value !== 'string' || !TIME_RE.test(value)) {
+    throw new HttpError(400, `${field} must be a valid 24-hour time in HH:MM format`);
+  }
+}
+
 module.exports = {
   assertValidEmail,
   assertPasswordStrength,
   assertValidZip,
   assertValidState,
+  assertValidTime,
   assertMaxLength,
 };

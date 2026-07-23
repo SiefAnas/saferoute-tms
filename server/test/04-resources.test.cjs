@@ -82,14 +82,50 @@ async function main() {
       schoolView.body.some((s) => s.id === stu.body.id) ? ok('school_admin sees the student via school scope (cross-side read)') : bad('school_admin cannot see its student');
       (await api('GET', '/students', adminB)).body.length === 0 ? ok('admin B sees no Company A students (isolation)') : bad('student leaked to Company B');
 
+      console.log('\n--- Students: age/address/notes + contacts (Driver dashboard rework) ---');
+      const stu2 = await api('POST', '/students', adminA, { full_name: 'Kid Two', school_id: S.id, age: 8, address: '5 Elm St', notes: 'needs help buckling' });
+      (stu2.status === 201 && stu2.body.age === 8 && stu2.body.address === '5 Elm St' && stu2.body.notes === 'needs help buckling')
+        ? ok('student create accepts age/address/notes') : bad(`student create w/ new fields: ${stu2.status} ${JSON.stringify(stu2.body)}`);
+      const patchStu = await api('PATCH', `/students/${stu2.body.id}`, adminA, { age: 9 });
+      patchStu.body.age === 9 ? ok('student patch updates age') : bad(`patch age: ${JSON.stringify(patchStu.body)}`);
+
+      const contact1 = await api('POST', `/students/${stu2.body.id}/contacts`, adminA, { name: 'Grandma Jo', phone: '555-2222', relationship: 'Grandmother' });
+      eq('company_admin adds a student contact -> 201', contact1.status, 201);
+      const stuWithContacts = await api('GET', `/students/${stu2.body.id}`, adminA);
+      (Array.isArray(stuWithContacts.body.contacts) && stuWithContacts.body.contacts.length === 1 && stuWithContacts.body.contacts[0].name === 'Grandma Jo')
+        ? ok('GET student includes contacts array') : bad(`contacts not merged: ${JSON.stringify(stuWithContacts.body)}`);
+      const driverATokenEarly = await login('drvA@co.com');
+      eq('driver creating a contact -> 403 (company_admin only)', (await api('POST', `/students/${stu2.body.id}/contacts`, driverATokenEarly, { name: 'x' })).status, 403);
+      eq('delete contact -> 204', (await api('DELETE', `/students/${stu2.body.id}/contacts/${contact1.body.id}`, adminA)).status, 204);
+      const afterDelete = await api('GET', `/students/${stu2.body.id}`, adminA);
+      afterDelete.body.contacts.length === 0 ? ok('contact removed after delete') : bad('contact still present after delete');
+
       console.log('\n--- Schools (cross-tenant read, company_admin only, BACKLOG #7) ---');
       const schoolsA = await api('GET', '/schools', adminA);
       (schoolsA.status === 200 && schoolsA.body.length === 1 && schoolsA.body[0].id === S.id && schoolsA.body[0].name === 'School S')
         ? ok('company_admin sees the name of a school it has a student at') : bad(`schools A: ${schoolsA.status} ${JSON.stringify(schoolsA.body)}`);
       (await api('GET', '/schools', adminB)).body.length === 0 ? ok('admin B (no students anywhere) sees no schools') : bad('school leaked to Company B with no relationship');
+      const driverATokenEarly2 = await login('drvA@co.com');
       eq('school_admin GET /schools -> 403 (company_admin only)', (await api('GET', '/schools', schoolAdmin)).status, 403);
-      eq('driver GET /schools -> 403 (company_admin only)', (await api('GET', '/schools', driverA)).status, 403);
+      eq('driver GET /schools -> 403 (company_admin only)', (await api('GET', '/schools', driverATokenEarly2)).status, 403);
       eq('unauthenticated GET /schools -> 401', (await api('GET', '/schools', null)).status, 401);
+
+      console.log('\n--- Schools: /me profile + /:id detail (Driver dashboard rework) ---');
+      const meGet = await api('GET', '/schools/me', schoolAdmin);
+      (meGet.status === 200 && meGet.body.id === S.id) ? ok('school_admin GET /schools/me returns own school') : bad(`schools/me get: ${meGet.status}`);
+      eq('company_admin GET /schools/me -> 403 (school_admin only)', (await api('GET', '/schools/me', adminA)).status, 403);
+      const mePatch = await api('PATCH', '/schools/me', schoolAdmin, {
+        phone: '555-3333', hours: 'Mon-Fri 8am-4pm', website: 'https://school-s.example.edu', zip_code: '02139', state: 'ma',
+      });
+      (mePatch.status === 200 && mePatch.body.phone === '555-3333' && mePatch.body.state === 'MA')
+        ? ok('school_admin PATCH /schools/me updates profile fields, state normalized') : bad(`schools/me patch: ${mePatch.status} ${JSON.stringify(mePatch.body)}`);
+      eq('PATCH /schools/me with bad zip -> 400', (await api('PATCH', '/schools/me', schoolAdmin, { zip_code: 'bad' })).status, 400);
+
+      const schoolDetail = await api('GET', `/schools/${S.id}`, adminA);
+      (schoolDetail.status === 200 && schoolDetail.body.phone === '555-3333') ? ok('company_admin GET /schools/:id sees full detail incl. phone') : bad(`schools/:id: ${schoolDetail.status}`);
+      const schoolDetailDriver = await api('GET', `/schools/${S.id}`, driverATokenEarly2);
+      schoolDetailDriver.status === 200 ? ok('driver GET /schools/:id sees a school their company has a student at') : bad(`driver schools/:id: ${schoolDetailDriver.status}`);
+      eq('admin B GET /schools/:id (no relationship) -> 404', (await api('GET', `/schools/${S.id}`, adminB)).status, 404);
 
       console.log('\n--- Sessions (driver shifts) ---');
       const ci = await api('POST', '/sessions/checkin', driverA, { check_in_lat: 42.3, check_in_lng: -71.1 });
@@ -110,6 +146,52 @@ async function main() {
       drvAsg.body.length === 1 ? ok('driver sees own assignment (owner sub-scope)') : bad(`driver assignments ${drvAsg.body.length}`);
       (await api('GET', '/assignments', adminB)).body.length === 0 ? ok('admin B sees no Company A assignments (isolation)') : bad('assignment leaked');
       eq('delete assignment -> 204', (await api('DELETE', `/assignments/${asg.body.id}`, adminA)).status, 204);
+
+      console.log('\n--- Assignments: pickup_time/dropoff_time (Driver dashboard rework) ---');
+      const asg2 = await api('POST', '/assignments', adminA, {
+        student_id: stu.body.id, driver_user_id: driverAId, van_id: vanA.id, start_date: '2020-01-01',
+        pickup_time: '07:30', dropoff_time: '15:00',
+      });
+      (asg2.status === 201 && asg2.body.pickup_time && asg2.body.dropoff_time)
+        ? ok('assignment create accepts pickup_time/dropoff_time') : bad(`asg2 create: ${asg2.status} ${JSON.stringify(asg2.body)}`);
+      eq('assignment create with bad time -> 400', (await api('POST', '/assignments', adminA, {
+        student_id: stu.body.id, driver_user_id: driverAId, van_id: vanA.id, start_date: '2026-07-01', pickup_time: 'nope',
+      })).status, 400);
+      const patchTime = await api('PATCH', `/assignments/${asg2.body.id}`, adminA, { pickup_time: '08:00' });
+      eq('assignment patch updates pickup_time -> 200', patchTime.status, 200);
+
+      console.log('\n--- GET /schedule/today (no override yet) ---');
+      const today1 = await api('GET', '/schedule/today', driverA);
+      const row1 = today1.body.find((r) => r.assignment_id === asg2.body.id);
+      (today1.status === 200 && row1 && row1.pickup_time === '08:00:00' && row1.override === null)
+        ? ok("driver sees today's schedule with usual time, no override") : bad(`schedule/today: ${today1.status} ${JSON.stringify(today1.body)}`);
+      eq('company_admin GET /schedule/today -> 403 (driver only)', (await api('GET', '/schedule/today', adminA)).status, 403);
+
+      console.log('\n--- Overrides: upsert / list / resolve in schedule / delete ---');
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const ov = await api('POST', `/assignments/${asg2.body.id}/overrides`, adminA, { override_date: todayStr, pickup_time: '09:00' });
+      eq('company_admin creates an override for today -> 201', ov.status, 201);
+      const todayWithOverride = await api('GET', '/schedule/today', driverA);
+      const row2 = todayWithOverride.body.find((r) => r.assignment_id === asg2.body.id);
+      (row2 && row2.override && row2.override.pickup_time === '09:00:00')
+        ? ok("schedule/today resolves today's override pickup_time") : bad(`override not resolved: ${JSON.stringify(row2)}`);
+
+      const ovUpdate = await api('POST', `/assignments/${asg2.body.id}/overrides`, adminA, { override_date: todayStr, skip: true, note: 'no school today' });
+      eq('re-posting same date upserts (updates) rather than duplicating -> 201', ovUpdate.status, 201);
+      const listOv = await api('GET', `/assignments/${asg2.body.id}/overrides`, adminA);
+      listOv.body.length === 1 ? ok('upsert did not create a duplicate row for the same date') : bad(`override list has ${listOv.body.length} rows`);
+      const todaySkipped = await api('GET', '/schedule/today', driverA);
+      const row3 = todaySkipped.body.find((r) => r.assignment_id === asg2.body.id);
+      (row3 && row3.override.skip === true && row3.override.note === 'no school today')
+        ? ok('schedule/today reflects updated override (skip=true)') : bad(`skip override wrong: ${JSON.stringify(row3)}`);
+
+      eq('driver deleting an override -> 403 (company_admin only)', (await api('DELETE', `/assignments/${asg2.body.id}/overrides/${listOv.body[0].id}`, driverA)).status, 403);
+      eq('company_admin deletes override -> 204', (await api('DELETE', `/assignments/${asg2.body.id}/overrides/${listOv.body[0].id}`, adminA)).status, 204);
+      const todayAfterDelete = await api('GET', '/schedule/today', driverA);
+      const row4 = todayAfterDelete.body.find((r) => r.assignment_id === asg2.body.id);
+      row4.override === null ? ok('override gone after delete, back to usual time') : bad('override still present after delete');
+
+      eq('admin B cannot add an override to a Company A assignment -> 404', (await api('POST', `/assignments/${asg2.body.id}/overrides`, adminB, { override_date: todayStr })).status, 404);
 
       console.log('\n--- PayRules + summary (integer cents) ---');
       eq('upsert hourly rule 1850 -> 200', (await api('PUT', `/payroll/rules/${driverAId}`, adminA, { rate_type: 'hourly', rate_cents: 1850 })).status, 200);
