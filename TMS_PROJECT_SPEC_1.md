@@ -181,11 +181,6 @@ All routes below exist and are tested (`server/test/*.test.cjs`, 7 suites):
   SMTP env vars into Render's dashboard himself, then a live end-to-end send needs
   verifying. `NODE_ENV=test` always stays on the dev transport regardless of SMTP config.
 - **Forgot password flow** - not built.
-- **Van/assignment/payroll *management* UI gaps for company_admin** - some backend
-  endpoints exist and are tested with no frontend yet (check current state before
-  assuming, this may have closed since last verified).
-- **Student creation UI** - `POST /students` backend exists (company_admin only), no form
-  built yet, seed data was created via direct API calls during testing.
 - **Recurring weekly schedule pattern** - only single-day overrides exist, no "repeat every
   Friday" mechanism.
 - **Rate history over time for pay_rules** - only current rate tracked.
@@ -240,3 +235,18 @@ changed in scope/vision, not implementation detail, that stays in `BACKLOG.md`/
   (`.github/workflows/db-backup.yml`, 90-day artifact retention). Full detail in
   `BACKLOG.md`/`PROJECT_STATE.md`'s 2026-08-25 entries, including what's still pending
   (live Resend send not yet verified — blocked on Anas entering the API key himself).
+- **2026-08-25**: `JWT_SECRET` rotated on Render, done directly by Anas in Render's own
+  dashboard, outside any Claude Code session. Per Anas: it was possibly still the code's
+  insecure default before this; it's now a genuinely random value. Not independently
+  verified by this session (no Render env-var access) — recorded as reported.
+- **2026-08-25**: corrected two stale items in section 8 — "Van/assignment/payroll
+  management UI gaps" and "Student creation UI" were both already fully built (create/
+  edit/delete for vans, full assignment lifecycle + schedule overrides, pay rate +
+  adjustment entry, and student creation with existing/new-school choice + contacts
+  manager), already routed in `App.tsx`, already in the company_admin sidebar. This
+  session verified each live against the real dev Neon DB (create/edit/delete round-trips
+  through the actual UI, not just a code read) rather than building duplicates. Section 7's
+  route table already correctly listed these as built; section 8 had gone stale relative to
+  it. One genuine gap surfaced during verification, tracked in `BACKLOG.md` instead (not a
+  scope question): `DELETE /students/:id` exists on the backend but the Students page has
+  no delete button in the UI.

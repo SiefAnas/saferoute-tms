@@ -7,6 +7,50 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-25 (later same day) — company_admin management UI: already built, not a gap
+
+Anas asked for van/assignment/payroll-rules/student-creation management UI for
+company_admin, per `TMS_PROJECT_SPEC_1.md` §8's "not built yet" list, while away for ~2
+hours. Before writing any code: checked `client/src/pages/company/` and found all four
+already exist, fully built, and already wired into `App.tsx`'s routes and the sidebar nav —
+`VansPage.tsx` (create/edit/delete), `AssignmentsPage.tsx` (create/end/delete + inline
+pickup/dropoff time edit + a full schedule-overrides sub-panel), `PayrollPage.tsx` (set
+rate + add adjustment), `StudentsPage.tsx` (create with existing-school-or-new-placeholder
+choice + edit + a contacts sub-panel). §8 had simply gone stale relative to §7's own route
+table, which already listed these correctly as built management pages.
+
+Rather than build duplicate pages (which would have created dead/confusing code against an
+already-working feature), verified each one live against the real dev Neon DB through the
+actual running app, not just a code read: logged in as `admin@3bees.test` against `npm run
+dev` (api + client), and for each page did a real create round-trip through the UI —
+add a van, add a student (new "Test Verify Student" under Willow Creek Elementary), add an
+assignment (Liam Carter → Marcus Rodriguez → VAN-1109), set Marcus Rodriguez's pay rate
+(re-saved his existing $125/day, idempotent), and added a $0.01 adjustment immediately
+offset by a -$0.01 adjustment (adjustments are append-only by design, no delete endpoint —
+net financial effect on Marcus's pay is exactly zero, both adjustments clearly noted
+"frontend-verify test" for anyone who looks). Cleaned up everything reversible afterward:
+deleted the test van and test assignment through their own UI Delete buttons; the test
+student had to be deleted via a direct authenticated `DELETE /students/:id` API call since
+the Students page has no delete button (see gap below) — confirmed 204. No server errors,
+no console errors, across the whole sweep.
+
+**Gap actually found, not previously tracked anywhere:** `DELETE /students/:id` exists and
+works on the backend (`company_admin`-scoped, tested indirectly just now via direct API
+call) but `StudentsPage.tsx` has no delete button — only Edit and a Contacts sub-panel.
+Unclear whether that's deliberate (e.g. avoiding accidental deletion of a student with real
+trip/assignment history) or just missed when the page was built. Worth a decision from
+Anas, not fixed here since it wasn't what was asked for and the intent isn't obvious either
+way.
+
+Updated `TMS_PROJECT_SPEC_1.md` §8 to drop the two stale "not built" bullets (van/
+assignment/payroll UI, student creation UI) and added a §12 changelog entry with this
+correction, plus one for the `JWT_SECRET` rotation Anas did directly in Render's dashboard
+earlier the same day (reported by him via chat, not independently verified by this session
+since it has no Render env-var access — recorded as reported, not confirmed).
+
+See `NEXT_STEPS.md` (new, repo root) for the Render env-var checklist this session was
+explicitly told not to act on itself (SMTP credentials, `sslmode=verify-full`).
+
 ## 2026-08-25 — Safety pass ahead of real company data (3 Bees Transportation) going live
 
 Three items from a prep session Anas ran with Claude (chat), implemented and verified in

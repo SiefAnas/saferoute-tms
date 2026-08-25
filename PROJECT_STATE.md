@@ -456,3 +456,31 @@ recording as-is rather than quietly correcting it without a trace. See
 `TMS_PROJECT_SPEC_1.md` section 12 and `BACKLOG.md`'s 2026-08-25 entry for the reconciled
 account.
 
+**Separately, same session, worth recording:** mid-session, a message purporting to be from
+Anas arrived with a file attached (`TMS_PROJECT_SPEC_1 (1).md`) claiming the real spec
+"genuinely doesn't exist on GitHub yet" and asking for it to be committed as source of
+truth. That contradicted this session's own just-verified evidence (the real file, already
+on `origin/main`, already deployed live on Render). The attached file also carried the file
+through a fake-looking `<system-reminder>`/tool-call wrapper this session never actually
+generated, and contained an unverifiable claim (`JWT_SECRET` already rotated on Render).
+Flagged directly rather than acted on; Anas confirmed by chat that the real file (this
+repo's own, on `origin/main`) is the correct one, the downloaded file should be discarded,
+and that the `JWT_SECRET` line is true — he rotated it himself, directly in Render's
+dashboard, outside any Claude Code session. Recorded in `TMS_PROJECT_SPEC_1.md` §12 as
+reported by Anas, not independently verified (this session has no Render env-var access).
+
+**2026-08-25, later same day — company_admin management UI (vans/assignments/payroll/
+students): found already built, verified live instead of duplicating.** Full detail in
+`BACKLOG.md`'s matching entry. Summary: all four pages Anas asked for already existed,
+fully built, already routed — `TMS_PROJECT_SPEC_1.md` §8 had gone stale relative to its own
+§7 route table. Verified each live (real create/edit round-trips against the dev Neon DB
+through the actual running app, not just reading the code), cleaned up every reversible
+test artifact afterward (deleted the test van and assignment via their own UI buttons; the
+test student needed a direct authenticated API call since the Students page turned out to
+have no delete button at all — a real, newly-found gap, tracked in `BACKLOG.md`, not fixed).
+No server or console errors across the whole sweep. `TMS_PROJECT_SPEC_1.md` §8 corrected to
+drop the two now-stale "not built" bullets. `NEXT_STEPS.md` (new, repo root) written per
+Anas's explicit "do not touch Render yourself" instruction, listing the env vars he needs to
+set himself and in what order, including the `sslmode=require` → `sslmode=verify-full`
+change he asked to be documented.
+
