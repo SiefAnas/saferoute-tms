@@ -436,9 +436,15 @@ follow-up session can trigger a real send by hitting a live endpoint that calls 
 (e.g. registration or resend-verification) and confirm delivery — that verification has
 not happened yet.
 
-Also flagged (not corrected): this session's task prompt named `TMS_PROJECT_SPEC_1.md` as
-the required source-of-truth file to read first. It does not exist anywhere in this repo
-or its git history, despite being cited repeatedly by this file and `BACKLOG.md` as
-authoritative. Proceeded on `PROJECT_STATE.md` + `BACKLOG.md` + current code, per Anas's
-explicit go-ahead when asked directly about the discrepancy.
+**Correction, same session:** this session initially told Anas `TMS_PROJECT_SPEC_1.md` was
+missing entirely — not on disk, not in git history — and proceeded on `PROJECT_STATE.md` +
+`BACKLOG.md` + current code with his go-ahead. That was checked against a stale local
+clone (never fetched before concluding "absent"); the file had actually already been
+created on GitHub that same morning (10:42/10:54 EDT, before this session's check ran) and
+only appeared locally once `git push` was rejected as behind and a `git fetch` pulled it
+in. The file does exist now, in the repo root; the earlier "doesn't exist" claim to Anas
+was a real gap in verification (should have fetched first), not a correct finding — worth
+recording as-is rather than quietly correcting it without a trace. See
+`TMS_PROJECT_SPEC_1.md` section 12 and `BACKLOG.md`'s 2026-08-25 entry for the reconciled
+account.
 

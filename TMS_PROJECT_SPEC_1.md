@@ -175,10 +175,11 @@ All routes below exist and are tested (`server/test/*.test.cjs`, 7 suites):
   DB-composite-FK + app-scoped-accessor that already exist. Large, invasive change (every
   table, plus per-request session-variable handling in the connection pool). Parked
   pending a real go/no-go, not started.
-- **Real email transport** - dev mailer currently just logs "sent" emails to the server
-  console. Swapping in a real provider (SMTP/Postmark/SendGrid/SES) needs credentials only
-  you can provide. The mailer interface is already pluggable, this is a config change when
-  ready, not a rewrite.
+- **Real email transport** - code done as of 2026-08-25 (see section 12): `mailer.js`
+  supports real SMTP send via `nodemailer`, auto-activated by `SMTP_HOST`, target provider
+  Resend. What remains is not code — Anas needs to enter the Resend API key and related
+  SMTP env vars into Render's dashboard himself, then a live end-to-end send needs
+  verifying. `NODE_ENV=test` always stays on the dev transport regardless of SMTP config.
 - **Forgot password flow** - not built.
 - **Van/assignment/payroll *management* UI gaps for company_admin** - some backend
   endpoints exist and are tested with no frontend yet (check current state before
@@ -229,3 +230,13 @@ changed in scope/vision, not implementation detail, that stays in `BACKLOG.md`/
 
 - **2026-08-25**: file created, reconstructed from migrations/routes/existing docs since
   the original spec file was never actually in the repo.
+- **2026-08-25**: safety pass ahead of real company data (3 Bees Transportation) going
+  live. Section 8's "Real email transport" item moves from "not built" to "code done,
+  pending Anas's own SMTP credential entry on Render" — `mailer.js` now sends via
+  `nodemailer` over SMTP (Resend), gated on `SMTP_HOST`, dev transport still used whenever
+  that's unset or under `NODE_ENV=test`. Also added (new capabilities, not previously
+  listed anywhere in this spec): `config.js` now refuses to boot in production without a
+  real `JWT_SECRET`/`DATABASE_URL`, and a daily automated Neon DB backup now exists
+  (`.github/workflows/db-backup.yml`, 90-day artifact retention). Full detail in
+  `BACKLOG.md`/`PROJECT_STATE.md`'s 2026-08-25 entries, including what's still pending
+  (live Resend send not yet verified — blocked on Anas entering the API key himself).

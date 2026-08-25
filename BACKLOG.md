@@ -49,13 +49,18 @@ not confirming these specific changes are live yet. See `PROJECT_STATE.md` for t
 up-to-date status of what's actually been verified live vs. still needs Anas's hands-on
 credential step.
 
-**Also flagged, not corrected in this repo (see this session's chat transcript for detail):**
-this session's task prompt named `TMS_PROJECT_SPEC_1.md` as the required-read source of
-truth. That file does not exist anywhere in this repo, on disk, or in git history
-(`git log --all` for it returns nothing) — despite `PROJECT_STATE.md` and this file both
-citing it repeatedly as authoritative. Per this repo's own established convention (flag
-mismatches rather than fabricate), work proceeded on `PROJECT_STATE.md` + `BACKLOG.md` +
-current code only, per Anas's explicit go-ahead when asked.
+**Correction to an earlier finding in this same session, worth recording plainly:** this
+session initially reported `TMS_PROJECT_SPEC_1.md` as missing from the repo entirely,
+including from git history (`git log --all` for it), and proceeded on `PROJECT_STATE.md` +
+`BACKLOG.md` + current code with Anas's go-ahead. That check was run against a stale local
+clone without fetching first — the file was in fact created on GitHub at 10:42/10:54 EDT
+that same morning (`0bc54e6`/`41a5a58`, "Create/Fix indentation in TMS_PROJECT_SPEC_1.md"),
+before this session's check ran, but this session's local `origin/main` ref hadn't been
+fetched since before that, so it looked absent both on disk and in local git history. It
+only surfaced when `git push` was rejected for being behind and a `git fetch` pulled it in.
+Net effect: the file genuinely does now exist (see the repo root) and this session's
+earlier claim to Anas that it didn't was based on an incomplete check, not a correct one —
+flagging the gap in method, not just the wrong intermediate conclusion.
 
 ## 2026-07-23 — Driver dashboard rework: real daily schedule, student/school detail, pay visibility
 
