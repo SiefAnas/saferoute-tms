@@ -7,6 +7,58 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-25 (later still) — Assignments UUID display fix + multi-tab session bug fixed
+
+Two items from a `TMS_GAP_ANALYSIS.md` Anas referenced (produced via Claude in Chrome).
+**That file does not exist anywhere in this repo** — checked a fresh `git fetch` (no new
+commits on `origin/main` beyond this session's own) and the working tree directly; not
+acted on as a trusted source, same reasoning as the spec-file mixup earlier today. Anas's
+own chat message described both bugs specifically enough to act on directly regardless.
+
+**1. Assignments page raw-UUID display — was NOT already fixed, despite being described
+that way.** Checked `client/src/pages/company/AssignmentsPage.tsx` directly: the fallback
+was still `studentsById.get(a.student_id)?.full_name ?? a.student_id` (and the equivalent
+for driver/van) — a raw UUID would render whenever the join-target query hadn't resolved
+yet, exactly the bug described, completely unfixed. Implemented it directly: each cell now
+checks its own query's `isLoading` first (`'…'` while pending) and falls back to
+`'(deleted student/driver/van)'` only once that query has actually resolved and the id
+still isn't in the map. `npx tsc -b` clean.
+
+Verified live, not just read: ran `npm run dev` (api+client), logged in as
+`admin@3bees.test`. The DB's own composite FKs (`assignments_student_company_fk` etc., no
+`ON DELETE` override, so default `RESTRICT`) mean a referenced student/driver/van can't
+actually be deleted while an assignment points at it — so both scenarios were reproduced
+by temporarily patching `api.ts` (delay real fetches to `/students`/`/users`/`/vans`
+behind a `localStorage` flag for the loading race; filter a driver out of the `/users`
+response behind a second flag for the not-found case), confirmed the exact expected
+render in each case, then fully reverted `api.ts` (`git checkout --`, diff confirmed
+empty) before committing anything. Loading race: row rendered `… / … / …` for
+student/driver/van while the real assignment date/buttons were already visible, then
+resolved cleanly to `Emma Johnson / Sarah Jenkins / VAN-084`. Not-found case: with Sarah
+Jenkins filtered out of the drivers response, the row rendered `Emma Johnson / (deleted
+driver) / VAN-084` — student and van still resolved correctly, confirming the fallback is
+per-column, not an all-or-nothing failure.
+
+**2. Multi-tab session confusion — real bug, fixed.** `client/src/lib/auth.tsx`'s
+`AuthProvider` read `localStorage` once on mount and never again; nothing listened for
+another tab changing `saferoute_token`/`saferoute_user`. Added a `storage` event listener
+(native browser event, fires only in *other* tabs of the same origin when either key
+actually changes value) that does a full `window.location.reload()` — deliberately a full
+reload rather than just re-syncing the auth state in place, since this tab's in-memory
+React Query cache could otherwise keep serving data fetched under the old account after
+the auth context itself updated.
+
+Verified live across two real tabs, both directions: logged into tab A as
+`admin@3bees.test` (Company Admin dashboard), then logged into tab B as
+`driver1@3bees.test` — tab A automatically flipped to the Driver dashboard (confirmed via
+its own sidebar: "Driver Portal", `driver1@3bees.test`, "Marcus Rodriguez") with no manual
+action on tab A at all. Then logged out from tab B — tab A automatically redirected to
+`/login`. Re-ran the whole sequence a second time from fully fresh tabs with zero
+interleaved file edits (an earlier pass showed transient `useAuth must be used within
+AuthProvider` console errors that turned out to be Vite HMR noise from editing `api.ts`
+live in the same browser session for item 1's test, not a real defect — the clean re-run
+had zero console errors in either tab). `npx tsc -b` clean.
+
 ## 2026-08-25 (later same day) — company_admin management UI: already built, not a gap
 
 Anas asked for van/assignment/payroll-rules/student-creation management UI for

@@ -133,13 +133,13 @@ export function AssignmentsPage() {
                     const rows = [
                       <tr key={a.id} className="hover:bg-surface-container-low">
                         <td className="px-6 py-3 text-body-md font-medium">
-                          {studentsById.get(a.student_id)?.full_name ?? a.student_id}
+                          {studentsQuery.isLoading ? '…' : (studentsById.get(a.student_id)?.full_name ?? '(deleted student)')}
                         </td>
                         <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                          {driversById.get(a.driver_user_id)?.full_name ?? a.driver_user_id}
+                          {driversQuery.isLoading ? '…' : (driversById.get(a.driver_user_id)?.full_name ?? '(deleted driver)')}
                         </td>
                         <td className="px-6 py-3 text-data-mono text-secondary">
-                          {vansById.get(a.van_id)?.license_plate ?? a.van_id}
+                          {vansQuery.isLoading ? '…' : (vansById.get(a.van_id)?.license_plate ?? '(deleted van)')}
                         </td>
                         <td className="px-6 py-3 text-data-mono text-secondary">{a.start_date}</td>
                         <td className="px-6 py-3 text-data-mono text-secondary">{a.end_date ?? '—'}</td>

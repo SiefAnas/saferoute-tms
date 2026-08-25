@@ -42,6 +42,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('saferoute:unauthorized', logout)
   }, [logout])
 
+  // localStorage is shared across every tab of this origin, so logging into a different
+  // account in one tab silently overwrites saferoute_token/saferoute_user for every other
+  // open tab. The native `storage` event fires in those OTHER tabs (never the one that made
+  // the change) whenever either key actually changes value. A full reload is simplest and
+  // safest here: it also drops this tab's in-memory React Query cache, so nothing fetched
+  // under the old account can linger and render against the new one.
+  useEffect(() => {
+    function handleStorage(e: StorageEvent) {
+      if (e.key === TOKEN_KEY || e.key === USER_KEY) {
+        window.location.reload()
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
+
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.post<LoginResponse>('/auth/login', { email, password })
     localStorage.setItem(TOKEN_KEY, res.token)
