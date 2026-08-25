@@ -7,6 +7,56 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-25 — Safety pass ahead of real company data (3 Bees Transportation) going live
+
+Three items from a prep session Anas ran with Claude (chat), implemented and verified in
+this session, not just written:
+
+1. **`server/src/config.js`** now throws a clear error at boot if `JWT_SECRET` or
+   `DATABASE_URL` are missing under `NODE_ENV=production`, instead of silently falling back
+   to the insecure dev default (`'dev-insecure-change-me'`). Dev/test behavior unchanged
+   (still falls back, since the check only runs for `production`). New
+   `test/08-boot-safety.test.cjs` (spawns child processes across prod/dev/test ×
+   present/missing combinations) covers this.
+2. **`server/src/mail/mailer.js`** now supports real SMTP sending via `nodemailer`
+   (`^9.0.5` — see the new backlog item below on why not `^6.x`), auto-activated when
+   `SMTP_HOST` is set in env. `NODE_ENV=test` always uses the existing dev transport
+   regardless of SMTP config, so the suite never depends on network access; verified by the
+   same new test file (mocks `SMTP_HOST` under `NODE_ENV=test`, confirms no real network
+   attempt is made and the message still lands in `_sent()`). Intended provider: Resend, via
+   its SMTP endpoint.
+3. **`.github/workflows/db-backup.yml`** — daily `pg_dump` (custom format) of the live Neon
+   DB, via a `postgres:18` Docker image so the client version matches Neon's server version
+   (18.x) rather than whatever ubuntu-latest ships. Uploaded as a 90-day workflow artifact;
+   also runs on `workflow_dispatch` for manual triggers. Needs a `DATABASE_URL` repo secret
+   (Anas sets this himself in GitHub settings — not in any file). New
+   `server/BACKUP_RESTORE.md` documents setup, manual runs, downloading artifacts, and
+   restoring via `pg_restore` (into a scratch DB first, not live, unless deliberately
+   recovering).
+
+Full suite re-run clean after these changes: **193/193 passed** (well above the 140+ bar),
+one single clean run after clearing stale embedded-Postgres locks left over from an earlier
+run that collided with itself.
+
+**What this entry does NOT cover — deliberately left to Anas, not something an AI assistant
+should do on someone's behalf:** entering the actual Resend API key (as `SMTP_PASS`) and
+the other SMTP env vars into Render's dashboard, and confirming the API currently boots on
+Render with real `JWT_SECRET`/`DATABASE_URL` already set. Entering API keys/credentials into
+third-party account settings is out of scope regardless of instruction. Render's public
+`/health` endpoint was checked directly (no auth needed) and returned `{"status":"ok"}`
+before this session's changes were pushed — confirming the current live deploy boots today,
+not confirming these specific changes are live yet. See `PROJECT_STATE.md` for the
+up-to-date status of what's actually been verified live vs. still needs Anas's hands-on
+credential step.
+
+**Also flagged, not corrected in this repo (see this session's chat transcript for detail):**
+this session's task prompt named `TMS_PROJECT_SPEC_1.md` as the required-read source of
+truth. That file does not exist anywhere in this repo, on disk, or in git history
+(`git log --all` for it returns nothing) — despite `PROJECT_STATE.md` and this file both
+citing it repeatedly as authoritative. Per this repo's own established convention (flag
+mismatches rather than fabricate), work proceeded on `PROJECT_STATE.md` + `BACKLOG.md` +
+current code only, per Anas's explicit go-ahead when asked.
+
 ## 2026-07-23 — Driver dashboard rework: real daily schedule, student/school detail, pay visibility
 
 Driver's dashboard now shares the same sidebar shell (`AdminLayout`) as the other 3 roles —
@@ -351,10 +401,19 @@ before a future session can act on it.
 - **Postgres RLS** — optional defense-in-depth on top of the app-layer scoped accessor.
   Large, invasive change (every table + per-request session-variable/role handling in the
   connection pool). Not started pending a go/no-go given its size relative to MVP.
-- **Real email transport** (SMTP / provider) to replace the dev mailer — needs external
-  account/API-key credentials that only Anas can provide. The mailer interface
-  (`src/mail/mailer.js`) is already pluggable; swapping in real delivery later is a
-  transport-layer change, not a rewrite.
+- **Real email transport — code done, needs live credentials only Anas can enter.** As of
+  2026-08-25, `src/mail/mailer.js` supports real SMTP sending via `nodemailer`, auto-activated
+  when `SMTP_HOST` is set (Resend's SMTP endpoint); `NODE_ENV=test` always forces the dev
+  transport regardless. What's left is not code: Render's env vars (`SMTP_HOST`, `SMTP_PORT`,
+  `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` = Resend API key, `MAIL_FROM`) need to be entered
+  directly by Anas in Render's dashboard — an AI assistant should not be entering API keys
+  into third-party account settings on anyone's behalf. Once set, a real send through Resend
+  hasn't yet been verified end-to-end against the live Render deploy (see 2026-08-25 entry).
+- **Transitive high-severity vulns from `node-pg-migrate`** (`glob`, `brace-expansion`,
+  `ip-address` — SSRF/CIDR-parsing and DoS advisories) — surfaced by `npm audit` while adding
+  `nodemailer` this session, pre-existing and unrelated to that change. `npm audit fix --force`
+  wants to bump `node-pg-migrate` to a new major (breaking change); not attempted here since
+  it's out of scope for a safety-focused pass. Worth a dedicated look before go-live.
 
 ## Resolved — hardening pass
 - ~~`resendVerification` hygiene~~ — now invalidates all prior unconsumed tokens for the user

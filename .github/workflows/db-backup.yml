@@ -1,0 +1,50 @@
+name: Database Backup
+
+# Daily pg_dump of the live Neon database, kept as a 90-day workflow artifact.
+# Needs a DATABASE_URL repo secret (Settings > Secrets and variables > Actions) pointing
+# at the live Neon connection string — not stored in this file or anywhere in git.
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # 08:00 UTC daily
+  workflow_dispatch: {} # manual runs from the Actions tab
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "::error::DATABASE_URL repo secret is not set. Add it under Settings > Secrets and variables > Actions." >&2
+            exit 1
+          fi
+          mkdir -p backup
+          STAMP="$(date -u +%Y%m%d-%H%M%S)"
+          FILE="backup/saferoute-tms-${STAMP}.dump"
+
+          # Run pg_dump from a postgres:18 image so the client version matches Neon's
+          # server version (currently PostgreSQL 18.x) rather than whatever pg_dump
+          # ubuntu-latest happens to ship.
+          docker run --rm -e PGCONNECT_TIMEOUT=30 postgres:18 \
+            pg_dump "$DATABASE_URL" --no-owner --no-privileges --format=custom \
+            > "$FILE"
+
+          if [ ! -s "$FILE" ]; then
+            echo "::error::Backup file is empty — pg_dump likely failed silently." >&2
+            exit 1
+          fi
+          echo "Backup written: $FILE ($(du -h "$FILE" | cut -f1))"
+          echo "BACKUP_FILE=$FILE" >> "$GITHUB_ENV"
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 90
+          if-no-files-found: error
