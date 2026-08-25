@@ -417,12 +417,20 @@ Full suite re-run clean: **193/193**, one clean run (an earlier run collided wit
 via stale embedded-Postgres locks from two accidentally-parallel test invocations; cleared
 and re-ran once cleanly before trusting the result).
 
-**What was checked live, with real evidence:** Render's public `/health` endpoint
+**What was checked live, with real evidence — including a resolution of the addendum
+above's open question:** Render's public `/health` endpoint
 (`https://saferoute-tms-api.onrender.com/health`, no auth needed) returned
-`{"status":"ok"}` before this session's commit was pushed — the currently-live deploy
-boots fine today. This does **not** by itself confirm this session's new code is live on
-Render; that depends on the same auto-deploy-webhook question flagged in the addendum
-above, unresolved as of that entry.
+`{"status":"ok"}` both before and after this session's push. After pushing, `saferoute-
+tms-api`'s Render dashboard event log (viewed live, read-only, via the user's own
+already-authenticated session — no credentials entered by this session) showed **"Deploy
+live for 1cf4cb0 ... New commit via Auto-Deploy"** at 1:22 PM the same day: a plain `git
+push` to `main` auto-deployed on its own. **The auto-deploy-webhook gap flagged in the
+addendum above is resolved** — plain pushes to `main` now trigger real deploys, no manual/
+API trigger needed. Since the deploy went `live` (not failed/crash-looping) and `/health`
+still returns `ok` afterward, this also confirms live, for real: `config.js`'s new
+production boot-guard did not trip, meaning Render already has real `JWT_SECRET` and
+`DATABASE_URL` set — the "confirm the API boots fine with real env vars set" check from
+this session's task is satisfied with direct evidence, not assumption.
 
 **What was intentionally NOT done, and why:** the task asked for a real end-to-end Resend
 test send verified against the live Render deploy. That requires entering the Resend API

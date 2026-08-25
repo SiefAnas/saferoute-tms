@@ -38,16 +38,22 @@ Full suite re-run clean after these changes: **193/193 passed** (well above the 
 one single clean run after clearing stale embedded-Postgres locks left over from an earlier
 run that collided with itself.
 
+**Live verification, with real evidence:** after pushing, `saferoute-tms-api`'s Render
+dashboard (viewed read-only via the user's own already-logged-in session — no credentials
+entered) showed the new commit auto-deployed and went live via a plain `git push`, no
+manual trigger needed — this also resolves a previously-open item: push-based auto-deploy
+to `main` was flagged as broken as of the 2026-07-20 session and now genuinely works.
+Since the deploy went live rather than crash-looping, and `/health` still returned
+`{"status":"ok"}` afterward, this is direct evidence the new production boot-guard didn't
+trip — Render already has real `JWT_SECRET`/`DATABASE_URL` set. Full detail in
+`PROJECT_STATE.md`'s matching addendum.
+
 **What this entry does NOT cover — deliberately left to Anas, not something an AI assistant
 should do on someone's behalf:** entering the actual Resend API key (as `SMTP_PASS`) and
-the other SMTP env vars into Render's dashboard, and confirming the API currently boots on
-Render with real `JWT_SECRET`/`DATABASE_URL` already set. Entering API keys/credentials into
-third-party account settings is out of scope regardless of instruction. Render's public
-`/health` endpoint was checked directly (no auth needed) and returned `{"status":"ok"}`
-before this session's changes were pushed — confirming the current live deploy boots today,
-not confirming these specific changes are live yet. See `PROJECT_STATE.md` for the
-up-to-date status of what's actually been verified live vs. still needs Anas's hands-on
-credential step.
+the other SMTP env vars into Render's dashboard. Entering API keys/credentials into
+third-party account settings is out of scope regardless of instruction. Once Anas sets
+those, a follow-up session can trigger a real send against the now-live SMTP code path and
+confirm delivery — not done yet.
 
 **Correction to an earlier finding in this same session, worth recording plainly:** this
 session initially reported `TMS_PROJECT_SPEC_1.md` as missing from the repo entirely,
