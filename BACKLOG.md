@@ -7,6 +7,61 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-27 (latest) — Mockup removed, real Parent Dashboard built out, dummy account added
+
+Anas caught that `/mockup/parent-dashboard` was live and unauthenticated on the public
+deployed site (`saferoute-tms-client.onrender.com`) — pushed earlier in this engagement
+without remembering to gate/remove it first. Fixed in two parts, first part pushed
+immediately on its own given the exposure:
+
+1. **Removed the mockup entirely** (commit `5a5ea34`, pushed standalone before anything
+   else in this entry): deleted the route from `App.tsx` and the file
+   `client/src/mockups/parent-dashboard/ParentDashboardMockup.tsx`. Verified live on the
+   public site afterward — the URL now falls through to the login redirect, not the mockup.
+2. **Real `/parent` page now shows what the mockup used to fake.** New
+   `GET /parent/students/:id/detail` (`services/parentPortal.js`) returns real vehicle info
+   (plate/brand/model/year/color from the student's current assignment's van), the assigned
+   driver (name/phone), and today's real trips (from the `trips` table) for a real
+   checkmark/current/upcoming timeline — same visual language as the old mockup, but every
+   value is now real, not fake. `ParentHomePage.tsx` rewritten to render it: vehicle info
+   grid, trip timeline, a real Contact Driver `tel:` link, the Skip Today's Pickup button
+   (unchanged, already real), and the same static school↔home route illustration with its
+   `TODO (v2): live GPS` comment carried over.
+   **Real bug caught while building this and fixed before it shipped**: the new endpoint's
+   `skip_today` flag was first wired to the assignment's schedule-override skip flag
+   (driver/admin-set) instead of checking `pickup_skips` (the parent's own real Skip Pickup
+   action) — meaning after a parent skipped, the dashboard wouldn't have reflected it. Caught
+   by the endpoint's own test assertion failing, fixed to check both signals (`skip_today` =
+   parent-skipped OR admin schedule-override skip).
+3. **Dummy parent account created**, same pattern as the existing dummy driver/admin
+   accounts (`admin@3bees.test`, `driver1@3bees.test`, etc.):
+   - `parent1@3bees.test` / `Secret123!`, full name "Taylor Johnson", linked to **Emma
+     Johnson** (the student with the most complete dummy data already — a real assignment,
+     driver, van, and trip history; Liam Carter by contrast has no assignment at all, so
+     wasn't a good demo case). Filled in a few previously-null fields on that existing dummy
+     data to make the demo look complete rather than half-empty: Emma's assignment now has
+     real `pickup_time`/`dropoff_time` (08:00/15:15), her van (`VAN-084`) now has a color
+     ("White"), and her driver (Sarah Jenkins) now has a phone number ("555-0199") — none of
+     this existed before, all of it real fields the app already supports, just never
+     populated for this student.
+   **Anomaly found and flagged, not silently fixed**: while setting this up, found a SECOND
+   parent account already in the DB — `parent1@dummy.edu` / "SamaCrazy" — also linked to
+   Emma Johnson, created via the same admin account (`admin@3bees.test`) a few minutes before
+   this session created its own dummy account. Naming pattern (`dummy.edu`, "SamaCrazy") reads
+   like manual human testing, not anything this session generated — almost certainly Anas
+   testing the new Parents page himself on the live/shared dev DB after reading the earlier
+   report. Left it alone rather than deleting or overwriting it, since it isn't this
+   session's data to clean up. Worth deleting yourself if it was just a test.
+
+**Verification**: `npx tsc -b` clean. Full backend suite: **250/250 passing** (248 from the
+last entry + 2 more assertions extending `09-parent-and-permissions.test.cjs` for the new
+detail endpoint, including the skip_today bug fix). Live-verified end-to-end: logged in as
+the real `parent1@3bees.test` account in the browser, confirmed the real dashboard renders
+Emma's real vehicle info (VAN-084, Ford, Transit SE, 2025, White), real driver (Sarah
+Jenkins, `tel:555-0199` link works), a real trip timeline reflecting that no pickup has
+actually been logged yet today (not fabricated as "done"), and Liam Carter correctly showing
+"no driver/van assigned" rather than fake data.
+
 ## 2026-08-27 (later) — Fleet/Students/Payroll page enhancements
 
 Third batch of edits from Anas, same "make reasonable assumptions, don't block" instruction.

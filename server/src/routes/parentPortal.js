@@ -4,13 +4,16 @@ const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
-const { listMyStudents, getSkipStatus, skipPickup } = require('../services/parentPortal');
+const { listMyStudents, getSkipStatus, skipPickup, getStudentDetail } = require('../services/parentPortal');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb, requireRole('parent'));
 
 router.get('/students', async (req, res, next) => {
   try { res.json(await listMyStudents(req)); } catch (e) { next(e); }
+});
+router.get('/students/:id/detail', async (req, res, next) => {
+  try { res.json(await getStudentDetail(req, req.params.id)); } catch (e) { next(e); }
 });
 router.get('/students/:id/skip-status', async (req, res, next) => {
   try { res.json(await getSkipStatus(req, req.params.id)); } catch (e) { next(e); }

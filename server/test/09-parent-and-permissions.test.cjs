@@ -222,6 +222,18 @@ async function main() {
         409
       );
 
+      console.log('\n--- Parent student detail (real vehicle/driver/trip info) ---');
+      const detail = await api('GET', `/parent/students/${stuEligible.id}/detail`, tParent);
+      (detail.status === 200 && detail.body.van?.license_plate === 'AAA-1' && detail.body.driver?.full_name === 'Driver X'
+        && detail.body.skip_today === true)
+        ? ok('parent detail returns real van/driver info and reflects the skip just recorded')
+        : bad(`detail: ${detail.status} ${JSON.stringify(detail.body)}`);
+      eq(
+        'parent detail for an unlinked student -> 404',
+        (await api('GET', `/parent/students/${stuUnlinked.id}/detail`, tParent)).status,
+        404
+      );
+
       console.log('\n--- Unlink ---');
       eq('unlink parent from ineligible student -> 204', (await api('DELETE', `/parent-access/${link2.body.id}`, tA1)).status, 204);
       const afterUnlink = await api('GET', '/parent/students', tParent);

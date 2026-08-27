@@ -300,6 +300,15 @@ changed in scope/vision, not implementation detail, that stays in `BACKLOG.md`/
 
 ## 12. Changelog
 
+- **2026-08-27 (latest)**: removed the Parent Dashboard mockup entirely (route + file) —
+  it had been left unauthenticated on the live public site since the earlier push and
+  needed to come down immediately; pushed that fix on its own before anything else. The
+  real `/parent` page (§7) now shows real vehicle/driver/trip-timeline data (new
+  `GET /parent/students/:id/detail`), replacing what the mockup used to demonstrate. A real
+  dummy `parent` account now exists, following the same pattern as the dummy driver/admin
+  accounts — see `BACKLOG.md`'s matching entry for credentials and a live-data anomaly
+  found while setting it up (evidence of Anas already testing the new Parents feature
+  himself on the shared dev DB, not a bug — left his test data alone).
 - **2026-08-27 (later)**: Fleet/Students/Payroll page enhancements. Fleet: vans gained
   brand (split from the old single `model` field, real data backfilled by re-parsing),
   color, and a required assigned driver; plate/year now required too. Students: home address

@@ -74,6 +74,27 @@ export interface SkipStatus {
   alreadySkipped: boolean
 }
 
+// GET /parent/students/:id/detail — real vehicle/driver/trip info for the parent
+// dashboard's real (non-mockup) view (added 2026-08-27).
+export interface ParentStudentDetail {
+  student: { id: string; full_name: string }
+  school: { name: string | null }
+  company: { name: string | null }
+  van: { license_plate: string; brand: string; model: string; year: number; color: string | null } | null
+  driver: { full_name: string; phone: string | null } | null
+  pickup_time: string | null
+  dropoff_time: string | null
+  skip_today: boolean
+  trips_today: Array<{
+    trip_type: TripType
+    status: TripStatus
+    driver_confirmed_at: string | null
+    staff_confirmed_at: string | null
+    completed_at: string | null
+    created_at: string
+  }>
+}
+
 export interface Van {
   id: string
   company_id: string

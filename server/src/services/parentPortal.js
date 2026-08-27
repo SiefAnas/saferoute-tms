@@ -61,6 +61,68 @@ async function getEligibility(companyId, studentId) {
   return rows[0] ?? null;
 }
 
+// Real vehicle/driver/trip info for the parent's linked student — replaces the fake data
+// the design mockup used, once the real dashboard needed to show it (2026-08-27). Raw pool
+// for the same date-range-join reason as getEligibility(); manually ANDs company_id.
+async function getStudentDetail(req, studentId) {
+  const student = await assertLinkedStudent(req, studentId);
+
+  const { rows: assignmentRows } = await pool.query(
+    `SELECT COALESCE(o.pickup_time, a.pickup_time) AS pickup_time,
+            COALESCE(o.dropoff_time, a.dropoff_time) AS dropoff_time,
+            COALESCE(o.skip, false) AS schedule_skip,
+            v.license_plate, v.brand, v.model, v.year, v.color,
+            u.full_name AS driver_name, u.phone AS driver_phone,
+            c.name AS company_name
+       FROM assignments a
+       JOIN vans v ON v.id = a.van_id
+       JOIN users u ON u.id = a.driver_user_id
+       JOIN companies c ON c.id = a.company_id
+       LEFT JOIN assignment_schedule_overrides o ON o.assignment_id = a.id AND o.override_date = CURRENT_DATE
+      WHERE a.student_id = $1 AND a.company_id = $2
+        AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+      ORDER BY a.created_at DESC
+      LIMIT 1`,
+    [studentId, req.auth.tenantId]
+  );
+  const assignment = assignmentRows[0] ?? null;
+
+  // skip_today combines the two distinct ways a pickup can be off today: the admin/driver
+  // set a full-day schedule override (schedule_skip, driver_dashboard-visible), or the
+  // parent used the real Skip Today's Pickup action (pickup_skips) — either means "no
+  // pickup needed," which is what the dashboard's status badge/button actually care about.
+  const { rows: skipRows } = await pool.query(
+    'SELECT 1 FROM pickup_skips WHERE student_id = $1 AND skip_date = CURRENT_DATE',
+    [studentId]
+  );
+  const parentSkipped = skipRows.length > 0;
+
+  const { rows: schoolRows } = await pool.query('SELECT name FROM schools WHERE id = $1', [student.school_id]);
+
+  const { rows: trips } = await pool.query(
+    `SELECT trip_type, status, driver_confirmed_at, staff_confirmed_at, completed_at, created_at
+       FROM trips
+      WHERE student_id = $1 AND company_id = $2
+        AND (created_at AT TIME ZONE 'UTC')::date = CURRENT_DATE
+      ORDER BY created_at ASC`,
+    [studentId, req.auth.tenantId]
+  );
+
+  return {
+    student: { id: student.id, full_name: student.full_name },
+    school: { name: schoolRows[0]?.name ?? null },
+    company: { name: assignment?.company_name ?? null },
+    van: assignment
+      ? { license_plate: assignment.license_plate, brand: assignment.brand, model: assignment.model, year: assignment.year, color: assignment.color }
+      : null,
+    driver: assignment ? { full_name: assignment.driver_name, phone: assignment.driver_phone } : null,
+    pickup_time: assignment?.pickup_time ?? null,
+    dropoff_time: assignment?.dropoff_time ?? null,
+    skip_today: parentSkipped || (assignment?.schedule_skip ?? false),
+    trips_today: trips,
+  };
+}
+
 async function getSkipStatus(req, studentId) {
   await assertLinkedStudent(req, studentId);
   const elig = await getEligibility(req.auth.tenantId, studentId);
@@ -116,4 +178,4 @@ async function notifyPickupSkipped(req, student, driverUserId) {
   return notifyCompanyAndSchoolAdmins(req, student.school_id, { subject, text, extraRecipients: driver ? [driver.email] : [] });
 }
 
-module.exports = { listMyStudents, getSkipStatus, skipPickup };
+module.exports = { listMyStudents, getSkipStatus, skipPickup, getStudentDetail };
