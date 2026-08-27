@@ -14,7 +14,7 @@ const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
 const companyAdmin = requireRole('company_admin');
 
-const mapFk = (err) => (err.code === '23503' ? new HttpError(400, 'school_id or driver not found in your company') : err);
+const mapFk = (err) => (err.code === '23503' ? new HttpError(400, 'school_id not found') : err);
 
 // school_staff -> only students granted via staff_student_access (§7.4); everyone else
 // (company_admin, school_admin) gets the full tenant scope. Same pattern as Trips' readScope.
@@ -28,12 +28,18 @@ function readScope(req) {
 // Students page task (2026-08-27): every field required except notes. Enforced here (not a
 // DB NOT NULL) since existing students have real NULLs in several of these — same precedent
 // as the van fleet fields alongside this change.
+//
+// Rework (2026-08-27, later): students no longer carry their own "assigned driver" field.
+// That standalone tag could silently disagree with the real assignments table — removed per
+// Anas's direction once flagged. "Which driver" for a student is now purely a read-side
+// concept, derived client-side from today's active assignment for that student
+// (StudentsPage.tsx). Creating/changing that link goes through the real POST/PATCH
+// /assignments endpoints (already company_admin-gated + tenant-scoped), which the frontend
+// calls itself right after creating/editing the student — not through this route.
 router.post('/', companyAdmin, async (req, res, next) => {
   try {
-    const {
-      full_name, grade, parent_name, parent_phone, school_id, age, street_address, city, state, zip_code, notes,
-      driver_user_id,
-    } = req.body || {};
+    const { full_name, grade, parent_name, parent_phone, school_id, age, street_address, city, state, zip_code, notes } =
+      req.body || {};
     if (!full_name || !grade || !parent_name || !parent_phone || !school_id || age === undefined || age === null) {
       throw new HttpError(
         400,
@@ -49,9 +55,6 @@ router.post('/', companyAdmin, async (req, res, next) => {
       full_name, grade, parent_name, parent_phone, school_id, age,
       street_address, city, state: normalizedState, zip_code,
       notes: notes ?? null,
-      // Optional (task): a direct "assigned driver" tag on the student, separate from the
-      // operational assignments table — see migration 016's comment.
-      driver_user_id: driver_user_id || null,
     });
     res.status(201).json(row);
   } catch (e) { next(mapFk(e)); }
@@ -77,10 +80,7 @@ router.get('/:id', async (req, res, next) => {
 router.patch('/:id', companyAdmin, async (req, res, next) => {
   try {
     const patch = {};
-    for (const k of [
-      'full_name', 'grade', 'parent_name', 'parent_phone', 'age', 'street_address', 'city', 'zip_code', 'notes',
-      'driver_user_id',
-    ]) {
+    for (const k of ['full_name', 'grade', 'parent_name', 'parent_phone', 'age', 'street_address', 'city', 'zip_code', 'notes']) {
       if (req.body?.[k] !== undefined) patch[k] = req.body[k];
     }
     if (req.body?.zip_code !== undefined && req.body.zip_code !== null) assertValidZip(req.body.zip_code);

@@ -6,6 +6,23 @@ export function isToday(iso: string): boolean {
   )
 }
 
+function dateOnly(iso: string): number {
+  const d = new Date(iso)
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+// Mirrors the server's own "active today" range check (start_date <= CURRENT_DATE AND
+// (end_date IS NULL OR end_date >= CURRENT_DATE), used in schedule.js/parentPortal.js) for
+// display-only client-side derivation — e.g. "which assignment is this student/van's
+// current one" on the Students/Fleet pages. Not authoritative; the server re-derives this
+// itself wherever it actually matters (eligibility, notifications).
+export function isAssignmentActiveToday(startDate: string, endDate: string | null): boolean {
+  const today = dateOnly(new Date().toISOString())
+  if (dateOnly(startDate) > today) return false
+  if (endDate && dateOnly(endDate) < today) return false
+  return true
+}
+
 export function formatDuration(totalMinutes: number): string {
   const h = Math.floor(totalMinutes / 60)
   const m = Math.round(totalMinutes % 60)

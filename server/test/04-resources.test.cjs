@@ -79,21 +79,16 @@ async function main() {
 
       console.log('\n--- Vans ---');
       const vanFields = { brand: 'Ford', model: 'Transit', year: 2022, color: 'White' };
-      const vanA = (await api('POST', '/vans', adminA, { license_plate: 'AAA-1', ...vanFields, driver_user_id: driverAId })).body;
-      const vanB = (await api('POST', '/vans', adminB, { license_plate: 'BBB-1', ...vanFields, driver_user_id: driverBId })).body;
+      const vanA = (await api('POST', '/vans', adminA, { license_plate: 'AAA-1', ...vanFields })).body;
+      const vanB = (await api('POST', '/vans', adminB, { license_plate: 'BBB-1', ...vanFields })).body;
       const vansA = await api('GET', '/vans', adminA);
       (vansA.body.length === 1 && vansA.body[0].id === vanA.id) ? ok('admin A sees only Company A vans') : bad('van isolation broke');
       eq('school_admin GET /vans -> 403 (structural: no van scope)', (await api('GET', '/vans', schoolAdmin)).status, 403);
-      (vanA.brand === 'Ford' && vanA.model === 'Transit' && vanA.color === 'White' && vanA.driver_user_id === driverAId)
-        ? ok('van create returns brand/model/color/driver_user_id') : bad(`van create fields: ${JSON.stringify(vanA)}`);
+      (vanA.brand === 'Ford' && vanA.model === 'Transit' && vanA.color === 'White' && vanA.driver_user_id === undefined)
+        ? ok('van create returns brand/model/color (no standalone driver_user_id field)') : bad(`van create fields: ${JSON.stringify(vanA)}`);
       eq(
         'van create missing color -> 400 (now required)',
-        (await api('POST', '/vans', adminA, { license_plate: 'CCC-1', brand: 'Ford', model: 'Transit', year: 2022, driver_user_id: driverAId })).status,
-        400
-      );
-      eq(
-        'van create with driver from another company -> 400 (cross-company FK)',
-        (await api('POST', '/vans', adminA, { license_plate: 'DDD-1', ...vanFields, driver_user_id: driverBId })).status,
+        (await api('POST', '/vans', adminA, { license_plate: 'CCC-1', brand: 'Ford', model: 'Transit', year: 2022 })).status,
         400
       );
 
@@ -112,20 +107,15 @@ async function main() {
       );
       eq('student with bogus school_id -> 400 (FK)', (await api('POST', '/students', adminA, { full_name: 'x', school_id: '00000000-0000-0000-0000-000000000000', ...studentFields })).status, 400);
 
-      const stuWithDriver = await api('POST', '/students', adminA, {
-        full_name: 'Kid With Driver', school_id: S.id, ...studentFields, driver_user_id: driverAId,
+      // Rework (2026-08-27, later): students no longer have a standalone driver_user_id
+      // field at all — sending one is simply ignored (not a validation error), since "which
+      // driver" is now derived from the real assignments table, not written here.
+      const stuIgnoresDriverField = await api('POST', '/students', adminA, {
+        full_name: 'Kid Ignored Driver Field', school_id: S.id, ...studentFields, driver_user_id: driverAId,
       });
-      (stuWithDriver.status === 201 && stuWithDriver.body.driver_user_id === driverAId)
-        ? ok('student create accepts optional driver_user_id') : bad(`student w/ driver: ${JSON.stringify(stuWithDriver.body)}`);
-      const stuNoDriver = await api('POST', '/students', adminA, { full_name: 'Kid No Driver', school_id: S.id, ...studentFields });
-      stuNoDriver.body.driver_user_id === null ? ok('student create omits driver -> driver_user_id null') : bad('driver_user_id not null when omitted');
-      eq(
-        'student create with driver from another company -> 400 (cross-company FK)',
-        (await api('POST', '/students', adminA, { full_name: 'x', school_id: S.id, ...studentFields, driver_user_id: driverBId })).status,
-        400
-      );
-      const patchDriver = await api('PATCH', `/students/${stuNoDriver.body.id}`, adminA, { driver_user_id: driverAId });
-      patchDriver.body.driver_user_id === driverAId ? ok('student patch assigns a driver') : bad(`patch driver: ${JSON.stringify(patchDriver.body)}`);
+      (stuIgnoresDriverField.status === 201 && stuIgnoresDriverField.body.driver_user_id === undefined)
+        ? ok('student create silently ignores a driver_user_id in the body (no such column anymore)')
+        : bad(`student w/ driver field: ${JSON.stringify(stuIgnoresDriverField.body)}`);
       const schoolView = await api('GET', '/students', schoolAdmin);
       schoolView.body.some((s) => s.id === stu.body.id) ? ok('school_admin sees the student via school scope (cross-side read)') : bad('school_admin cannot see its student');
       (await api('GET', '/students', adminB)).body.length === 0 ? ok('admin B sees no Company A students (isolation)') : bad('student leaked to Company B');

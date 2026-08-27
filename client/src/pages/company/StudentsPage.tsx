@@ -5,7 +5,8 @@ import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { StateAutocomplete } from '../../components/StateAutocomplete'
-import type { PublicUser, SchoolSummary, Student, StudentContact } from '../../types/api'
+import { isAssignmentActiveToday } from '../../lib/format'
+import type { Assignment, PublicUser, SchoolSummary, Student, StudentContact, Van } from '../../types/api'
 
 interface GuardianRow {
   name: string
@@ -29,11 +30,23 @@ interface GuardianRow {
 // ASSUMPTION: this multi-row UI is CREATE-only — editing an existing student still uses the
 // single primary-contact fields plus the separate "Contacts" panel below (already built,
 // already the edit-time path for additional contacts) rather than duplicating that UI here.
+//
+// Driver assignment rework (2026-08-27, later): the "Driver" shown for a student is no
+// longer a standalone field — it's derived live from the real `assignments` table (whichever
+// assignment is active today), same single source of truth the driver's own schedule, payroll,
+// and the parent dashboard already use. Picking a driver+van here creates/updates a REAL
+// Assignment row via the existing (already company_admin-gated, tenant-scoped) /assignments
+// endpoints — not a separate write. Both driver and van are required together (an Assignment
+// can't exist with only one); changing them closes the previous active assignment
+// (end_date = today) before opening the new one, so a student never has two conflicting
+// "current" assignments from this flow.
 export function CompanyStudentsPage() {
   const queryClient = useQueryClient()
   const studentsQuery = useQuery({ queryKey: ['students'], queryFn: () => api.get<Student[]>('/students') })
   const schoolsQuery = useQuery({ queryKey: ['schools'], queryFn: () => api.get<SchoolSummary[]>('/schools') })
   const driversQuery = useQuery({ queryKey: ['users', 'driver'], queryFn: () => api.get<PublicUser[]>('/users?role=driver') })
+  const vansQuery = useQuery({ queryKey: ['vans'], queryFn: () => api.get<Van[]>('/vans') })
+  const assignmentsQuery = useQuery({ queryKey: ['assignments'], queryFn: () => api.get<Assignment[]>('/assignments') })
 
   const schoolName = useMemo(() => {
     const map = new Map((schoolsQuery.data ?? []).map((s) => [s.id, s.name]))
@@ -45,12 +58,26 @@ export function CompanyStudentsPage() {
     return (id: string | null) => (id ? (map.get(id) ?? null) : null)
   }, [driversQuery.data])
 
+  // Current active assignment per student — most-recently-created one still active today, if
+  // more than one somehow overlaps (mirrors the server's own tie-break elsewhere: ORDER BY
+  // created_at DESC LIMIT 1).
+  const currentAssignmentFor = useMemo(() => {
+    const byStudent = new Map<string, Assignment>()
+    for (const a of assignmentsQuery.data ?? []) {
+      if (!isAssignmentActiveToday(a.start_date, a.end_date)) continue
+      const existing = byStudent.get(a.student_id)
+      if (!existing || a.created_at > existing.created_at) byStudent.set(a.student_id, a)
+    }
+    return (studentId: string) => byStudent.get(studentId) ?? null
+  }, [assignmentsQuery.data])
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [fullName, setFullName] = useState('')
   const [grade, setGrade] = useState('')
   const [age, setAge] = useState('')
   const [guardians, setGuardians] = useState<GuardianRow[]>([{ name: '', phone: '' }])
   const [driverUserId, setDriverUserId] = useState('')
+  const [vanId, setVanId] = useState('')
   const [streetAddress, setStreetAddress] = useState('')
   const [city, setCity] = useState('')
   const [stateCode, setStateCode] = useState('')
@@ -73,6 +100,7 @@ export function CompanyStudentsPage() {
     setAge('')
     setGuardians([{ name: '', phone: '' }])
     setDriverUserId('')
+    setVanId('')
     setStreetAddress('')
     setCity('')
     setStateCode('')
@@ -89,7 +117,9 @@ export function CompanyStudentsPage() {
     setGrade(s.grade ?? '')
     setAge(s.age ? String(s.age) : '')
     setGuardians([{ name: s.parent_name ?? '', phone: s.parent_phone ?? '' }])
-    setDriverUserId(s.driver_user_id ?? '')
+    const current = currentAssignmentFor(s.id)
+    setDriverUserId(current?.driver_user_id ?? '')
+    setVanId(current?.van_id ?? '')
     setStreetAddress(s.street_address ?? '')
     setCity(s.city ?? '')
     setStateCode(s.state ?? '')
@@ -108,7 +138,24 @@ export function CompanyStudentsPage() {
     setGuardians((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const invalidateStudents = () => queryClient.invalidateQueries({ queryKey: ['students'] })
+  const invalidateStudents = () => {
+    queryClient.invalidateQueries({ queryKey: ['students'] })
+    queryClient.invalidateQueries({ queryKey: ['assignments'] })
+  }
+
+  // Reconciles the real Assignment for a student against what the form wants: closes the
+  // previous active assignment (end_date = today) if one existed and is being replaced or
+  // cleared, then opens a new one if a driver+van are both set. No-ops if nothing changed.
+  async function syncAssignment(studentId: string, current: Assignment | null) {
+    const today = new Date().toISOString().slice(0, 10)
+    const wantsAssignment = Boolean(driverUserId && vanId)
+    const unchanged = current && wantsAssignment && current.driver_user_id === driverUserId && current.van_id === vanId
+    if (unchanged) return
+    if (current) await api.patch(`/assignments/${current.id}`, { end_date: today })
+    if (wantsAssignment) {
+      await api.post('/assignments', { student_id: studentId, driver_user_id: driverUserId, van_id: vanId, start_date: today })
+    }
+  }
 
   const createStudent = useMutation({
     mutationFn: async () => {
@@ -116,6 +163,9 @@ export function CompanyStudentsPage() {
       const extraFilled = extra.filter((g) => g.name.trim() || g.phone.trim())
       const incomplete = extraFilled.find((g) => !g.name.trim() || !g.phone.trim())
       if (incomplete) throw new ApiError(400, 'Each additional parent/guardian needs both a name and a phone number.')
+      if (Boolean(driverUserId) !== Boolean(vanId)) {
+        throw new ApiError(400, 'Pick both a driver and a van to create a real assignment, or leave both blank.')
+      }
 
       let targetSchoolId = schoolId
       if (schoolMode === 'new') {
@@ -133,7 +183,6 @@ export function CompanyStudentsPage() {
         age: Number(age),
         parent_name: primary.name,
         parent_phone: primary.phone,
-        driver_user_id: driverUserId || undefined,
         street_address: streetAddress,
         city,
         state: stateCode,
@@ -149,6 +198,11 @@ export function CompanyStudentsPage() {
           relationship: 'Parent/Guardian',
         })
       }
+      if (driverUserId && vanId) {
+        await api.post('/assignments', {
+          student_id: student.id, driver_user_id: driverUserId, van_id: vanId, start_date: new Date().toISOString().slice(0, 10),
+        })
+      }
       return student
     },
     onSuccess: (student) => {
@@ -161,20 +215,25 @@ export function CompanyStudentsPage() {
   })
 
   const updateStudent = useMutation({
-    mutationFn: (id: string) =>
-      api.patch<Student>(`/students/${id}`, {
+    mutationFn: async (id: string) => {
+      if (Boolean(driverUserId) !== Boolean(vanId)) {
+        throw new ApiError(400, 'Pick both a driver and a van to create a real assignment, or leave both blank.')
+      }
+      const student = await api.patch<Student>(`/students/${id}`, {
         full_name: fullName,
         grade,
         age: Number(age),
         parent_name: guardians[0].name,
         parent_phone: guardians[0].phone,
-        driver_user_id: driverUserId || null,
         street_address: streetAddress,
         city,
         state: stateCode,
         zip_code: zipCode,
         notes: notes || null,
-      }),
+      })
+      await syncAssignment(id, currentAssignmentFor(id))
+      return student
+    },
     onSuccess: () => {
       invalidateStudents()
       setFormMsg('Changes saved.')
@@ -236,7 +295,9 @@ export function CompanyStudentsPage() {
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '—'}</td>
                       <td className="px-6 py-3 text-data-mono text-secondary">{s.parent_phone ?? '—'}</td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {driversQuery.isLoading ? '…' : (driverName(s.driver_user_id) ?? '(no driver assigned)')}
+                        {driversQuery.isLoading || assignmentsQuery.isLoading
+                          ? '…'
+                          : (driverName(currentAssignmentFor(s.id)?.driver_user_id ?? null) ?? '(no driver assigned)')}
                       </td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
                         <button
@@ -314,14 +375,29 @@ export function CompanyStudentsPage() {
               )}
             </div>
 
-            <select value={driverUserId} onChange={(e) => setDriverUserId(e.target.value)} className={selectClass}>
-              <option value="">Assign a driver (optional)…</option>
-              {(driversQuery.data ?? []).map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.full_name}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-col gap-1">
+              <p className="text-label-md text-on-surface-variant">
+                Assign a driver + van (optional — creates a real Assignment; both required together)
+              </p>
+              <div className="flex gap-2">
+                <select value={driverUserId} onChange={(e) => setDriverUserId(e.target.value)} className={selectClass}>
+                  <option value="">Driver…</option>
+                  {(driversQuery.data ?? []).map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name}
+                    </option>
+                  ))}
+                </select>
+                <select value={vanId} onChange={(e) => setVanId(e.target.value)} className={selectClass}>
+                  <option value="">Van…</option>
+                  {(vansQuery.data ?? []).map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.license_plate}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             <Input required placeholder="Street address" value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} />
             <div className="flex gap-2">

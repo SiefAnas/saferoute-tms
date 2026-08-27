@@ -7,6 +7,51 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-27 (latest still) — Fixed the student/van standalone driver tags, for real this time
+
+Follow-up on the previous entry's own flagged assumption: Anas confirmed he wanted the two
+sources of truth (the standalone `driver_user_id` tags vs. the real `assignments` table)
+actually synced, not just documented as a risk. Checked first per his explicit instruction
+("stop and flag if this touches a lot of code or breaks something load-bearing") — found a
+real structural conflict, not just busywork: `assignments` is a genuine 3-way link
+(student+driver+van, all `NOT NULL`), so a 2-way "driver for a student" or "driver for a
+van" picker can't create a valid Assignment row by itself. Flagged this with concrete
+options before touching any code; Anas chose:
+
+- **Students**: add a van picker alongside the driver dropdown — a real "quick assignment"
+  creator, reusing the existing (already company_admin-gated, tenant-scoped)
+  `POST`/`PATCH /assignments` endpoints, not a new write path.
+- **Fleet**: read-only — "Driver" for a van is now purely derived from whichever
+  assignment(s) are active today using that van (a van can legitimately have more than one
+  distinct driver, shown as a joined list); no inline driver picker on the van form at all,
+  since "assign a driver to a van" would need to name a student too.
+
+**What changed**: dropped `students.driver_user_id` and `vans.driver_user_id` entirely
+(migration `1752624000017` — both were only added earlier the same day, so no real data was
+ever meaningfully populated in either beyond this session's own demo setup). `POST /vans` no
+longer takes or requires a driver at all. `StudentsPage.tsx`'s Add/Edit form now has a
+driver+van pair (both required together or both left blank); on save it reconciles the
+student's real current assignment — closes the previous one (`end_date = today`) if the
+picked driver/van changed, opens a new one if now set, no-ops if unchanged. Both
+Students' and Fleet's "Driver" columns/table cells are now purely read-derived from
+`GET /assignments` client-side (new `isAssignmentActiveToday()` helper in `lib/format.ts`,
+mirroring the exact "active today" range check `schedule.js`/`parentPortal.js` already use
+server-side) — same single source of truth as the driver's own schedule, payroll, and the
+parent dashboard's vehicle/driver display.
+
+**Verification**: `npx tsc -b` and lint clean. Full backend suite: **269/269 passing**
+across all 11 suites (removed/rewrote the now-invalid standalone-tag assertions in
+`04-resources.test.cjs`, migration count bumped to 17). Live-verified the display fix
+directly: Emma Johnson's real assignment (driver Sarah Jenkins) now shows correctly and
+identically on both the Students page and the Fleet page (VAN-084), sourced from the one
+real `assignments` row — previously these could have silently disagreed. The live
+create/close/reopen round-trip (Students-page edit → real Assignment created → closed on a
+second edit) was verified directly against the real API rather than through the browser,
+after `StateAutocomplete`'s existing quirk under browser automation (typing doesn't open its
+suggestion list via synthetic JS events — a pre-existing component behavior, not something
+this change touched) made a full UI click-through impractical; a leftover test assignment
+from that verification was deleted afterward.
+
 ## 2026-08-27 (latest) — Driver address/license fields, permanent passwords, student-driver link
 
 Three page tasks from Anas, screenshots of the live Drivers/Students pages included for

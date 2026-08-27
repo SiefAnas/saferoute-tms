@@ -1,23 +1,49 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
+import { isAssignmentActiveToday } from '../../lib/format'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
-import type { PublicUser, Van } from '../../types/api'
+import type { Assignment, PublicUser, Van } from '../../types/api'
 
 // Company Admin — Fleet management. Fleet page task (2026-08-27): brand/model split, color,
 // and an assigned driver are all required at creation; plate/year are required too (no more
 // "optional"). Table gained Brand/Color/Driver columns.
+//
+// Driver assignment rework (2026-08-27, later): vans no longer carry their own "assigned
+// driver" field — that standalone tag could silently disagree with the real assignments
+// table (also student+driver+van), so it was removed entirely. "Driver" here is now
+// read-only, derived live from today's active assignment(s) using this van — same source of
+// truth as the Students page, the driver's own schedule, and payroll. There's no inline way
+// to set it from this page: "assign a driver to a van" would need to name a student too
+// (a real Assignment can't exist with only two of its three legs), which doesn't fit a
+// van-level action — use the Assignments page to actually create/change who's driving what.
 export function VansPage() {
   const queryClient = useQueryClient()
   const vansQuery = useQuery({ queryKey: ['vans'], queryFn: () => api.get<Van[]>('/vans') })
   const driversQuery = useQuery({ queryKey: ['users', 'driver'], queryFn: () => api.get<PublicUser[]>('/users?role=driver') })
+  const assignmentsQuery = useQuery({ queryKey: ['assignments'], queryFn: () => api.get<Assignment[]>('/assignments') })
 
   const driverName = useMemo(() => {
     const map = new Map((driversQuery.data ?? []).map((d) => [d.id, d.full_name]))
-    return (id: string | null) => (id ? (map.get(id) ?? null) : null)
+    return (id: string) => map.get(id) ?? null
   }, [driversQuery.data])
+
+  // A van can legitimately have more than one driver active today (different students,
+  // different assignments) — show every distinct driver currently using this van.
+  const currentDriversFor = useMemo(() => {
+    const byVan = new Map<string, Set<string>>()
+    for (const a of assignmentsQuery.data ?? []) {
+      if (!isAssignmentActiveToday(a.start_date, a.end_date)) continue
+      if (!byVan.has(a.van_id)) byVan.set(a.van_id, new Set())
+      byVan.get(a.van_id)!.add(a.driver_user_id)
+    }
+    return (vanId: string) =>
+      Array.from(byVan.get(vanId) ?? [])
+        .map(driverName)
+        .filter((n): n is string => Boolean(n))
+  }, [assignmentsQuery.data, driverName])
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [licensePlate, setLicensePlate] = useState('')
@@ -25,7 +51,6 @@ export function VansPage() {
   const [model, setModel] = useState('')
   const [year, setYear] = useState('')
   const [color, setColor] = useState('')
-  const [driverUserId, setDriverUserId] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
 
   function resetForm() {
@@ -35,7 +60,6 @@ export function VansPage() {
     setModel('')
     setYear('')
     setColor('')
-    setDriverUserId('')
     setFormError(null)
   }
 
@@ -46,7 +70,6 @@ export function VansPage() {
     setModel(van.model)
     setYear(String(van.year))
     setColor(van.color ?? '')
-    setDriverUserId(van.driver_user_id ?? '')
     setFormError(null)
   }
 
@@ -58,7 +81,6 @@ export function VansPage() {
     model,
     year: Number(year),
     color,
-    driver_user_id: driverUserId,
   })
 
   const createVan = useMutation({
@@ -95,9 +117,6 @@ export function VansPage() {
   }
 
   const saving = createVan.isPending || updateVan.isPending
-
-  const selectClass =
-    'h-14 w-full rounded-lg border border-outline bg-surface-container-lowest px-4 text-body-lg outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20'
 
   const columns: Array<{ label: string; icon: string }> = [
     { label: 'Plate', icon: 'pin' },
@@ -140,35 +159,42 @@ export function VansPage() {
                     </td>
                   </tr>
                 ) : (
-                  (vansQuery.data ?? []).map((van) => (
-                    <tr key={van.id} className="hover:bg-surface-container-low">
-                      <td className="px-6 py-3 text-data-mono font-medium">{van.license_plate}</td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.brand}</td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.model}</td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">{van.year}</td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.color ?? '—'}</td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {driversQuery.isLoading ? '…' : (driverName(van.driver_user_id) ?? '(no driver assigned)')}
-                      </td>
-                      <td className="px-6 py-3 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => startEdit(van)}
-                          className="mr-3 text-label-md text-primary hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteVan.mutate(van.id)}
-                          disabled={deleteVan.isPending}
-                          className="text-label-md text-error hover:underline disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  (vansQuery.data ?? []).map((van) => {
+                    const drivers = currentDriversFor(van.id)
+                    return (
+                      <tr key={van.id} className="hover:bg-surface-container-low">
+                        <td className="px-6 py-3 text-data-mono font-medium">{van.license_plate}</td>
+                        <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.brand}</td>
+                        <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.model}</td>
+                        <td className="px-6 py-3 text-data-mono text-secondary">{van.year}</td>
+                        <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.color ?? '—'}</td>
+                        <td className="px-6 py-3 text-body-md text-on-surface-variant">
+                          {driversQuery.isLoading || assignmentsQuery.isLoading
+                            ? '…'
+                            : drivers.length
+                              ? drivers.join(', ')
+                              : '(no driver assigned)'}
+                        </td>
+                        <td className="px-6 py-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(van)}
+                            className="mr-3 text-label-md text-primary hover:underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteVan.mutate(van.id)}
+                            disabled={deleteVan.isPending}
+                            className="text-label-md text-error hover:underline disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>
@@ -190,14 +216,10 @@ export function VansPage() {
               <Input required type="number" placeholder="Year" value={year} onChange={(e) => setYear(e.target.value)} />
               <Input required placeholder="Color" value={color} onChange={(e) => setColor(e.target.value)} />
             </div>
-            <select required value={driverUserId} onChange={(e) => setDriverUserId(e.target.value)} className={selectClass}>
-              <option value="">Assign a driver…</option>
-              {(driversQuery.data ?? []).map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.full_name}
-                </option>
-              ))}
-            </select>
+            <p className="text-label-md text-on-surface-variant">
+              To assign a driver to this van, create or edit an Assignment on the Assignments page — "Driver" above
+              reflects whichever assignment is active today, it isn't set here.
+            </p>
             <div className="flex gap-2">
               <Button type="submit" variant="secondary" disabled={saving} className="flex-1">
                 {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Van'}
