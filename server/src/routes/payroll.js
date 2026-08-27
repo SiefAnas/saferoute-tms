@@ -5,7 +5,7 @@ const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
 const { HttpError } = require('../errors');
-const { upsertRule, listRules, addAdjustment, summary } = require('../services/payroll');
+const { upsertRule, listRules, addAdjustment, summary, unpaidSummary, markPaid, listAdjustments } = require('../services/payroll');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
@@ -31,6 +31,20 @@ router.get('/summary/:driverId', async (req, res, next) => {
   try {
     assertSelfOrAdmin(req, req.params.driverId);
     res.json(await summary(req, req.params.driverId, { from: req.query.from, to: req.query.to }));
+  } catch (e) { next(e); }
+});
+
+// The Payroll page's "Paid" feature: current unpaid cycle + settling it.
+router.get('/unpaid-summary/:driverId', companyAdmin, async (req, res, next) => {
+  try { res.json(await unpaidSummary(req, req.params.driverId)); } catch (e) { next(e); }
+});
+router.post('/rules/:driverId/mark-paid', companyAdmin, async (req, res, next) => {
+  try { res.json(await markPaid(req, req.params.driverId)); } catch (e) { next(e); }
+});
+router.get('/adjustments/:driverId', async (req, res, next) => {
+  try {
+    assertSelfOrAdmin(req, req.params.driverId);
+    res.json(await listAdjustments(req, req.params.driverId));
   } catch (e) { next(e); }
 });
 

@@ -43,6 +43,14 @@ async function addAdjustment(req, body = {}) {
 
 // Pay owed for a driver over [from, to]: rate applied to worked time + summed adjustments.
 // Hourly: minutes/60 * rate. Daily: distinct worked calendar days * rate.
+//
+// BUG FIX (2026-08-27, found while building the Payroll "Paid" feature): adjustments were
+// never filtered by `from`/`to` at all — every adjustment ever recorded for a driver bled
+// into every summary, including the driver's own "this month" dashboard card. A driver paid
+// out for a past adjustment would see it counted again in every later month's total, and
+// this session's new "amount owed since last paid" would have been wrong in the same way
+// (already-settled adjustments re-appearing as still owed). Adjustments are now filtered by
+// `work_date` exactly like sessions are filtered by `check_in_at`.
 async function summary(req, driverId, { from, to } = {}) {
   const rule = (await req.db.findMany('pay_rules', { where: { driver_id: driverId } }))[0];
   if (!rule) throw new HttpError(404, 'no pay rule for this driver');
@@ -64,8 +72,15 @@ async function summary(req, driverId, { from, to } = {}) {
     ? Math.round((shifts.minutes / 60) * rule.rate_cents)
     : shifts.days * rule.rate_cents;
 
-  const adjRows = await req.db.findMany('pay_adjustments', { where: { driver_id: driverId } });
-  const adjustments = adjRows.reduce((sum, a) => sum + a.amount_cents, 0);
+  const adjRange = [driverId, req.auth.tenantId];
+  let adjClause = 'driver_id = $1 AND company_id = $2';
+  if (from) { adjRange.push(from); adjClause += ` AND work_date >= $${adjRange.length}`; }
+  if (to) { adjRange.push(to); adjClause += ` AND work_date < $${adjRange.length}`; }
+  const adjResult = await pool.query(
+    `SELECT COALESCE(SUM(amount_cents),0)::int AS total FROM pay_adjustments WHERE ${adjClause}`,
+    adjRange
+  );
+  const adjustments = adjResult.rows[0].total;
 
   return {
     driver_id: driverId,
@@ -79,4 +94,26 @@ async function summary(req, driverId, { from, to } = {}) {
   };
 }
 
-module.exports = { upsertRule, listRules, addAdjustment, summary };
+// The "current unpaid cycle": everything since paid_through_at (or the beginning of time,
+// if never marked paid). Reuses summary() directly rather than duplicating its computation.
+async function unpaidSummary(req, driverId) {
+  const rule = (await req.db.findMany('pay_rules', { where: { driver_id: driverId } }))[0];
+  if (!rule) throw new HttpError(404, 'no pay rule for this driver');
+  const result = await summary(req, driverId, { from: rule.paid_through_at ?? undefined });
+  return { ...result, paid_through_at: rule.paid_through_at };
+}
+
+// Marks the current unpaid cycle settled — resets the "owed since" counter to now. Does not
+// touch historical sessions/adjustments, only where the cycle boundary is.
+async function markPaid(req, driverId) {
+  const rule = (await req.db.findMany('pay_rules', { where: { driver_id: driverId } }))[0];
+  if (!rule) throw new HttpError(404, 'no pay rule for this driver');
+  const paidThroughAt = new Date().toISOString();
+  return req.db.update('pay_rules', rule.id, { paid_through_at: paidThroughAt });
+}
+
+async function listAdjustments(req, driverId) {
+  return req.db.findMany('pay_adjustments', { where: { driver_id: driverId }, orderBy: 'work_date' });
+}
+
+module.exports = { upsertRule, listRules, addAdjustment, summary, unpaidSummary, markPaid, listAdjustments };

@@ -1,15 +1,23 @@
-// User management (§5.2): a company_admin creates drivers (and company_admins);
-// a school_admin creates school_staff (and school_admins). All within the creator's tenant.
-// Admin-created accounts are vouched-for, so we stamp email_verified_at at creation — this
-// upholds the requireOperable invariant (every operational user must be verified).
+// User management (§5.2): a company_admin creates drivers and parents; a school_admin
+// creates school_staff. All within the creator's tenant. Admin-created accounts are
+// vouched-for, so we stamp email_verified_at at creation — this upholds the requireOperable
+// invariant (every operational user must be verified).
+//
+// Permission-changes task (2026-08-25): company_admin can no longer create another
+// company_admin, and school_admin can no longer create another school_admin — the task's
+// spec enumerated exactly what each admin role may create ("driver accounts, parent
+// accounts" / "school staff accounts only") and neither list includes the admin's own role.
+// ASSUMPTION, flagged for confirmation: this is a real behavior change from before (both
+// were previously self-creatable); no existing test asserted the old behavior, so nothing
+// broke, but worth double-checking this was the intent.
 const { hashPassword } = require('../auth/password');
 const { HttpError } = require('../errors');
 const { assertValidEmail, assertPasswordStrength, assertMaxLength } = require('../validate');
 
 // Which roles a given admin role may create (same tenant side).
 const CREATABLE = {
-  company_admin: ['driver', 'company_admin'],
-  school_admin: ['school_staff', 'school_admin'],
+  company_admin: ['driver', 'parent'],
+  school_admin: ['school_staff'],
 };
 
 async function createUser(req, body = {}) {
@@ -31,6 +39,8 @@ async function createUser(req, body = {}) {
   try {
     // req.db stamps the caller's tenant column (company_id or school_id); the DB CHECK
     // guarantees role matches that column. email_verified_at stamped now (admin-vouched).
+    // created_by_user_id records who created this account — the only admin who may later
+    // edit its password/email/profile info (see updateUser below).
     const row = await req.db.insert('users', {
       email,
       password_hash,
@@ -38,6 +48,7 @@ async function createUser(req, body = {}) {
       role,
       phone: phone ?? null,
       email_verified_at: new Date().toISOString(),
+      created_by_user_id: req.auth.userId,
     });
     return publicUser(row);
   } catch (err) {
@@ -58,17 +69,49 @@ async function getUser(req, id) {
   return publicUser(row);
 }
 
+// Creator-only edit (task requirement): only the admin who created an account may change
+// its password, email, or profile info (full_name/phone/is_active). Driver/parent/
+// school_staff have no self-edit route at all — the adminsOnly gate on the router already
+// keeps them off this endpoint entirely, so there's nothing further to remove there; this
+// check is the "only the CREATING admin, not just any admin in the tenant" half.
+//
+// ASSUMPTION, flagged for confirmation: rows with created_by_user_id = NULL (every account
+// that existed before this feature, plus any future self-serve company_admin/school_admin
+// signup, which has no creating admin) are grandfathered — editable by any admin in the same
+// tenant, the pre-existing behavior — rather than uneditable by anyone. Locking those out
+// entirely would silently strand real accounts (the seeded drivers/staff, Jamie, etc.) with
+// no path to being edited at all.
 async function updateUser(req, id, body = {}) {
+  const existing = await req.db.findById('users', id);
+  if (!existing) throw new HttpError(404, 'user not found');
+  if (existing.created_by_user_id && existing.created_by_user_id !== req.auth.userId) {
+    throw new HttpError(403, 'only the admin who created this account can edit it');
+  }
+
   const patch = {};
   for (const key of ['full_name', 'phone', 'is_active']) {
     if (body[key] !== undefined) patch[key] = body[key];
   }
+  if (body.email !== undefined) {
+    assertValidEmail(body.email);
+    patch.email = body.email;
+  }
+  if (body.password !== undefined) {
+    assertPasswordStrength(body.password);
+    patch.password_hash = await hashPassword(body.password);
+  }
   if (Object.keys(patch).length === 0) throw new HttpError(400, 'nothing to update');
   assertMaxLength(patch.full_name, 200, 'full_name');
   assertMaxLength(patch.phone, 30, 'phone');
-  const row = await req.db.update('users', id, patch);
-  if (!row) throw new HttpError(404, 'user not found');
-  return publicUser(row);
+
+  try {
+    const row = await req.db.update('users', id, patch);
+    if (!row) throw new HttpError(404, 'user not found');
+    return publicUser(row);
+  } catch (err) {
+    if (err.code === '23505') throw new HttpError(409, 'email already registered');
+    throw err;
+  }
 }
 
 // Never leak password_hash.
@@ -81,6 +124,7 @@ function publicUser(u) {
     phone: u.phone,
     is_active: u.is_active,
     email_verified_at: u.email_verified_at,
+    created_by_user_id: u.created_by_user_id ?? null,
   };
 }
 

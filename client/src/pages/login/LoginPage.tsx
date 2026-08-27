@@ -6,6 +6,53 @@ import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { ApiError } from '../../lib/api'
 
+// "I forgot my password" self-report, shown only for the 3 roles that can't self-serve a
+// reset (task: driver/parent/school_staff — company_admin/school_admin aren't offered this).
+// No real reset flow exists — this is deliberately just a static contact message.
+const FORGOT_PASSWORD_ROLES = [
+  { key: 'driver', label: 'Driver', message: 'Please contact your company administrator to reset your password.' },
+  { key: 'parent', label: 'Parent', message: 'Please contact your company administrator to reset your password.' },
+  { key: 'school_staff', label: 'School Staff', message: 'Please contact your school administrator to reset your password.' },
+] as const
+
+// ASSUMPTION (flagged for confirmation): this is one shared login page for all 4 roles
+// (§5.1) — the app deliberately does not know which role a visitor is until AFTER they
+// authenticate, so "forgot password, shown only for driver/parent/staff" can't be
+// conditioned on the visitor's real role pre-login. Resolved by asking them to self-report
+// which of those 3 they are, then showing that role's static message — no real identity
+// check needed since no real reset action happens either way.
+function ForgotPasswordPanel({ onClose }: { onClose: () => void }) {
+  const [picked, setPicked] = useState<(typeof FORGOT_PASSWORD_ROLES)[number] | null>(null)
+  return (
+    <div className="flex w-full flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container-low p-4">
+      {!picked ? (
+        <>
+          <p className="text-body-md text-on-surface-variant">I am a…</p>
+          <div className="flex flex-wrap gap-2">
+            {FORGOT_PASSWORD_ROLES.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => setPicked(r)}
+                className="rounded-full border border-outline px-4 py-1.5 text-label-md text-on-surface hover:bg-surface-container"
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <p role="status" className="text-body-md text-on-surface">
+          {picked.message}
+        </p>
+      )}
+      <button type="button" onClick={onClose} className="self-start text-label-md text-secondary hover:underline">
+        Close
+      </button>
+    </div>
+  )
+}
+
 // One shared login page for all 4 roles (§5.1) — role determines the post-login
 // destination, not which page/URL the user starts at. Visual design ported from the
 // Stitch "Driver Login" mockup, generalized since this screen isn't driver-only.
@@ -17,6 +64,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -95,6 +143,17 @@ export function LoginPage() {
               {error}
             </p>
           )}
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowForgot((v) => !v)}
+              className="text-label-md text-secondary hover:underline"
+            >
+              Forgot password?
+            </button>
+          </div>
+          {showForgot && <ForgotPasswordPanel onClose={() => setShowForgot(false)} />}
 
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? (

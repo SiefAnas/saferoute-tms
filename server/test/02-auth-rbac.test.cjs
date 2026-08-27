@@ -44,8 +44,8 @@ async function main() {
     await q("INSERT INTO users(email,password_hash,full_name,role,company_id) VALUES('adminB@x.com',$1,'Admin B','company_admin',$2) RETURNING id", [hash, B.id]);
     await q("INSERT INTO users(email,password_hash,full_name,role,school_id) VALUES('schooladmin@x.com',$1,'School Admin','school_admin',$2) RETURNING id", [hash, S.id]);
     await q("INSERT INTO users(email,password_hash,full_name,role,company_id,is_active) VALUES('inactive@x.com',$1,'Inactive','company_admin',$2,false) RETURNING id", [hash, A.id]);
-    const vanA = await q("INSERT INTO vans(company_id,license_plate,model) VALUES($1,'AAA-111','Transit') RETURNING id", [A.id]);
-    const vanB = await q("INSERT INTO vans(company_id,license_plate,model) VALUES($1,'BBB-222','Sprinter') RETURNING id", [B.id]);
+    const vanA = await q("INSERT INTO vans(company_id,license_plate,brand,model,year) VALUES($1,'AAA-111','Ford','Transit',2022) RETURNING id", [A.id]);
+    const vanB = await q("INSERT INTO vans(company_id,license_plate,brand,model,year) VALUES($1,'BBB-222','Mercedes','Sprinter',2022) RETURNING id", [B.id]);
 
     const app = express();
     app.use(express.json());
@@ -94,7 +94,7 @@ async function main() {
       console.log('\n--- Scoped accessor (unit) ---');
       const dbA = createScopedDb(pool, { type: 'company', id: A.id }, { userId: driverA.id, role: 'company_admin' });
       (await dbA.findById('vans', vanB.id)) === null ? ok('findById across tenants -> null (no existence leak)') : bad('cross-tenant findById leaked');
-      const ins = await dbA.insert('vans', { license_plate: 'NEW-999', model: 'Test' });
+      const ins = await dbA.insert('vans', { license_plate: 'NEW-999', brand: 'Test', model: 'Test', year: 2022 });
       ins.company_id === A.id ? ok('insert auto-stamps caller tenant (company_id)') : bad('insert did not stamp tenant');
       try {
         const dbS = createScopedDb(pool, { type: 'school', id: S.id }, { userId: 'x', role: 'school_admin' });

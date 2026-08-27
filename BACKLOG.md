@@ -7,6 +7,318 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-27 (later) — Fleet/Students/Payroll page enhancements
+
+Third batch of edits from Anas, same "make reasonable assumptions, don't block" instruction.
+Task said screenshots were attached for reference — **none actually reached this session**
+(same gap as the Parent Dashboard mockup task) — built from the written spec plus the current
+live UI/code instead. Flagging clearly, same as last time.
+
+### 1. Fleet page
+
+Migration `1752624000013`: `vans` gained `brand` (split from the old single `model` field —
+both real vans in the dev DB had `model` populated, e.g. "Ford Transit SE", so brand/model
+were backfilled by re-parsing on the first space rather than left blank — "Ford" / "Transit
+SE"), `color`, and `driver_user_id` (a new *general* assigned-driver concept, distinct from
+the existing per-student `assignments` table — a van now has one currently-assigned driver,
+independent of which students that driver happens to be picking up). `license_plate`/`year`
+made required (year already had real data on both vans, safe to enforce at the DB level
+now). brand/model/year are DB `NOT NULL`; color/driver_user_id stay DB-nullable (no
+historical data exists for either) but are required by `POST /vans` — same precedent this
+project already established for company/school zip+state. `routes/vans.js` updated
+accordingly, with a `driver_user_id`+`company_id` composite FK (mirrors the same
+tenant-consistency pattern as `assignments`) so a cross-company driver assignment 400s.
+
+`VansPage.tsx`: table gained Brand/Color/Driver columns (small Material icons in each header
+for the visual-polish ask), Add/Edit form gained Brand+Model (split), Color, and a driver
+dropdown, all required. Driver name resolved client-side via a small lookup map, same
+per-column loading/fallback pattern already established on `AssignmentsPage.tsx`.
+
+### 2. Students page
+
+Migration `1752624000014`: dropped the old `address` column (both real students had it
+NULL — nothing lost) and added `street_address`/`city`/`state`/`zip_code`. Every create-form
+field except Notes is now required — enforced in `routes/students.js` (grade/age/parent
+name+phone/street/city/state/zip all required on `POST /students`), reusing the existing
+`assertValidZip`/`assertValidState` helpers (same validators companies/schools already use).
+**ASSUMPTION**: like the van fields above, these new/tightened-required columns stay
+DB-nullable — existing students (and grandfathered NULLs from before this change) aren't
+retroactively forced to have every field filled in; "required" is enforced only at the point
+of creating/editing through the form.
+
+**"Add another parent/guardian"**: append-only rows of name+phone on the create form.
+Explicitly NOT new parent login accounts, per the task's own clarification — the first row
+becomes the student's existing primary contact fields (`parent_name`/`parent_phone`,
+unchanged schema decision from the original build), and any additional rows become
+`student_contacts` rows (already-existing table from the Driver dashboard rework), tagged
+`"Parent/Guardian"`, created via the already-existing `POST /students/:id/contacts`
+endpoint — no new backend capability needed for this part. **ASSUMPTION**: this multi-row UI
+is create-only; editing an existing student still uses one primary-contact field pair plus
+the separate "Contacts" panel already built below the table (which already covers editing
+additional contacts) — didn't duplicate that UI into the edit form.
+
+Table gained School (resolved via the existing `GET /schools` lookup, same pattern
+`AssignmentsPage.tsx` and this page already use elsewhere) and Address (joined from the four
+new fields) columns.
+
+### 3. Payroll page
+
+**Checked before building, per the task's explicit instruction**: driver work-time tracking
+**already exists** — `sessions.check_in_at`/`check_out_at`/`duration_minutes`, already
+computed into hours/days by `services/payroll.js`'s `summary()` and already surfaced on the
+driver's own dashboard. This kept the task in the smaller-scope case: no new tracking
+mechanism needed, just a way to mark a cycle settled and reuse the existing math for "since
+when."
+
+Migration `1752624000015`: `pay_rules.paid_through_at` (nullable timestamptz; NULL = never
+paid). New `unpaidSummary()`/`markPaid()`/`listAdjustments()` in `services/payroll.js`, new
+routes `GET /payroll/unpaid-summary/:driverId`, `POST /payroll/rules/:driverId/mark-paid`
+(both company_admin-only), `GET /payroll/adjustments/:driverId` (self-or-admin, same gate as
+the existing summary route).
+
+**Real bug found and fixed while building this**: `summary()`'s adjustments were never
+filtered by the `from`/`to` range at all — only sessions were. Every adjustment a driver ever
+had recorded bled into every summary computed for them, including their own dashboard's
+"This Month's Pay" card (which does pass a month-scoped `from`/`to`) and would have made the
+new "amount owed since last paid" silently wrong (already-settled adjustments reappearing as
+still owed, forever). Fixed by filtering `pay_adjustments` by `work_date` exactly like
+sessions are filtered by `check_in_at`. Regression-tested explicitly (see below) — this
+wasn't a hypothetical, a real adjustment from months-old data was still bleeding into a
+`from=2025-01-01` query before the fix.
+
+`PayrollPage.tsx`: Driver Pay Rates table gained Worked This Cycle (days or hours, matching
+`rate_type`) and Amount Owed columns, computed per-driver via the new unpaid-summary
+endpoint. A driver's name is clickable (when they have a rate set) and opens a modal listing
+every shift and adjustment in the current unpaid cycle, sourced from the already-fetched
+`/sessions` + the new adjustments endpoint, filtered client-side by the cycle boundary. A
+"Paid" button per driver calls mark-paid and the row updates live (verified with an explicit
+wait — an instant re-check right after the click can catch React Query's invalidation
+mid-flight and look stale; it is not, confirmed by re-checking after ~1.5s and by a full page
+reload landing on the same up-to-date numbers).
+
+**Verification**: `npx tsc -b` and `npm run lint` clean (client). Full backend suite:
+**248/248 passing** across all 11 suites, including a new `server/test/11-payroll-paid.test.cjs`
+(12 assertions, covering the unpaid-summary/mark-paid flow, the adjustments-date-filter bug fix
+explicitly, and permission gates). Updated `01-schema.test.cjs`'s migration count and several
+existing tests' van/student payloads for the new required fields (04-resources, 02-auth-rbac,
+09-parent-and-permissions, 10-no-show — all were creating vans/students with the old minimal
+shape, which now 400s or violates a NOT NULL constraint).
+
+Live-verified end-to-end against the real dev Neon DB, not just the isolated suite: created a
+real test van with brand/color/driver through the actual Fleet UI, created a real student
+with two guardians (one primary + one via "Add another parent/guardian") through the actual
+Students UI and confirmed the second one landed as a real `student_contacts` row, and
+exercised the real Payroll "Paid" button against Marcus Rodriguez's real historical pay data
+(3 days / $415.00 owed, matching real sessions + adjustments going back to July) — confirmed
+the click correctly zeroed the cycle live, then **reverted `paid_through_at` back to NULL
+afterward** via direct SQL so his real payroll state wasn't left altered by this session's
+testing. Deleted the test van and test student afterward too.
+
+## 2026-08-27 — Company nav restructuring (Driver/Parent pages) + driver-side no-show feature
+
+Follow-up to the parent-role session below. Anas was looking at the *deployed* site
+(`saferoute-tms-client.onrender.com`) and correctly noted "Add Parent" wasn't there — that's
+expected, the previous session's work was never pushed (flagged again here since it's easy
+to lose track of: everything in this file is still local/uncommitted as of this entry too).
+
+Before building, asked 4 clarifying questions (explicitly invited — "ask me any questions if
+you have any") since the request implied a real Dashboard redesign that wasn't otherwise
+specified. Answers, and what they changed about the plan:
+
+1. **"Absent students" definition** — Anas's answer surfaced a whole feature, not just a
+   definition: parents already have Skip Pickup (previous session); he wants the *driver*
+   side too — "whenever they arrive and no one shows up they can hit the button the student
+   is Absent" and it should notify the school + company. Built it (see below) — his framing
+   ("that is a very good feature we should add") made this a real go-ahead, not a hypothetical.
+2. **Dashboard scope** — "others... do not wanna confuse you with too much details... when
+   we are done with the rest we are coming back to it." So the Dashboard itself was
+   deliberately NOT redesigned this session — see below for what it looks like now.
+3. **Parent linking after creation** — "Yes, full link/unlink management" — built as a real
+   page (mirrors school_admin's Staff & Access exactly), not just at-creation linking.
+4. **Account editing** — "Yes, add edit capability" — built a shared edit modal (password/
+   email/profile/deactivate), giving the previous session's creator-only-edit permission work
+   an actual UI for the first time.
+
+**Nav restructuring**: `client/src/App.tsx`'s `COMPANY_NAV`, exact order per Anas's own
+words — Dashboard, Driver, Fleet, Students, Parents, Assignments, Payroll.
+
+**New: `client/src/pages/company/DriversPage.tsx`** — the "Live Driver Status" table and
+"Add Driver" form that used to live on the Dashboard, moved here wholesale, plus a new Edit
+button per driver opening the shared modal.
+
+**New: `client/src/pages/company/ParentsPage.tsx`** — mirrors `StaffAccessPage.tsx`'s
+two-column pattern (create + list on the left, selected-parent's student-access checklist on
+the right), but for `parent_user_id`/`/parent-access` instead of `staff_user_id`/
+`/staff-access`. Add Parent form moved here from the Dashboard (dropped the at-creation
+student-checklist that briefly lived on the Dashboard's combined Add Driver/Parent card, in
+favor of this fuller page). Edit button per parent, same shared modal.
+
+**New: `client/src/components/EditAccountModal.tsx`** — shared by both pages. `PATCH
+/users/:id` with full_name/phone/email/is_active/password (password optional, blank = keep
+current). Surfaces the backend's 403 ("only the creator can edit") as a real, legible message
+instead of a generic error.
+
+**Dashboard (`CompanyAdminDashboard.tsx`)**: stripped down, not redesigned. Removed the
+"Live Driver Status" table and "Add Driver or Parent" card (both moved to their own pages).
+Left Fleet and Payroll Summary as-is for now, plus a one-line note that a real overview is
+coming — per Anas's own "come back to it later" instruction, this is a deliberate half-step,
+not a finished redesign.
+
+**New real feature: driver-reported no-shows.** Migration `1752624000012`: `pickup_no_shows`
+table, same shape as `pickup_skips` (unique on student+date, doubling as the double-submit
+guard). `services/schedule.js`'s new `markNoShow()` — requires an open shift (same invariant
+`logTrip` already enforces), 404s if the assignment isn't the calling driver's own, 409s on a
+same-day duplicate report. Notifies company_admins + school_admins via a newly-extracted
+shared helper, `services/notifications.js`'s `notifyCompanyAndSchoolAdmins()` — pulled out of
+`parentPortal.js`'s Skip Pickup notify logic once a second feature needed the identical
+"company + school admin" recipient lookup, rather than duplicating it. `parentPortal.js`
+refactored to use the shared helper too; its own test suite (09) still passes unchanged,
+confirming the refactor didn't alter its recipient set.
+
+`getTodaySchedule()` (the driver's daily schedule) now also returns `parent_skipped_today`/
+`no_show_reported_today` per item (two cheap extra `LEFT JOIN`s) — lets the Driver dashboard
+show "parent already skipped this pickup" and reflect an already-reported no-show without a
+second round-trip. New route: `POST /schedule/:assignmentId/no-show`, driver-only.
+
+**Driver dashboard UI**: new "Mark Absent" button next to the existing pickup/dropoff
+Confirm control (pickup-only — a no-show is specifically about arriving to an empty pickup),
+disabled until checked in, already-logged-today, already-reported, or parent-already-skipped.
+Shows a note when the parent already skipped so the driver knows not to bother.
+
+**Tests**: `server/test/10-no-show.test.cjs` (8 assertions) — open-shift requirement,
+ownership (wrong driver's assignment → 404), non-driver role → 403, the notify + double-
+submit-guard flow, and `getTodaySchedule`'s new fields. `01-schema.test.cjs`'s migration
+count bumped 11 → 12.
+
+**Verification**: `npx tsc -b` and `npm run lint` clean (client). Full backend suite:
+**233/233 passing** (223 from the previous session's work + 10 new). Live-verified end-to-end
+against the real dev Neon DB, not just the isolated suite: created a real test parent via the
+new Parents page, linked/unlinked Emma Johnson through the real checklist UI, edited a real
+driver's account (Marcus Rodriguez, a grandfathered NULL-creator row — confirmed any
+same-tenant admin can still edit it) via the new modal, then logged in as `driver2@3bees.test`
+(Sarah Jenkins, Emma's real assigned driver), checked in for real, clicked the real "Mark
+Absent" button, and confirmed via the API server's own console that two real `[mail]` lines
+went out — to `admin@3bees.test` and `principal@willowcreek.test` — with the expected
+subject/body. Cleaned up every test artifact afterward (test parent account, the no-show row,
+and the test check-in/out session).
+
+**Note on the Windows embedded-Postgres flake from the previous session**: traced to 7
+orphaned `postgres.exe` processes left over from earlier overlapping test invocations,
+holding a stale shared-memory segment (`FATAL: pre-existing shared memory block is still in
+use` — the exact hint Postgres itself printed: "check for old server processes and terminate
+them"). Found via `tasklist` (not visible to a plain `ps aux` from Git Bash), killed via
+`taskkill`, and the suite ran clean immediately after. Not a code issue; recorded here in case
+a future session hits the same symptom.
+
+## 2026-08-25 (even later) — Parent role + account permissions (real) + Parent Dashboard mockup
+
+Two-part task from Anas, run autonomously while he was away ~1hr with instructions to make
+reasonable assumptions rather than block. Both parts done; several assumptions flagged below
+for his confirmation.
+
+### Part 1 — real backend + permission changes
+
+1. **New `parent` role.** Migration `1752624000011`: `parent` added to `users_role_check` and
+   grouped with `driver`/`company_admin` in `users_tenant_scope_check` (company-scoped, since
+   company_admin creates parent accounts). New `parent_students` join table (many-to-many,
+   composite tenant-consistency FKs mirroring `staff_student_access` exactly) so one parent
+   can link to multiple students. New `server/src/routes/parentAccess.js` +
+   `services/parentAccess.js` (`/parent-access`, company_admin-only grant/list/revoke).
+2. **Narrowed CREATABLE.** `company_admin` can now create `driver`/`parent` only (previously
+   also `company_admin` — **removed**, since the task's spec enumerated exactly two roles and
+   didn't include company_admin's own). `school_admin` can now create `school_staff` only
+   (previously also `school_admin` — same narrowing). Neither the app nor its tests
+   previously depended on the removed self-creation ability, so nothing broke, but this is a
+   **real behavior change worth Anas explicitly confirming** — it wasn't asked for in those
+   words, it's what the enumerated lists implied.
+3. **Creator-only edit.** New `users.created_by_user_id` column, stamped on every
+   `POST /users` create. `PATCH /users/:id` (`services/users.js`) now 403s unless the caller
+   is the account's creator. **ASSUMPTION**: rows with no recorded creator (every account
+   that existed before this column — the seeded drivers/staff, Jamie, etc. — plus any future
+   self-serve company_admin/school_admin signup, which has no creating admin) are
+   grandfathered to "any same-tenant admin may edit," the old behavior, rather than
+   uneditable by anyone. Locking those out entirely would have silently stranded real
+   accounts with no edit path at all. Also extended `PATCH /users/:id` to accept `email` and
+   `password` (previously only `full_name`/`phone`/`is_active` — there was no way to admin-
+   edit an account's login credentials at all before this).
+4. **No self-edit for driver/parent/school_staff.** Checked rather than assumed: no self-edit
+   route for password/email existed anywhere in this codebase for any role before this task —
+   nothing to remove. Explicitly tested now rather than left implicit.
+5. **"Forgot password"** on `/login`, driver/parent/school_staff only. **ASSUMPTION, flagged
+   for confirmation**: since this is one shared login page for all 5 roles and the app can't
+   know a visitor's real role before they authenticate, "shown only for these 3 roles" can't
+   be conditioned on their actual account — resolved by asking the visitor to self-report
+   which of the three they are (fine, since no real reset action happens either way), then
+   showing that role's static message. `/register` untouched, per instruction.
+6. **Tests**: new `server/test/09-parent-and-permissions.test.cjs` (28 assertions) covering
+   all of the above plus the skip-pickup flow below — narrowed CREATABLE, creator-only edit
+   (including the grandfathered-NULL case and an actual password-change round-trip via
+   re-login), parent<->student linking + tenant isolation, and the full skip/notify flow.
+   `01-schema.test.cjs` updated for the new migration count + a positive/negative check on
+   `parent`'s tenant-scope CHECK. Full suite: verify the tail of this session's own run before
+   trusting "clean" — see the note at the end of this entry.
+
+### Part 2 — Parent Dashboard: mockup (isolated) + one real feature (Skip Pickup)
+
+The task explicitly carved the Skip Today's Pickup button out of "mockup, fake data only" —
+it needs a genuine notification send. Built accordingly:
+
+- **Real**: `server/src/services/parentPortal.js` + `routes/parentPortal.js`
+  (`GET /parent/students`, `GET /parent/students/:id/skip-status`,
+  `POST /parent/students/:id/skip-pickup`). Eligibility (available until 30 min before
+  scheduled pickup, unavailable through the school day, resets daily) is computed
+  server-side and authoritatively, from the student's real active assignment + today's
+  schedule override, not trusted from the client. On confirm: inserts a `pickup_skips` row
+  (unique per student/day, doubling as the double-submit guard) and calls the existing
+  `sendMail()` — no new notification system — to every active company_admin, every active
+  school_admin of the student's school, and the specific driver on today's assignment.
+  **ASSUMPTION, flagged for confirmation**: the eligibility check compares `pickup_time`
+  against the database's own session timezone (no per-school/per-company timezone concept),
+  matching how `assignments.pickup_time` already worked pre-existing (a bare `time`, no tz) —
+  not new imprecision, but worth knowing if company/school timezones ever diverge. Live-
+  verified end-to-end against the real dev Neon DB (not just the isolated test suite):
+  created a real parent account linked to the real Emma Johnson, temporarily set her real
+  assignment's `pickup_time` to make the window eligible, called the real endpoint, and
+  confirmed via the API server's own console that three real `[mail]` log lines went out —
+  to `admin@3bees.test`, `principal@willowcreek.test`, and `driver2@3bees.test` (the real
+  assigned driver) — with the expected subject/body. Reverted the assignment's `pickup_time`
+  and deleted the test parent account + link + skip record afterward.
+- **Real, minimal**: `client/src/pages/parent/ParentHomePage.tsx`, wired as the real `parent`
+  role's actual login landing page (`ROLE_HOME.parent = '/parent'`) — real linked students,
+  real working Skip button. Not styled/designed yet; exists so a real parent login has
+  somewhere real to land, separate from the mockup below.
+- **Mockup, isolated**: `client/src/mockups/parent-dashboard/ParentDashboardMockup.tsx` — the
+  fully-described layout (per-student vehicle info/plate/year/model/color, company name,
+  "In Transit, X mins away" status, checkmark/dot/greyed trip timeline, static school-to-home
+  route map with a `TODO: live GPS (v2)` comment, Contact Driver as a `tel:` link, read-only
+  username-only profile section). All fake/hardcoded data, matching the task's "no real
+  db/api calls" instruction for everything except the Skip button (which reuses the real
+  logic above — its eligibility math runs against the real wall clock, not a fake one, and
+  its Confirm action calls the real endpoint if a real parent session/student id is
+  supplied). Not imported by `App.tsx`'s real route tree; reachable only via a **temporary**
+  unauthenticated `/mockup/parent-dashboard` route added for design review — **remove that
+  route before any real deploy**. **ASSUMPTION, flagged prominently**: no reference image
+  actually reached this session — the task said one was attached, but nothing came through.
+  Built from the written spec plus this codebase's existing "Road & Logistics" design system
+  (same `Card`/`Button`/`StatusBadge` components and `index.css` tokens every real page
+  already uses) for visual consistency. **Please compare against the real Stitch export when
+  you're back** — this is a best-effort reconstruction from text alone, not a verified match.
+- Frontend real wiring: `types/api.ts` gained `Role`'s `'parent'` variant,
+  `PublicUser.created_by_user_id`, `ParentStudentLink`, `SkipStatus`.
+  `CompanyAdminDashboard.tsx`'s "Add Driver" card became "Add Driver or Parent" (role
+  toggle + a student-link checklist show when Parent is selected) — needed so the new
+  backend capability is actually usable from the UI, not just via raw API calls; not asked
+  for explicitly but the permission change would otherwise have no UI path at all.
+
+**Verification**: `npx tsc -b` clean, `npm run lint` clean (client). Backend suite run
+started before this entry was written — **check its tail before trusting "all green"**;
+two unrelated flakes were hit and resolved earlier in this session (06-staff-access failing
+once from a stale embedded-Postgres shared-memory lock caused by two overlapping local test
+invocations — passed cleanly alone afterward — and 01-schema's hardcoded migration count,
+legitimately updated from 10 to 11). Live-verified against the real dev Neon DB as described
+above, with all test artifacts cleaned up afterward (matching this project's own established
+convention for live-verification sessions).
+
 ## 2026-08-25 (later still) — Assignments UUID display fix + multi-tab session bug fixed
 
 Two items from a `TMS_GAP_ANALYSIS.md` Anas referenced (produced via Claude in Chrome).

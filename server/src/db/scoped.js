@@ -14,7 +14,7 @@ class ScopeError extends Error {
 
 // role -> which tenant this user lives in (§5.1). Never both.
 function tenantTypeForRole(role) {
-  if (role === 'driver' || role === 'company_admin') return 'company';
+  if (role === 'driver' || role === 'company_admin' || role === 'parent') return 'company';
   if (role === 'school_admin' || role === 'school_staff') return 'school';
   throw new ScopeError(`unknown role: ${role}`);
 }
@@ -35,6 +35,9 @@ const TABLE_SCOPE = {
   pay_adjustments: { company: 'company_id' },
   student_contacts: { company: 'company_id', school: 'school_id' }, // dual-tenant, like students
   assignment_schedule_overrides: { company: 'company_id' }, // scoped like its parent assignments
+  parent_students: { company: 'company_id' }, // parent belongs to company, like driver
+  pickup_skips: { company: 'company_id' },
+  pickup_no_shows: { company: 'company_id' },
 };
 
 const IDENT = /^[a-z_][a-z0-9_]*$/;

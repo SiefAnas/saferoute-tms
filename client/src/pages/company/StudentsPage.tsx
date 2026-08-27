@@ -1,31 +1,53 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
+import { StateAutocomplete } from '../../components/StateAutocomplete'
 import type { SchoolSummary, Student, StudentContact } from '../../types/api'
 
+interface GuardianRow {
+  name: string
+  phone: string
+}
+
 // Company Admin — Student creation + edit (§4/§9 frontend gap, extended for the Driver
-// dashboard rework). POST /students is company_admin-only and stamps company_id from the
-// caller, but still needs a school_id (the other half of the dual-tenant row). GET /schools
-// (BACKLOG #7) lists real names for schools this company already has a student at. For a
-// genuinely new school, this creates an unclaimed placeholder first (mirrors school_admin's
-// "Add a Company" panel) and uses its id. Edit reuses the same editingId pattern as
-// VansPage.tsx (this codebase's one existing edit-form precedent); school_id is not
-// editable, matching the backend's PATCH /students/:id, which doesn't accept it either.
+// dashboard rework, and again 2026-08-27 for the Students page task). POST /students is
+// company_admin-only and stamps company_id from the caller, but still needs a school_id (the
+// other half of the dual-tenant row). GET /schools (BACKLOG #7) lists real names for schools
+// this company already has a student at. For a genuinely new school, this creates an
+// unclaimed placeholder first (mirrors school_admin's "Add a Company" panel) and uses its id.
+//
+// Multi-guardian create (2026-08-27): "Add another parent/guardian" appends more name+phone
+// pairs. These are plain contact-info text fields on the student record (student_contacts —
+// already-existing table/endpoint from the Driver dashboard rework), NOT new parent login
+// accounts — explicitly out of scope per the task. The first row is the student's primary
+// contact (students.parent_name/parent_phone, per the original schema decision to keep the
+// primary contact as simple fields rather than a table row); any additional rows become
+// student_contacts entries created right after the student itself, tagged "Parent/Guardian".
+// ASSUMPTION: this multi-row UI is CREATE-only — editing an existing student still uses the
+// single primary-contact fields plus the separate "Contacts" panel below (already built,
+// already the edit-time path for additional contacts) rather than duplicating that UI here.
 export function CompanyStudentsPage() {
   const queryClient = useQueryClient()
   const studentsQuery = useQuery({ queryKey: ['students'], queryFn: () => api.get<Student[]>('/students') })
   const schoolsQuery = useQuery({ queryKey: ['schools'], queryFn: () => api.get<SchoolSummary[]>('/schools') })
 
+  const schoolName = useMemo(() => {
+    const map = new Map((schoolsQuery.data ?? []).map((s) => [s.id, s.name]))
+    return (id: string) => map.get(id) ?? '—'
+  }, [schoolsQuery.data])
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [fullName, setFullName] = useState('')
   const [grade, setGrade] = useState('')
-  const [parentName, setParentName] = useState('')
-  const [parentPhone, setParentPhone] = useState('')
   const [age, setAge] = useState('')
-  const [address, setAddress] = useState('')
+  const [guardians, setGuardians] = useState<GuardianRow[]>([{ name: '', phone: '' }])
+  const [streetAddress, setStreetAddress] = useState('')
+  const [city, setCity] = useState('')
+  const [stateCode, setStateCode] = useState('')
+  const [zipCode, setZipCode] = useState('')
   const [notes, setNotes] = useState('')
 
   const [schoolMode, setSchoolMode] = useState<'existing' | 'new'>('existing')
@@ -41,10 +63,12 @@ export function CompanyStudentsPage() {
     setEditingId(null)
     setFullName('')
     setGrade('')
-    setParentName('')
-    setParentPhone('')
     setAge('')
-    setAddress('')
+    setGuardians([{ name: '', phone: '' }])
+    setStreetAddress('')
+    setCity('')
+    setStateCode('')
+    setZipCode('')
     setNotes('')
     setNewSchoolName('')
     setNewSchoolAddress('')
@@ -55,18 +79,35 @@ export function CompanyStudentsPage() {
     setEditingId(s.id)
     setFullName(s.full_name)
     setGrade(s.grade ?? '')
-    setParentName(s.parent_name ?? '')
-    setParentPhone(s.parent_phone ?? '')
     setAge(s.age ? String(s.age) : '')
-    setAddress(s.address ?? '')
+    setGuardians([{ name: s.parent_name ?? '', phone: s.parent_phone ?? '' }])
+    setStreetAddress(s.street_address ?? '')
+    setCity(s.city ?? '')
+    setStateCode(s.state ?? '')
+    setZipCode(s.zip_code ?? '')
     setNotes(s.notes ?? '')
     setFormError(null)
+  }
+
+  function updateGuardian(index: number, field: keyof GuardianRow, value: string) {
+    setGuardians((prev) => prev.map((g, i) => (i === index ? { ...g, [field]: value } : g)))
+  }
+  function addGuardian() {
+    setGuardians((prev) => [...prev, { name: '', phone: '' }])
+  }
+  function removeGuardian(index: number) {
+    setGuardians((prev) => prev.filter((_, i) => i !== index))
   }
 
   const invalidateStudents = () => queryClient.invalidateQueries({ queryKey: ['students'] })
 
   const createStudent = useMutation({
     mutationFn: async () => {
+      const [primary, ...extra] = guardians
+      const extraFilled = extra.filter((g) => g.name.trim() || g.phone.trim())
+      const incomplete = extraFilled.find((g) => !g.name.trim() || !g.phone.trim())
+      if (incomplete) throw new ApiError(400, 'Each additional parent/guardian needs both a name and a phone number.')
+
       let targetSchoolId = schoolId
       if (schoolMode === 'new') {
         const placeholder = await api.post<{ id: string; name: string }>('/placeholders/school', {
@@ -76,16 +117,29 @@ export function CompanyStudentsPage() {
         targetSchoolId = placeholder.id
       }
       if (!targetSchoolId) throw new ApiError(400, 'Select or create a school first')
-      return api.post<Student>('/students', {
+
+      const student = await api.post<Student>('/students', {
         full_name: fullName,
-        grade: grade || undefined,
-        parent_name: parentName || undefined,
-        parent_phone: parentPhone || undefined,
-        age: age ? Number(age) : undefined,
-        address: address || undefined,
+        grade,
+        age: Number(age),
+        parent_name: primary.name,
+        parent_phone: primary.phone,
+        street_address: streetAddress,
+        city,
+        state: stateCode,
+        zip_code: zipCode,
         notes: notes || undefined,
         school_id: targetSchoolId,
       })
+
+      for (const g of extraFilled) {
+        await api.post<StudentContact>(`/students/${student.id}/contacts`, {
+          name: g.name,
+          phone: g.phone,
+          relationship: 'Parent/Guardian',
+        })
+      }
+      return student
     },
     onSuccess: (student) => {
       invalidateStudents()
@@ -100,11 +154,14 @@ export function CompanyStudentsPage() {
     mutationFn: (id: string) =>
       api.patch<Student>(`/students/${id}`, {
         full_name: fullName,
-        grade: grade || null,
-        parent_name: parentName || null,
-        parent_phone: parentPhone || null,
-        age: age ? Number(age) : null,
-        address: address || null,
+        grade,
+        age: Number(age),
+        parent_name: guardians[0].name,
+        parent_phone: guardians[0].phone,
+        street_address: streetAddress,
+        city,
+        state: stateCode,
+        zip_code: zipCode,
         notes: notes || null,
       }),
     onSuccess: () => {
@@ -140,7 +197,7 @@ export function CompanyStudentsPage() {
             <table className="w-full text-left">
               <thead className="border-b border-outline-variant bg-surface-container-low">
                 <tr>
-                  {['Name', 'Grade', 'Parent/Guardian', 'Phone', ''].map((h) => (
+                  {['Name', 'Grade', 'School', 'Address', 'Parent/Guardian', 'Phone', ''].map((h) => (
                     <th key={h} className="px-6 py-2 text-label-md text-secondary uppercase">
                       {h}
                     </th>
@@ -150,7 +207,7 @@ export function CompanyStudentsPage() {
               <tbody className="divide-y divide-outline-variant">
                 {(studentsQuery.data ?? []).length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 text-body-md text-on-surface-variant">
+                    <td colSpan={7} className="px-6 py-4 text-body-md text-on-surface-variant">
                       {studentsQuery.isLoading ? 'Loading…' : 'No students yet.'}
                     </td>
                   </tr>
@@ -159,6 +216,12 @@ export function CompanyStudentsPage() {
                     <tr key={s.id} className="hover:bg-surface-container-low">
                       <td className="px-6 py-3 text-body-md font-medium">{s.full_name}</td>
                       <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
+                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
+                        {schoolsQuery.isLoading ? '…' : schoolName(s.school_id)}
+                      </td>
+                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
+                        {s.street_address ? `${s.street_address}, ${s.city}, ${s.state} ${s.zip_code}` : '—'}
+                      </td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '—'}</td>
                       <td className="px-6 py-3 text-data-mono text-secondary">{s.parent_phone ?? '—'}</td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
@@ -176,7 +239,7 @@ export function CompanyStudentsPage() {
                     </tr>,
                     expandedContactsId === s.id ? (
                       <tr key={`${s.id}-contacts`}>
-                        <td colSpan={5} className="bg-surface-container-low px-6 py-4">
+                        <td colSpan={7} className="bg-surface-container-low px-6 py-4">
                           <ContactsPanel studentId={s.id} />
                         </td>
                       </tr>
@@ -193,14 +256,61 @@ export function CompanyStudentsPage() {
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
             <Input required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
             <div className="flex gap-2">
-              <Input placeholder="Grade" value={grade} onChange={(e) => setGrade(e.target.value)} />
-              <Input type="number" placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} />
+              <Input required placeholder="Grade" value={grade} onChange={(e) => setGrade(e.target.value)} />
+              <Input required type="number" placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} />
             </div>
-            <Input placeholder="Parent/guardian name" value={parentName} onChange={(e) => setParentName(e.target.value)} />
-            <Input placeholder="Parent/guardian phone" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} />
-            <Input placeholder="Home address" value={address} onChange={(e) => setAddress(e.target.value)} />
+
+            <div className="flex flex-col gap-2">
+              {guardians.map((g, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="material-symbols-outlined !text-[18px] text-on-surface-variant">family_restroom</span>
+                  <Input
+                    required
+                    placeholder={i === 0 ? 'Parent/guardian name' : 'Additional parent/guardian name'}
+                    value={g.name}
+                    onChange={(e) => updateGuardian(i, 'name', e.target.value)}
+                  />
+                  <Input
+                    required={i === 0}
+                    placeholder="Phone"
+                    value={g.phone}
+                    onChange={(e) => updateGuardian(i, 'phone', e.target.value)}
+                  />
+                  {!editingId && i > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => removeGuardian(i)}
+                      aria-label="Remove this guardian"
+                      className="text-outline hover:text-error"
+                    >
+                      <span className="material-symbols-outlined !text-[20px]">close</span>
+                    </button>
+                  )}
+                </div>
+              ))}
+              {!editingId && (
+                <button
+                  type="button"
+                  onClick={addGuardian}
+                  className="flex w-fit items-center gap-1 text-label-md text-primary hover:underline"
+                >
+                  <span className="material-symbols-outlined !text-[18px]">person_add</span>
+                  Add another parent/guardian
+                </button>
+              )}
+            </div>
+
+            <Input required placeholder="Street address" value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} />
+            <div className="flex gap-2">
+              <Input required placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
+              <div className="w-32 flex-none">
+                <StateAutocomplete required value={stateCode} onChange={setStateCode} />
+              </div>
+              <Input required placeholder="Zip code" value={zipCode} onChange={(e) => setZipCode(e.target.value)} />
+            </div>
+
             <textarea
-              placeholder="Notes (e.g. needs help buckling, needs a monitor)"
+              placeholder="Notes (optional — e.g. needs help buckling, needs a monitor)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}

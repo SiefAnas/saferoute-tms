@@ -8,6 +8,7 @@ const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
 const { HttpError } = require('../errors');
+const { assertValidZip, assertValidState } = require('../validate');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
@@ -24,13 +25,28 @@ function readScope(req) {
   return {};
 }
 
+// Students page task (2026-08-27): every field required except notes. Enforced here (not a
+// DB NOT NULL) since existing students have real NULLs in several of these — same precedent
+// as the van fleet fields alongside this change.
 router.post('/', companyAdmin, async (req, res, next) => {
   try {
-    const { full_name, grade, parent_name, parent_phone, school_id, age, address, notes } = req.body || {};
-    if (!full_name || !school_id) throw new HttpError(400, 'full_name and school_id are required');
+    const { full_name, grade, parent_name, parent_phone, school_id, age, street_address, city, state, zip_code, notes } =
+      req.body || {};
+    if (!full_name || !grade || !parent_name || !parent_phone || !school_id || age === undefined || age === null) {
+      throw new HttpError(
+        400,
+        'full_name, grade, age, parent_name, parent_phone and school_id are required'
+      );
+    }
+    if (!street_address || !city || !state || !zip_code) {
+      throw new HttpError(400, 'street_address, city, state and zip_code are required');
+    }
+    assertValidZip(zip_code);
+    const normalizedState = assertValidState(state);
     const row = await req.db.insert('students', {
-      full_name, grade: grade ?? null, parent_name: parent_name ?? null, parent_phone: parent_phone ?? null, school_id,
-      age: age ?? null, address: address ?? null, notes: notes ?? null,
+      full_name, grade, parent_name, parent_phone, school_id, age,
+      street_address, city, state: normalizedState, zip_code,
+      notes: notes ?? null,
     });
     res.status(201).json(row);
   } catch (e) { next(mapFk(e)); }
@@ -56,9 +72,11 @@ router.get('/:id', async (req, res, next) => {
 router.patch('/:id', companyAdmin, async (req, res, next) => {
   try {
     const patch = {};
-    for (const k of ['full_name', 'grade', 'parent_name', 'parent_phone', 'age', 'address', 'notes']) {
+    for (const k of ['full_name', 'grade', 'parent_name', 'parent_phone', 'age', 'street_address', 'city', 'zip_code', 'notes']) {
       if (req.body?.[k] !== undefined) patch[k] = req.body[k];
     }
+    if (req.body?.zip_code !== undefined && req.body.zip_code !== null) assertValidZip(req.body.zip_code);
+    if (req.body?.state !== undefined && req.body.state !== null) patch.state = assertValidState(req.body.state);
     if (!Object.keys(patch).length) throw new HttpError(400, 'nothing to update');
     const row = await req.db.update('students', req.params.id, patch);
     if (!row) throw new HttpError(404, 'student not found');

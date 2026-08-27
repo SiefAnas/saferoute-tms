@@ -1,16 +1,18 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
-import { formatMoney } from '../../lib/format'
+import { formatMoney, formatDuration } from '../../lib/format'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
-import type { PayRule, PublicUser, RateType } from '../../types/api'
+import { Modal } from '../../components/Modal'
+import type { DriverSession, PayAdjustment, PayRule, PublicUser, RateType, UnpaidPaySummary } from '../../types/api'
 
-// Company Admin — Payroll management (§7.2 frontend gap): set/update each driver's pay
-// rate and log one-off adjustments. The dashboard's Payroll Summary card is read-only by
-// design (§7.2); this page is where rates/adjustments actually get set. Dollar inputs are
-// converted to integer cents at the boundary — the API only ever speaks cents (money.md).
+// Company Admin — Payroll management (§7.2 frontend gap). Set/update each driver's pay rate,
+// log one-off adjustments, and — added 2026-08-27 — see what's owed since they were last
+// paid and settle it. Driver work-time tracking already existed (sessions.check_in_at/
+// check_out_at); this reuses that via the new GET /payroll/unpaid-summary/:driverId rather
+// than tracking anything new. Dollar inputs are converted to integer cents at the boundary.
 export function PayrollPage() {
   const queryClient = useQueryClient()
   const driversQuery = useQuery({ queryKey: ['users', 'driver'], queryFn: () => api.get<PublicUser[]>('/users?role=driver') })
@@ -36,6 +38,7 @@ export function PayrollPage() {
     onSuccess: (rule) => {
       queryClient.invalidateQueries({ queryKey: ['payroll-rules'] })
       queryClient.invalidateQueries({ queryKey: ['payroll-summary', rule.driver_id] })
+      queryClient.invalidateQueries({ queryKey: ['payroll-unpaid-summary', rule.driver_id] })
       setRateMsg('Rate saved.')
       setRateDollars('')
     },
@@ -64,8 +67,9 @@ export function PayrollPage() {
         note: adjNote,
         work_date: adjDate,
       }),
-    onSuccess: (_data, _vars) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payroll-summary', adjDriverId] })
+      queryClient.invalidateQueries({ queryKey: ['payroll-unpaid-summary', adjDriverId] })
       setAdjMsg('Adjustment recorded.')
       setAdjDollars('')
       setAdjNote('')
@@ -80,6 +84,8 @@ export function PayrollPage() {
     setAdjError(null)
     addAdjustment.mutate()
   }
+
+  const [detailDriver, setDetailDriver] = useState<PublicUser | null>(null)
 
   const selectClass =
     'h-14 w-full rounded-lg border border-outline bg-surface-container-lowest px-4 text-body-lg outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20'
@@ -97,7 +103,7 @@ export function PayrollPage() {
             <table className="w-full text-left">
               <thead className="border-b border-outline-variant bg-surface-container-low">
                 <tr>
-                  {['Driver', 'Rate Type', 'Rate'].map((h) => (
+                  {['Driver', 'Rate Type', 'Rate', 'Worked This Cycle', 'Amount Owed', ''].map((h) => (
                     <th key={h} className="px-6 py-2 text-label-md text-secondary uppercase">
                       {h}
                     </th>
@@ -107,25 +113,14 @@ export function PayrollPage() {
               <tbody className="divide-y divide-outline-variant">
                 {(driversQuery.data ?? []).length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="px-6 py-4 text-body-md text-on-surface-variant">
+                    <td colSpan={6} className="px-6 py-4 text-body-md text-on-surface-variant">
                       {driversQuery.isLoading ? 'Loading…' : 'No drivers yet.'}
                     </td>
                   </tr>
                 ) : (
-                  (driversQuery.data ?? []).map((d) => {
-                    const rule = rulesByDriver.get(d.id)
-                    return (
-                      <tr key={d.id} className="hover:bg-surface-container-low">
-                        <td className="px-6 py-3 text-body-md font-medium">{d.full_name}</td>
-                        <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                          {rule ? (rule.rate_type === 'hourly' ? 'Hourly' : 'Daily') : '—'}
-                        </td>
-                        <td className="px-6 py-3 text-data-mono text-secondary">
-                          {rule ? `${formatMoney(rule.rate_cents)} / ${rule.rate_type === 'hourly' ? 'hr' : 'day'}` : 'Not set'}
-                        </td>
-                      </tr>
-                    )
-                  })
+                  (driversQuery.data ?? []).map((d) => (
+                    <DriverPayRow key={d.id} driver={d} rule={rulesByDriver.get(d.id) ?? null} onViewDetail={() => setDetailDriver(d)} />
+                  ))
                 )}
               </tbody>
             </table>
@@ -209,6 +204,163 @@ export function PayrollPage() {
           </Card>
         </div>
       </div>
+
+      {detailDriver && <DriverCycleDetailModal driver={detailDriver} onClose={() => setDetailDriver(null)} />}
     </div>
+  )
+}
+
+function DriverPayRow({
+  driver,
+  rule,
+  onViewDetail,
+}: {
+  driver: PublicUser
+  rule: PayRule | null
+  onViewDetail: () => void
+}) {
+  const queryClient = useQueryClient()
+  const unpaidQuery = useQuery({
+    queryKey: ['payroll-unpaid-summary', driver.id],
+    queryFn: () => api.get<UnpaidPaySummary>(`/payroll/unpaid-summary/${driver.id}`),
+    enabled: Boolean(rule),
+    retry: false,
+  })
+
+  const markPaid = useMutation({
+    mutationFn: () => api.post<PayRule>(`/payroll/rules/${driver.id}/mark-paid`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payroll-unpaid-summary', driver.id] })
+      queryClient.invalidateQueries({ queryKey: ['payroll-rules'] })
+    },
+  })
+
+  const worked = unpaidQuery.data
+    ? unpaidQuery.data.rate_type === 'hourly'
+      ? formatDuration(unpaidQuery.data.worked_minutes)
+      : `${unpaidQuery.data.worked_days} ${unpaidQuery.data.worked_days === 1 ? 'day' : 'days'}`
+    : '—'
+
+  return (
+    <tr className="hover:bg-surface-container-low">
+      <td className="px-6 py-3 text-body-md font-medium">
+        {rule ? (
+          <button type="button" onClick={onViewDetail} className="text-primary hover:underline">
+            {driver.full_name}
+          </button>
+        ) : (
+          driver.full_name
+        )}
+      </td>
+      <td className="px-6 py-3 text-body-md text-on-surface-variant">
+        {rule ? (rule.rate_type === 'hourly' ? 'Hourly' : 'Daily') : '—'}
+      </td>
+      <td className="px-6 py-3 text-data-mono text-secondary">
+        {rule ? `${formatMoney(rule.rate_cents)} / ${rule.rate_type === 'hourly' ? 'hr' : 'day'}` : 'Not set'}
+      </td>
+      <td className="px-6 py-3 text-data-mono text-secondary">{rule ? worked : '—'}</td>
+      <td className="px-6 py-3 text-data-mono font-medium">
+        {rule && unpaidQuery.data ? formatMoney(unpaidQuery.data.total_pay_cents) : rule ? '…' : '—'}
+      </td>
+      <td className="px-6 py-3 text-right">
+        {rule && (
+          <Button
+            variant="outline"
+            className="h-9 px-4 text-label-md"
+            disabled={markPaid.isPending || !unpaidQuery.data || unpaidQuery.data.total_pay_cents === 0}
+            onClick={() => markPaid.mutate()}
+          >
+            {markPaid.isPending ? 'Marking…' : 'Paid'}
+          </Button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+function DriverCycleDetailModal({ driver, onClose }: { driver: PublicUser; onClose: () => void }) {
+  const unpaidQuery = useQuery({
+    queryKey: ['payroll-unpaid-summary', driver.id],
+    queryFn: () => api.get<UnpaidPaySummary>(`/payroll/unpaid-summary/${driver.id}`),
+  })
+  const sessionsQuery = useQuery({ queryKey: ['sessions', 'all'], queryFn: () => api.get<DriverSession[]>('/sessions') })
+  const adjustmentsQuery = useQuery({
+    queryKey: ['payroll-adjustments', driver.id],
+    queryFn: () => api.get<PayAdjustment[]>(`/payroll/adjustments/${driver.id}`),
+  })
+
+  const paidThroughAt = unpaidQuery.data?.paid_through_at ?? null
+
+  const shifts = useMemo(() => {
+    const all = (sessionsQuery.data ?? []).filter((s) => s.user_id === driver.id && s.check_out_at)
+    return all
+      .filter((s) => !paidThroughAt || new Date(s.check_in_at) >= new Date(paidThroughAt))
+      .sort((a, b) => b.check_in_at.localeCompare(a.check_in_at))
+  }, [sessionsQuery.data, driver.id, paidThroughAt])
+
+  const adjustments = useMemo(() => {
+    const all = adjustmentsQuery.data ?? []
+    return all
+      .filter((a) => !paidThroughAt || a.work_date >= paidThroughAt.slice(0, 10))
+      .sort((a, b) => b.work_date.localeCompare(a.work_date))
+  }, [adjustmentsQuery.data, paidThroughAt])
+
+  const loading = unpaidQuery.isLoading || sessionsQuery.isLoading || adjustmentsQuery.isLoading
+
+  return (
+    <Modal title={`${driver.full_name} — Current Unpaid Cycle`} onClose={onClose}>
+      {loading ? (
+        <p className="text-body-md text-on-surface-variant">Loading…</p>
+      ) : (
+        <>
+          <p className="text-body-md text-on-surface-variant">
+            {paidThroughAt
+              ? `Since last paid on ${new Date(paidThroughAt).toLocaleDateString()}.`
+              : 'Since the beginning — this driver has never been marked paid.'}
+          </p>
+
+          <div>
+            <h3 className="mb-1 text-title-md text-primary">Shifts Worked</h3>
+            {shifts.length === 0 ? (
+              <p className="text-body-md text-on-surface-variant">No completed shifts in this cycle yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-1 text-body-md">
+                {shifts.map((s) => (
+                  <li key={s.id} className="flex justify-between text-on-surface-variant">
+                    <span>{new Date(s.check_in_at).toLocaleDateString()}</span>
+                    <span className="text-data-mono">{formatDuration(s.duration_minutes ?? 0)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-title-md text-primary">Adjustments</h3>
+            {adjustments.length === 0 ? (
+              <p className="text-body-md text-on-surface-variant">No adjustments in this cycle.</p>
+            ) : (
+              <ul className="flex flex-col gap-1 text-body-md">
+                {adjustments.map((a) => (
+                  <li key={a.id} className="flex justify-between text-on-surface-variant">
+                    <span>
+                      {new Date(a.work_date).toLocaleDateString()} — {a.note}
+                    </span>
+                    <span className="text-data-mono">{formatMoney(a.amount_cents)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {unpaidQuery.data && (
+            <div className="rounded-lg border border-outline-variant bg-surface-container p-3">
+              <p className="text-label-md text-secondary uppercase">Total Owed</p>
+              <p className="text-title-lg font-bold">{formatMoney(unpaidQuery.data.total_pay_cents)}</p>
+            </div>
+          )}
+        </>
+      )}
+    </Modal>
   )
 }

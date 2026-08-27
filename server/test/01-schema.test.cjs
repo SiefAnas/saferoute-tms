@@ -19,7 +19,7 @@ async function main() {
     await client.connect();
     try {
       const applied = (await client.query('SELECT count(*)::int AS n FROM pgmigrations')).rows[0].n;
-      eq('pgmigrations records 10 applied migrations', applied, 10);
+      eq('pgmigrations records 15 applied migrations', applied, 15);
       const tables = (await client.query(
         "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name<>'pgmigrations' ORDER BY 1"
       )).rows.map((r) => r.table_name);
@@ -43,6 +43,10 @@ async function main() {
         "INSERT INTO users(email,password_hash,full_name,role,company_id) VALUES('a@x.com','h','A','company_admin',$1)", [c1.id]);
       await expectOk('school_admin with school_id',
         "INSERT INTO users(email,password_hash,full_name,role,school_id) VALUES('sa@x.com','h','SA','school_admin',$1)", [s1.id]);
+      await expectOk('parent with company_id (new role, company-scoped like driver)',
+        "INSERT INTO users(email,password_hash,full_name,role,company_id) VALUES('par@x.com','h','Par','parent',$1)", [c1.id]);
+      await expectReject('parent with school_id (wrong tenant col)',
+        "INSERT INTO users(email,password_hash,full_name,role,school_id) VALUES('bad5@x.com','h','B','parent',$1)", [s1.id]);
       await expectReject('driver with school_id (wrong tenant col)',
         "INSERT INTO users(email,password_hash,full_name,role,school_id) VALUES('bad1@x.com','h','B','driver',$1)", [s1.id]);
       await expectReject('driver with BOTH company_id and school_id',

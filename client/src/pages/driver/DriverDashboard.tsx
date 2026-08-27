@@ -89,6 +89,14 @@ export function DriverDashboard() {
     onError: (err) => setActionError(err instanceof ApiError ? err.message : 'Could not log trip.'),
   })
 
+  // "When they arrive and no one shows up" — real feature, notifies the school + company
+  // admin (server/src/services/schedule.js's markNoShow), same as the parent's Skip Pickup.
+  const markAbsent = useMutation({
+    mutationFn: (assignmentId: string) => api.post<{ reported: boolean }>(`/schedule/${assignmentId}/no-show`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schedule-today'] }),
+    onError: (err) => setActionError(err instanceof ApiError ? err.message : 'Could not report the no-show.'),
+  })
+
   const todaysTrips = useMemo(
     () => (tripsQuery.data ?? []).filter((t) => isToday(t.created_at)).sort((a, b) => b.created_at.localeCompare(a.created_at)),
     [tripsQuery.data],
@@ -254,6 +262,12 @@ export function DriverDashboard() {
                     </div>
                   </div>
 
+                  {item.parent_skipped_today && (
+                    <p className="rounded-lg bg-secondary-container px-3 py-2 text-label-md text-on-secondary-container">
+                      Parent skipped pickup for this student today — no pickup needed.
+                    </p>
+                  )}
+
                   <div className="flex items-center gap-2">
                     {(['pickup', 'dropoff'] as const).map((t) => (
                       <button
@@ -278,6 +292,24 @@ export function DriverDashboard() {
                       {!openSession ? 'Check in first' : alreadyLogged ? 'Already logged' : 'Confirm'}
                     </Button>
                   </div>
+
+                  {type === 'pickup' && (
+                    <Button
+                      variant="outline"
+                      className="h-10 w-fit px-4 text-label-md"
+                      disabled={
+                        !openSession ||
+                        markAbsent.isPending ||
+                        item.no_show_reported_today ||
+                        item.parent_skipped_today ||
+                        loggedToday.some((t) => t.trip_type === 'pickup')
+                      }
+                      onClick={() => markAbsent.mutate(item.assignment_id)}
+                    >
+                      <span className="material-symbols-outlined !text-[18px]">person_off</span>
+                      {item.no_show_reported_today ? 'Absence Reported' : markAbsent.isPending ? 'Reporting…' : 'Mark Absent'}
+                    </Button>
+                  )}
 
                   {loggedToday.length > 0 && (
                     <div className="flex gap-3 text-label-md text-on-surface-variant">
@@ -362,7 +394,7 @@ function StudentDetailModal({ studentId, trips, onClose }: { studentId: string; 
             <dt className="text-on-surface-variant">Age</dt>
             <dd>{s.age ?? '—'}</dd>
             <dt className="text-on-surface-variant">Address</dt>
-            <dd>{s.address ?? '—'}</dd>
+            <dd>{s.street_address ? `${s.street_address}, ${s.city}, ${s.state} ${s.zip_code}` : '—'}</dd>
             <dt className="text-on-surface-variant">Parent/Guardian</dt>
             <dd>{s.parent_name ?? '—'}</dd>
             <dt className="text-on-surface-variant">Parent Phone</dt>

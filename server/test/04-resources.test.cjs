@@ -68,24 +68,49 @@ async function main() {
       eq('driver GET /users -> 403 (not an admin)', (await api('GET', '/users', driverA)).status, 403);
 
       console.log('\n--- Vans ---');
-      const vanA = (await api('POST', '/vans', adminA, { license_plate: 'AAA-1', model: 'Transit' })).body;
-      const vanB = (await api('POST', '/vans', adminB, { license_plate: 'BBB-1' })).body;
+      const vanFields = { brand: 'Ford', model: 'Transit', year: 2022, color: 'White' };
+      const vanA = (await api('POST', '/vans', adminA, { license_plate: 'AAA-1', ...vanFields, driver_user_id: driverAId })).body;
+      const vanB = (await api('POST', '/vans', adminB, { license_plate: 'BBB-1', ...vanFields, driver_user_id: driverBId })).body;
       const vansA = await api('GET', '/vans', adminA);
       (vansA.body.length === 1 && vansA.body[0].id === vanA.id) ? ok('admin A sees only Company A vans') : bad('van isolation broke');
       eq('school_admin GET /vans -> 403 (structural: no van scope)', (await api('GET', '/vans', schoolAdmin)).status, 403);
+      (vanA.brand === 'Ford' && vanA.model === 'Transit' && vanA.color === 'White' && vanA.driver_user_id === driverAId)
+        ? ok('van create returns brand/model/color/driver_user_id') : bad(`van create fields: ${JSON.stringify(vanA)}`);
+      eq(
+        'van create missing color -> 400 (now required)',
+        (await api('POST', '/vans', adminA, { license_plate: 'CCC-1', brand: 'Ford', model: 'Transit', year: 2022, driver_user_id: driverAId })).status,
+        400
+      );
+      eq(
+        'van create with driver from another company -> 400 (cross-company FK)',
+        (await api('POST', '/vans', adminA, { license_plate: 'DDD-1', ...vanFields, driver_user_id: driverBId })).status,
+        400
+      );
 
       console.log('\n--- Students (dual-tenant) ---');
-      const stu = await api('POST', '/students', adminA, { full_name: 'Kid One', grade: '3', school_id: S.id });
+      const studentFields = {
+        grade: '3', age: 8, parent_name: 'Pat Guardian', parent_phone: '555-1000',
+        street_address: '5 Elm St', city: 'Boston', state: 'ma', zip_code: '02139',
+      };
+      const stu = await api('POST', '/students', adminA, { full_name: 'Kid One', school_id: S.id, ...studentFields });
       stu.status === 201 && stu.body.company_id === A.id && stu.body.school_id === S.id ? ok('company_admin creates student (company stamped, school linked)') : bad(`student create: ${stu.status}`);
-      eq('student with bogus school_id -> 400 (FK)', (await api('POST', '/students', adminA, { full_name: 'x', school_id: '00000000-0000-0000-0000-000000000000' })).status, 400);
+      stu.body.state === 'MA' ? ok('student state normalized to uppercase') : bad(`student state: ${stu.body.state}`);
+      eq(
+        'student create missing parent_phone -> 400 (now required)',
+        (await api('POST', '/students', adminA, { full_name: 'x', school_id: S.id, ...studentFields, parent_phone: undefined })).status,
+        400
+      );
+      eq('student with bogus school_id -> 400 (FK)', (await api('POST', '/students', adminA, { full_name: 'x', school_id: '00000000-0000-0000-0000-000000000000', ...studentFields })).status, 400);
       const schoolView = await api('GET', '/students', schoolAdmin);
       schoolView.body.some((s) => s.id === stu.body.id) ? ok('school_admin sees the student via school scope (cross-side read)') : bad('school_admin cannot see its student');
       (await api('GET', '/students', adminB)).body.length === 0 ? ok('admin B sees no Company A students (isolation)') : bad('student leaked to Company B');
 
-      console.log('\n--- Students: age/address/notes + contacts (Driver dashboard rework) ---');
-      const stu2 = await api('POST', '/students', adminA, { full_name: 'Kid Two', school_id: S.id, age: 8, address: '5 Elm St', notes: 'needs help buckling' });
-      (stu2.status === 201 && stu2.body.age === 8 && stu2.body.address === '5 Elm St' && stu2.body.notes === 'needs help buckling')
-        ? ok('student create accepts age/address/notes') : bad(`student create w/ new fields: ${stu2.status} ${JSON.stringify(stu2.body)}`);
+      console.log('\n--- Students: age/street address/notes + contacts (Driver dashboard rework) ---');
+      const stu2 = await api('POST', '/students', adminA, {
+        full_name: 'Kid Two', school_id: S.id, ...studentFields, age: 8, notes: 'needs help buckling',
+      });
+      (stu2.status === 201 && stu2.body.age === 8 && stu2.body.street_address === '5 Elm St' && stu2.body.city === 'Boston' && stu2.body.notes === 'needs help buckling')
+        ? ok('student create accepts age/street_address/city/notes') : bad(`student create w/ new fields: ${stu2.status} ${JSON.stringify(stu2.body)}`);
       const patchStu = await api('PATCH', `/students/${stu2.body.id}`, adminA, { age: 9 });
       patchStu.body.age === 9 ? ok('student patch updates age') : bad(`patch age: ${JSON.stringify(patchStu.body)}`);
 

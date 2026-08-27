@@ -1,7 +1,7 @@
 // Types mirror the API's actual response shapes (server/src/services/*.js), not aspirational
 // ones — see individual routes for the source of truth.
 
-export type Role = 'driver' | 'company_admin' | 'school_admin' | 'school_staff'
+export type Role = 'driver' | 'company_admin' | 'school_admin' | 'school_staff' | 'parent'
 export type TenantType = 'company' | 'school'
 
 // Shape returned by POST /auth/login's `user` field.
@@ -51,14 +51,40 @@ export interface PublicUser {
   phone: string | null
   is_active: boolean
   email_verified_at: string | null
+  created_by_user_id: string | null
+}
+
+// Which parent can see which student, granted by a company_admin — the company-side
+// counterpart to StaffAccessGrant (§7.3), since parent is a company-scoped role.
+export interface ParentStudentLink {
+  id: string
+  parent_user_id: string
+  student_id: string
+  company_id: string
+  created_by_user_id: string | null
+  created_at: string
+}
+
+// GET /parent/students/:id/skip-status — server-authoritative eligibility for the real
+// Skip Today's Pickup action (§ Parent Dashboard task).
+export interface SkipStatus {
+  eligible: boolean
+  reason: string | null
+  pickupTime: string | null
+  alreadySkipped: boolean
 }
 
 export interface Van {
   id: string
   company_id: string
   license_plate: string
-  model: string | null
-  year: number | null
+  brand: string
+  model: string
+  year: number
+  // Nullable at the DB level (existing vans predate these fields) even though the create
+  // form requires them going forward — see server/src/routes/vans.js.
+  color: string | null
+  driver_user_id: string | null
   created_at: string
   updated_at: string
 }
@@ -72,7 +98,13 @@ export interface Student {
   parent_name: string | null
   parent_phone: string | null
   age: number | null
-  address: string | null
+  // Home address split into structured fields (2026-08-27) — replaces the old free-text
+  // `address` column, which real data never populated. Nullable at the DB level (existing
+  // students predate these fields) even though the create form requires them going forward.
+  street_address: string | null
+  city: string | null
+  state: string | null
+  zip_code: string | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -175,6 +207,10 @@ export interface TodayScheduleItem {
   }
   school: { id: string; name: string }
   override: { pickup_time: string | null; dropoff_time: string | null; skip: boolean; note: string | null } | null
+  // Added alongside the driver no-show feature: lets the driver's schedule view show
+  // "parent already skipped this pickup" and reflect an already-reported no-show.
+  parent_skipped_today: boolean
+  no_show_reported_today: boolean
 }
 
 export type RateType = 'hourly' | 'daily'
@@ -185,6 +221,9 @@ export interface PayRule {
   company_id: string
   rate_type: RateType
   rate_cents: number
+  // Added 2026-08-27 for the Payroll "Paid" feature — null = never marked paid (everything
+  // since the beginning is owed, same as summary()'s default with no `from`).
+  paid_through_at: string | null
   created_at: string
   updated_at: string
 }
@@ -198,6 +237,23 @@ export interface PaySummary {
   base_pay_cents: number
   adjustments_cents: number
   total_pay_cents: number
+}
+
+// GET /payroll/unpaid-summary/:driverId — PaySummary plus the cycle boundary it was computed
+// against, for the Payroll page's "Amount Owed" column + "Paid" button.
+export interface UnpaidPaySummary extends PaySummary {
+  paid_through_at: string | null
+}
+
+export interface PayAdjustment {
+  id: string
+  driver_id: string
+  company_id: string
+  amount_cents: number
+  note: string
+  work_date: string
+  created_at: string
+  updated_at: string
 }
 
 // Which School Staff member can see which student, granted by a School Admin (§7.3).

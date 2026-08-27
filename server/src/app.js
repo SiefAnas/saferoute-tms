@@ -15,6 +15,8 @@ const assignmentRoutes = require('./routes/assignments');
 const payrollRoutes = require('./routes/payroll');
 const staffAccessRoutes = require('./routes/staffAccess');
 const scheduleRoutes = require('./routes/schedule');
+const parentAccessRoutes = require('./routes/parentAccess');
+const parentPortalRoutes = require('./routes/parentPortal');
 
 function createApp() {
   const app = express();
@@ -54,6 +56,8 @@ function createApp() {
   app.use('/payroll', payrollRoutes);
   app.use('/staff-access', staffAccessRoutes);
   app.use('/schedule', scheduleRoutes);
+  app.use('/parent-access', parentAccessRoutes);
+  app.use('/parent', parentPortalRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
 

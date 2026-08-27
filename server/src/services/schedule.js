@@ -4,12 +4,18 @@
 // skip), one row per (assignment, date), upserted by date.
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
+const { notifyCompanyAndSchoolAdmins } = require('./notifications');
 
 // Raw pool query (not req.db): "active today" is a date-range condition req.db's
 // equality-only `where` can't express — same precedent as payroll.js's summary() and
 // services/schools.js's listCompanySchools for tenant-scoped range/join queries. Manually
 // ANDs both driver_user_id and company_id so this can never cross into another driver's or
 // another company's assignments.
+//
+// Also surfaces parent_skipped_today / no_show_reported_today (added alongside the driver
+// no-show feature) so a driver's own schedule view can show "parent already skipped this
+// pickup" and the Mark Absent button can reflect an already-reported no-show, without a
+// second round-trip.
 async function getTodaySchedule(req) {
   const { rows } = await pool.query(
     `SELECT a.id AS assignment_id, a.pickup_time, a.dropoff_time,
@@ -17,12 +23,16 @@ async function getTodaySchedule(req) {
             st.parent_name, st.parent_phone,
             sc.id AS school_id, sc.name AS school_name,
             o.id AS override_id, o.pickup_time AS override_pickup_time,
-            o.dropoff_time AS override_dropoff_time, o.skip AS override_skip, o.note AS override_note
+            o.dropoff_time AS override_dropoff_time, o.skip AS override_skip, o.note AS override_note,
+            (ps.id IS NOT NULL) AS parent_skipped_today,
+            (pns.id IS NOT NULL) AS no_show_reported_today
        FROM assignments a
        JOIN students st ON st.id = a.student_id
        JOIN schools sc ON sc.id = st.school_id
        LEFT JOIN assignment_schedule_overrides o
               ON o.assignment_id = a.id AND o.override_date = CURRENT_DATE
+       LEFT JOIN pickup_skips ps ON ps.student_id = a.student_id AND ps.skip_date = CURRENT_DATE
+       LEFT JOIN pickup_no_shows pns ON pns.student_id = a.student_id AND pns.no_show_date = CURRENT_DATE
       WHERE a.driver_user_id = $1
         AND a.company_id = $2
         AND a.start_date <= CURRENT_DATE
@@ -39,7 +49,47 @@ async function getTodaySchedule(req) {
     override: r.override_id
       ? { pickup_time: r.override_pickup_time, dropoff_time: r.override_dropoff_time, skip: r.override_skip, note: r.override_note }
       : null,
+    parent_skipped_today: r.parent_skipped_today,
+    no_show_reported_today: r.no_show_reported_today,
   }));
+}
+
+// Driver-reported no-show (task: "when they arrive and no one shows up they can hit the
+// button the student is Absent"). Requires an open shift, same invariant logTrip already
+// enforces for logging a trip. Notifies the school and company admin — same shared helper
+// the parent Skip Pickup feature uses, no new notification mechanism.
+async function markNoShow(req, assignmentId) {
+  const assignment = await req.db.findById('assignments', assignmentId, {
+    owner: { column: 'driver_user_id', value: req.auth.userId },
+  });
+  if (!assignment) throw new HttpError(404, 'assignment not found');
+
+  const open = (await req.db.findMany('sessions', { owner: { column: 'user_id', value: req.auth.userId } })).find(
+    (s) => s.check_out_at === null
+  );
+  if (!open) throw new HttpError(409, 'check in before reporting a no-show');
+
+  const student = await req.db.findById('students', assignment.student_id);
+  if (!student) throw new HttpError(404, 'student not found');
+
+  let inserted;
+  try {
+    inserted = await pool.query(
+      `INSERT INTO pickup_no_shows (company_id, student_id, driver_user_id, no_show_date)
+       VALUES ($1, $2, $3, CURRENT_DATE) RETURNING *`,
+      [req.auth.tenantId, student.id, req.auth.userId]
+    );
+  } catch (err) {
+    if (err.code === '23505') throw new HttpError(409, 'a no-show was already reported for this student today');
+    throw err;
+  }
+
+  const driver = await req.db.findById('users', req.auth.userId);
+  const subject = `No-show reported for ${student.full_name}`;
+  const text = `${driver?.full_name ?? 'The driver'} reported that no one was available for ${student.full_name}'s pickup this morning.`;
+  const notified = await notifyCompanyAndSchoolAdmins(req, student.school_id, { subject, text });
+
+  return { reported: true, noShow: inserted.rows[0], notified };
 }
 
 async function assertOwnedAssignment(req, assignmentId) {
@@ -91,4 +141,4 @@ async function deleteOverride(req, assignmentId, overrideId) {
   return row;
 }
 
-module.exports = { getTodaySchedule, upsertOverride, listOverrides, deleteOverride };
+module.exports = { getTodaySchedule, upsertOverride, listOverrides, deleteOverride, markNoShow };
