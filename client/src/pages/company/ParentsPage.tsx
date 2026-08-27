@@ -5,7 +5,18 @@ import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { EditAccountModal } from '../../components/EditAccountModal'
+import { CsvImportExport } from '../../components/CsvImportExport'
+import type { CsvColumn } from '../../lib/csv'
 import type { PublicUser, Student, ParentStudentLink } from '../../types/api'
+
+const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
+  { key: 'full_name', header: 'Full Name' },
+  { key: 'email', header: 'Email' },
+  // Never exported (we don't store/return plaintext) — blank on an existing parent's row
+  // leaves their password unchanged on re-import; required for a brand-new row.
+  { key: 'password', header: 'Password', value: () => '' },
+  { key: 'is_active', header: 'Active', value: (p) => (p.is_active ? 'true' : 'false') },
+]
 
 // Parent management — mirrors school_admin's Staff & Access page (create + grant/revoke
 // access), but company-scoped since parent is a company-side role. Split out from the
@@ -63,9 +74,49 @@ export function ParentsPage() {
     else link.mutate(studentId)
   }
 
+  // CSV import (2026-08-28): upsert by email, same pattern as Drivers. Does not set
+  // student links — those are inherently many-to-many and per-pair, not a good fit for one
+  // flat CSV row; use the checklist on the right (or link at creation via the Drivers/
+  // Parents "Add" form) instead.
+  async function handleImportRow(row: Record<string, string>) {
+    const email = row['Email']?.trim()
+    if (!email) return { ok: false, message: 'Email is required' }
+    const fullName = row['Full Name']?.trim()
+    const password = row['Password']?.trim()
+    const activeRaw = row['Active']?.trim().toLowerCase()
+
+    const existing = (parentsQuery.data ?? []).find((p) => p.email.toLowerCase() === email.toLowerCase())
+    try {
+      if (existing) {
+        const patch: Record<string, unknown> = {}
+        if (fullName) patch.full_name = fullName
+        if (password) patch.password = password
+        if (activeRaw) patch.is_active = ['true', '1', 'yes'].includes(activeRaw)
+        if (Object.keys(patch).length === 0) return { ok: true, message: 'No changes' }
+        await api.patch(`/users/${existing.id}`, patch)
+        return { ok: true, message: 'Updated' }
+      }
+      if (!fullName) return { ok: false, message: 'Full Name is required for a new parent' }
+      if (!password) return { ok: false, message: 'Password is required for a new parent' }
+      await api.post('/users', { role: 'parent', fullName, email, password })
+      return { ok: true, message: 'Created' }
+    } catch (err) {
+      return { ok: false, message: err instanceof ApiError ? err.message : 'Import failed' }
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-headline-lg text-primary">Parents</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-headline-lg text-primary">Parents</h1>
+        <CsvImportExport
+          entityName="Parents"
+          columns={CSV_COLUMNS}
+          rows={parentsQuery.data ?? []}
+          onImportRow={handleImportRow}
+          onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['users', 'parent'] })}
+        />
+      </div>
 
       <div className="grid grid-cols-12 gap-5">
         <Card className="col-span-12 p-5 lg:col-span-4">

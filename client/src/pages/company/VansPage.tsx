@@ -5,7 +5,17 @@ import { isAssignmentActiveToday } from '../../lib/format'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
+import { CsvImportExport } from '../../components/CsvImportExport'
+import type { CsvColumn } from '../../lib/csv'
 import type { Assignment, PublicUser, Van } from '../../types/api'
+
+const CSV_COLUMNS: CsvColumn<Van>[] = [
+  { key: 'license_plate', header: 'License Plate' },
+  { key: 'brand', header: 'Brand' },
+  { key: 'model', header: 'Model' },
+  { key: 'year', header: 'Year' },
+  { key: 'color', header: 'Color' },
+]
 
 // Company Admin — Fleet management. Fleet page task (2026-08-27): brand/model split, color,
 // and an assigned driver are all required at creation; plate/year are required too (no more
@@ -116,6 +126,38 @@ export function VansPage() {
     else createVan.mutate()
   }
 
+  // CSV import (2026-08-28): upsert by license plate, per the task's own matching rule for
+  // vans.
+  async function handleImportRow(row: Record<string, string>) {
+    const plate = row['License Plate']?.trim()
+    if (!plate) return { ok: false, message: 'License Plate is required' }
+    const brand = row['Brand']?.trim()
+    const model = row['Model']?.trim()
+    const yearRaw = row['Year']?.trim()
+    const color = row['Color']?.trim()
+
+    const existing = (vansQuery.data ?? []).find((v) => v.license_plate.toLowerCase() === plate.toLowerCase())
+    try {
+      if (existing) {
+        const patch: Record<string, unknown> = {}
+        if (brand) patch.brand = brand
+        if (model) patch.model = model
+        if (yearRaw) patch.year = Number(yearRaw)
+        if (color) patch.color = color
+        if (Object.keys(patch).length === 0) return { ok: true, message: 'No changes' }
+        await api.patch(`/vans/${existing.id}`, patch)
+        return { ok: true, message: 'Updated' }
+      }
+      if (!brand || !model || !yearRaw || !color) {
+        return { ok: false, message: 'Brand, Model, Year and Color are all required for a new van' }
+      }
+      await api.post('/vans', { license_plate: plate, brand, model, year: Number(yearRaw), color })
+      return { ok: true, message: 'Created' }
+    } catch (err) {
+      return { ok: false, message: err instanceof ApiError ? err.message : 'Import failed' }
+    }
+  }
+
   const saving = createVan.isPending || updateVan.isPending
 
   const columns: Array<{ label: string; icon: string }> = [
@@ -129,7 +171,16 @@ export function VansPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-headline-lg text-primary">Fleet</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-headline-lg text-primary">Fleet</h1>
+        <CsvImportExport
+          entityName="Fleet"
+          columns={CSV_COLUMNS}
+          rows={vansQuery.data ?? []}
+          onImportRow={handleImportRow}
+          onImportComplete={invalidateVans}
+        />
+      </div>
 
       <div className="grid grid-cols-12 gap-5">
         <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">

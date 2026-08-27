@@ -6,7 +6,10 @@ import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { StateAutocomplete } from '../../components/StateAutocomplete'
 import { isAssignmentActiveToday } from '../../lib/format'
+import { CsvImportExport } from '../../components/CsvImportExport'
+import type { CsvColumn } from '../../lib/csv'
 import type { Assignment, PublicUser, SchoolSummary, Student, StudentContact, Van } from '../../types/api'
+
 
 interface GuardianRow {
   name: string
@@ -52,6 +55,25 @@ export function CompanyStudentsPage() {
     const map = new Map((schoolsQuery.data ?? []).map((s) => [s.id, s.name]))
     return (id: string) => map.get(id) ?? '—'
   }, [schoolsQuery.data])
+
+  // CSV columns (2026-08-28) — includes a "School" column derived from school_id, since
+  // that's what both export display and import matching actually need.
+  const csvColumns: CsvColumn<Student>[] = useMemo(
+    () => [
+      { key: 'full_name', header: 'Full Name' },
+      { key: 'grade', header: 'Grade' },
+      { key: 'age', header: 'Age' },
+      { key: 'parent_name', header: 'Parent Name' },
+      { key: 'parent_phone', header: 'Parent Phone' },
+      { key: 'street_address', header: 'Street Address' },
+      { key: 'city', header: 'City' },
+      { key: 'state', header: 'State' },
+      { key: 'zip_code', header: 'Zip Code' },
+      { key: 'school', header: 'School', value: (s) => schoolName(s.school_id) },
+      { key: 'notes', header: 'Notes' },
+    ],
+    [schoolName],
+  )
 
   const driverName = useMemo(() => {
     const map = new Map((driversQuery.data ?? []).map((d) => [d.id, d.full_name]))
@@ -136,6 +158,45 @@ export function CompanyStudentsPage() {
   }
   function removeGuardian(index: number) {
     setGuardians((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // CSV import (2026-08-28) is CREATE-ONLY, unlike Drivers/Fleet. ASSUMPTION, flagged: unlike
+  // people (matched by email) and vans (matched by plate), students have no reliable natural
+  // key — full_name alone risks silently overwriting the WRONG student on a name collision.
+  // Rather than guess at a compound key, every CSV row always inserts a new student; bulk
+  // *updating* existing students isn't supported via CSV. Matches "onboarding a class list"
+  // being the real use case named for this feature better than "update by spreadsheet" would.
+  // Does not set a driver/van (no reliable way to name them safely in a bulk import either) —
+  // assign those afterward via the form or the Assignments page.
+  async function handleImportRow(row: Record<string, string>) {
+    const fullName = row['Full Name']?.trim()
+    const grade = row['Grade']?.trim()
+    const ageRaw = row['Age']?.trim()
+    const parentName = row['Parent Name']?.trim()
+    const parentPhone = row['Parent Phone']?.trim()
+    const streetAddress = row['Street Address']?.trim()
+    const city = row['City']?.trim()
+    const state = row['State']?.trim()
+    const zipCode = row['Zip Code']?.trim()
+    const schoolNameInput = row['School']?.trim()
+    const notes = row['Notes']?.trim()
+
+    if (!fullName || !grade || !ageRaw || !parentName || !parentPhone || !streetAddress || !city || !state || !zipCode) {
+      return { ok: false, message: 'Full Name, Grade, Age, Parent Name, Parent Phone, Street Address, City, State and Zip Code are all required' }
+    }
+    const school = (schoolsQuery.data ?? []).find((s) => s.name.toLowerCase() === schoolNameInput?.toLowerCase())
+    if (!school) {
+      return { ok: false, message: `School "${schoolNameInput ?? ''}" not found — add it first via the form, then re-import` }
+    }
+    try {
+      await api.post('/students', {
+        full_name: fullName, grade, age: Number(ageRaw), parent_name: parentName, parent_phone: parentPhone,
+        street_address: streetAddress, city, state, zip_code: zipCode, notes: notes || undefined, school_id: school.id,
+      })
+      return { ok: true, message: 'Created' }
+    } catch (err) {
+      return { ok: false, message: err instanceof ApiError ? err.message : 'Import failed' }
+    }
   }
 
   const invalidateStudents = () => {
@@ -256,7 +317,16 @@ export function CompanyStudentsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-headline-lg text-primary">Students</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-headline-lg text-primary">Students</h1>
+        <CsvImportExport
+          entityName="Students"
+          columns={csvColumns}
+          rows={studentsQuery.data ?? []}
+          onImportRow={handleImportRow}
+          onImportComplete={invalidateStudents}
+        />
+      </div>
 
       <div className="grid grid-cols-12 gap-5">
         <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">

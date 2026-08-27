@@ -6,7 +6,21 @@ import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { Modal } from '../../components/Modal'
+import { CsvImportExport } from '../../components/CsvImportExport'
+import type { CsvColumn } from '../../lib/csv'
 import type { DriverSession, PayAdjustment, PayRule, PublicUser, RateType, UnpaidPaySummary } from '../../types/api'
+
+interface PayrollCsvRow {
+  driver: PublicUser
+  rule: PayRule | null
+}
+
+const CSV_COLUMNS: CsvColumn<PayrollCsvRow>[] = [
+  { key: 'email', header: 'Driver Email', value: (r) => r.driver.email },
+  { key: 'name', header: 'Driver Name', value: (r) => r.driver.full_name },
+  { key: 'rate_type', header: 'Rate Type', value: (r) => r.rule?.rate_type ?? '' },
+  { key: 'rate_dollars', header: 'Rate (Dollars)', value: (r) => (r.rule ? (r.rule.rate_cents / 100).toFixed(2) : '') },
+]
 
 // Company Admin — Payroll management (§7.2 frontend gap). Set/update each driver's pay rate,
 // log one-off adjustments, and — added 2026-08-27 — see what's owed since they were last
@@ -22,6 +36,32 @@ export function PayrollPage() {
     () => new Map((rulesQuery.data ?? []).map((r) => [r.driver_id, r])),
     [rulesQuery.data],
   )
+
+  const payrollCsvRows: PayrollCsvRow[] = useMemo(
+    () => (driversQuery.data ?? []).map((driver) => ({ driver, rule: rulesByDriver.get(driver.id) ?? null })),
+    [driversQuery.data, rulesByDriver],
+  )
+
+  // CSV import (2026-08-28): matched by driver email, per the task's rule. Reuses
+  // PUT /payroll/rules/:driverId, which is already upsert-by-design (ON CONFLICT DO UPDATE)
+  // — no separate create/update branching needed here, unlike Drivers/Fleet/Students.
+  async function handleImportRow(row: Record<string, string>) {
+    const email = row['Driver Email']?.trim()
+    if (!email) return { ok: false, message: 'Driver Email is required' }
+    const driver = (driversQuery.data ?? []).find((d) => d.email.toLowerCase() === email.toLowerCase())
+    if (!driver) return { ok: false, message: `No driver found with email ${email}` }
+    const rateTypeInput = row['Rate Type']?.trim().toLowerCase()
+    if (rateTypeInput !== 'hourly' && rateTypeInput !== 'daily') return { ok: false, message: 'Rate Type must be "hourly" or "daily"' }
+    const rateDollarsInput = row['Rate (Dollars)']?.trim()
+    const dollars = Number(rateDollarsInput)
+    if (!rateDollarsInput || Number.isNaN(dollars) || dollars < 0) return { ok: false, message: 'Rate (Dollars) must be a non-negative number' }
+    try {
+      await api.put(`/payroll/rules/${driver.id}`, { rate_type: rateTypeInput, rate_cents: Math.round(dollars * 100) })
+      return { ok: true, message: 'Rate set' }
+    } catch (err) {
+      return { ok: false, message: err instanceof ApiError ? err.message : 'Import failed' }
+    }
+  }
 
   const [rateDriverId, setRateDriverId] = useState('')
   const [rateType, setRateType] = useState<RateType>('hourly')
@@ -92,7 +132,16 @@ export function PayrollPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-headline-lg text-primary">Payroll</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-headline-lg text-primary">Payroll</h1>
+        <CsvImportExport
+          entityName="Payroll"
+          columns={CSV_COLUMNS}
+          rows={payrollCsvRows}
+          onImportRow={handleImportRow}
+          onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['payroll-rules'] })}
+        />
+      </div>
 
       <div className="grid grid-cols-12 gap-5">
         <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">

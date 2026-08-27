@@ -46,3 +46,18 @@ export function formatTimeOfDay(time: string | null): string {
   d.setHours(Number(h), Number(m), 0, 0)
   return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 }
+
+// Dashboard redesign (2026-08-28): the reference mockup had a "Last Sync" column implying
+// live device telemetry this app doesn't have. Relabeled "Last Activity" and backed by a
+// real timestamp (most recent session check-in/check-out) instead — this formatter is just
+// the relative-time display for that real value, not a stand-in for a sync heartbeat.
+export function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const diffMin = Math.round(diffMs / 60_000)
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.round(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  const diffDay = Math.round(diffHr / 24)
+  return `${diffDay}d ago`
+}

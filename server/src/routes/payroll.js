@@ -5,7 +5,9 @@ const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
 const { HttpError } = require('../errors');
-const { upsertRule, listRules, addAdjustment, summary, unpaidSummary, markPaid, listAdjustments } = require('../services/payroll');
+const {
+  upsertRule, listRules, addAdjustment, summary, unpaidSummary, markPaid, listAdjustments, companySummary,
+} = require('../services/payroll');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
@@ -26,6 +28,11 @@ router.get('/rules', companyAdmin, async (req, res, next) => {
 });
 router.post('/adjustments', companyAdmin, async (req, res, next) => {
   try { res.status(201).json(await addAdjustment(req, req.body || {})); } catch (e) { next(e); }
+});
+// Dashboard payroll snippet (2026-08-28): registered before the /:driverId route below so
+// Express doesn't swallow the literal "company" as a driverId param.
+router.get('/summary/company', companyAdmin, async (req, res, next) => {
+  try { res.json(await companySummary(req, { from: req.query.from, to: req.query.to })); } catch (e) { next(e); }
 });
 router.get('/summary/:driverId', async (req, res, next) => {
   try {

@@ -116,4 +116,26 @@ async function listAdjustments(req, driverId) {
   return req.db.findMany('pay_adjustments', { where: { driver_id: driverId }, orderBy: 'work_date' });
 }
 
-module.exports = { upsertRule, listRules, addAdjustment, summary, unpaidSummary, markPaid, listAdjustments };
+// Company-wide payroll snippet for the redesigned Dashboard (2026-08-28): total hours +
+// total pay across every driver with a pay rule, over [from, to]. Reuses summary() per
+// driver rather than duplicating its computation — small driver counts make the per-driver
+// round-trip fine for a dashboard widget, not worth a bespoke aggregate query.
+async function companySummary(req, { from, to } = {}) {
+  const [drivers, rules] = await Promise.all([
+    req.db.findMany('users', { where: { role: 'driver' } }),
+    req.db.findMany('pay_rules', {}),
+  ]);
+  const driverIdsWithRule = new Set(rules.map((r) => r.driver_id));
+
+  let totalMinutes = 0;
+  let totalPayCents = 0;
+  for (const d of drivers) {
+    if (!driverIdsWithRule.has(d.id)) continue;
+    const s = await summary(req, d.id, { from, to });
+    totalMinutes += s.worked_minutes;
+    totalPayCents += s.total_pay_cents;
+  }
+  return { driver_count: drivers.length, total_minutes: totalMinutes, total_pay_cents: totalPayCents };
+}
+
+module.exports = { upsertRule, listRules, addAdjustment, summary, unpaidSummary, markPaid, listAdjustments, companySummary };

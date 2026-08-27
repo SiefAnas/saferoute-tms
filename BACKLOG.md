@@ -7,6 +7,79 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-28 — Search, Dashboard redesign, CSV import/export, collapsible sidebar
+
+Four features in one batch. Part 1 of this task (the student/driver Assignment sync fix)
+had already been completed and shipped in the previous entry before this prompt arrived —
+nothing to redo there.
+
+1. **Typeahead search** (Dashboard): client-side filtering of already-loaded drivers/vans/
+   students, grouped results with counts ("Drivers (4)"), per explicit instruction — no new
+   backend endpoint.
+
+2. **Dashboard redesign**, adapted from Anas's reference mockup rather than cloned. Two
+   things in the reference had no real backing data and needed an honest substitute:
+   - "Last Sync" (implies live device telemetry) -> **"Last Activity"**, backed by each
+     driver's most recent real session check-in/check-out timestamp.
+   - "Recent Alerts" (mockup example: "VAN-2001 - Speeding", telemetry that doesn't exist)
+     -> real alerts derived from actual data: a driver checked in unusually long ago
+     (>10h) and still hasn't checked out. **ASSUMPTION, flagged**: no other "alert" concept
+     exists yet in this app; this was the one honest real signal available.
+   - "Fleet Summary" is just the real fleet count — there's no operational/maintenance
+     status field on vans to split "operational" from anything else.
+   - "Late/Absent Today" is the real hook flagged back when Skip Pickup / Mark Absent were
+     built — new `GET /dashboard/absent-today` (services/dashboard.js) reads today's
+     `pickup_skips` + `pickup_no_shows`, resets daily by construction (both tables keyed by
+     calendar date), no acknowledged/cleared state, per instruction to keep it simple.
+   - "Payroll Summary" snippet is a new `GET /payroll/summary/company` (current calendar
+     week, Monday-Sunday) — reuses the existing per-driver `summary()` rather than
+     duplicating its computation.
+   **Real bug caught while testing**: `getAbsentToday`'s sort crashed because `pg` returns
+   `timestamptz` columns as JS `Date` objects, not strings — `.localeCompare` doesn't exist
+   on a `Date`. Fixed before it shipped (normalize to ISO strings first).
+
+3. **CSV import/export**, wired into Drivers, Fleet, Students, Parents, and Payroll. Built
+   one reusable piece first (`client/src/lib/csv.ts` + `components/CsvImportExport.tsx`),
+   per instruction, rather than repeating the logic five times. Added `papaparse` as a new
+   dependency — deliberate, not incidental: real spreadsheets exported from Excel/Sheets
+   routinely have quoted commas, embedded newlines, and escaped quotes, which a hand-rolled
+   `split(',')` parser would silently corrupt on real user data. Export always doubles as
+   the import template (same columns either way). Import is per-row upsert with individual
+   success/failure reporting, matched by the task's own stated keys:
+   - **Drivers/Parents** (email): existing row -> `PATCH /users/:id` (this naturally
+     enforces creator-only edit — a CSV row for an account this admin didn't create fails
+     with that same 403, not a silent bypass); no match -> `POST /users`, which needs a
+     real password since there's no forced-reset flow (a Password column in the
+     export/template, always blank on export since we never store/return plaintext).
+   - **Fleet** (license plate): existing plate -> `PATCH /vans/:id`; no match -> `POST /vans`.
+   - **Payroll** (driver email): reuses `PUT /payroll/rules/:driverId`, already
+     upsert-by-design (`ON CONFLICT DO UPDATE`) — no create/update branching needed.
+   - **Students**: **CREATE-ONLY**, an explicit exception. **ASSUMPTION, flagged**: unlike
+     people (email) and vans (plate), students have no reliable natural key —
+     `full_name` alone risks silently overwriting the *wrong* student on a name collision.
+     Rather than guess at a compound key, every student CSV row always inserts new; bulk
+     *updating* existing students isn't supported via CSV. School is matched by name
+     against the company's already-known schools (from `GET /schools`) — a row naming an
+     unknown school fails with a clear message rather than guessing or creating a
+     placeholder. Driver/van assignment isn't set via CSV either (no safe way to name that
+     pairing per-row in bulk) — assign those afterward via the form.
+
+4. **Collapsible sidebar**: clicking the truck icon toggles it. **ASSUMPTION, flagged**: the
+   task said clicking it "hides it if open, shows it again if clicked again" taken
+   literally — but a fully-hidden sidebar would hide the truck icon too, with no way to
+   bring it back. Kept a slim always-visible icon rail (just the toggle button); everything
+   else (title, nav labels, logout text) hides/shows with it.
+
+**Verification**: `npx tsc -b`, lint, and `npm run build` (production bundle) all clean.
+Full backend suite: **257/257 passing** across 12 suites (new `12-dashboard.test.cjs`).
+Live-verified end-to-end against the real dev DB: search returned correct grouped counts
+for a live query; the collapsible sidebar toggled correctly (an initial check read a stale
+DOM snapshot before React's re-render committed — re-verified and confirmed working); CSV
+export produced a real, correctly-formatted file from live driver data; CSV import was
+verified as a genuine round-trip — updated Marcus Rodriguez's phone number via a real
+uploaded CSV file, confirmed the change landed in the real database, then reverted it
+immediately after.
+
 ## 2026-08-27 (latest still) — Fixed the student/van standalone driver tags, for real this time
 
 Follow-up on the previous entry's own flagged assumption: Anas confirmed he wanted the two

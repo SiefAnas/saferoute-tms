@@ -7,7 +7,22 @@ import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { StatusBadge } from '../../components/StatusBadge'
 import { EditAccountModal } from '../../components/EditAccountModal'
+import { CsvImportExport } from '../../components/CsvImportExport'
+import type { CsvColumn } from '../../lib/csv'
 import type { DriverSession, PublicUser } from '../../types/api'
+
+const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
+  { key: 'full_name', header: 'Full Name' },
+  { key: 'email', header: 'Email' },
+  { key: 'phone', header: 'Phone' },
+  { key: 'address', header: 'Address' },
+  { key: 'license_number', header: 'License Number' },
+  // Never exported — we don't store/return plaintext passwords. Present in the template
+  // so a row for a NEW driver has somewhere to put one; left blank on an existing driver's
+  // row leaves their password unchanged on re-import.
+  { key: 'password', header: 'Password', value: () => '' },
+  { key: 'is_active', header: 'Active', value: (d) => (d.is_active ? 'true' : 'false') },
+]
 
 // Driver management — split out from the Company Admin Dashboard so drivers get their own
 // page (nav restructuring per Anas's request). Carries over the "Live Driver Status" table
@@ -67,6 +82,46 @@ export function DriversPage() {
     addDriver.mutate()
   }
 
+  // CSV import (2026-08-28): upsert by email, per the task's own matching rule for "people".
+  // Existing driver -> PATCH /users/:id (naturally enforces creator-only edit — a row for a
+  // driver this admin didn't create fails with that same 403 message, not a silent bypass).
+  // No match -> POST /users, requires Full Name + Password (a brand-new account needs a
+  // real password to log in with, same as the one-by-one Add Driver form).
+  async function handleImportRow(row: Record<string, string>) {
+    const email = row['Email']?.trim()
+    if (!email) return { ok: false, message: 'Email is required' }
+    const fullName = row['Full Name']?.trim()
+    const phone = row['Phone']?.trim()
+    const address = row['Address']?.trim()
+    const license = row['License Number']?.trim()
+    const password = row['Password']?.trim()
+    const activeRaw = row['Active']?.trim().toLowerCase()
+
+    const existing = (driversQuery.data ?? []).find((d) => d.email.toLowerCase() === email.toLowerCase())
+    try {
+      if (existing) {
+        const patch: Record<string, unknown> = {}
+        if (fullName) patch.full_name = fullName
+        if (phone) patch.phone = phone
+        if (address) patch.address = address
+        if (license) patch.license_number = license
+        if (password) patch.password = password
+        if (activeRaw) patch.is_active = ['true', '1', 'yes'].includes(activeRaw)
+        if (Object.keys(patch).length === 0) return { ok: true, message: 'No changes' }
+        await api.patch(`/users/${existing.id}`, patch)
+        return { ok: true, message: 'Updated' }
+      }
+      if (!fullName) return { ok: false, message: 'Full Name is required for a new driver' }
+      if (!password) return { ok: false, message: 'Password is required for a new driver' }
+      await api.post('/users', {
+        role: 'driver', fullName, email, phone: phone || undefined, address: address || undefined, licenseNumber: license || undefined, password,
+      })
+      return { ok: true, message: 'Created' }
+    } catch (err) {
+      return { ok: false, message: err instanceof ApiError ? err.message : 'Import failed' }
+    }
+  }
+
   const driverRows = useMemo(() => {
     const sessions = sessionsQuery.data ?? []
     return (driversQuery.data ?? []).map((driver) => {
@@ -82,7 +137,16 @@ export function DriversPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-headline-lg text-primary">Drivers</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-headline-lg text-primary">Drivers</h1>
+        <CsvImportExport
+          entityName="Drivers"
+          columns={CSV_COLUMNS}
+          rows={driversQuery.data ?? []}
+          onImportRow={handleImportRow}
+          onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['users', 'driver'] })}
+        />
+      </div>
 
       <div className="grid grid-cols-12 gap-5">
         <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">

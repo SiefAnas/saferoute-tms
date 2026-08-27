@@ -330,3 +330,19 @@ export interface SchoolSummary {
   id: string
   name: string
 }
+
+// GET /dashboard/absent-today — today's real skip/no-show signals (2026-08-28 Dashboard
+// redesign), resets daily since both source tables are keyed by calendar date.
+export interface AbsentTodayEntry {
+  student_id: string
+  student_name: string
+  type: 'parent_skipped' | 'driver_no_show'
+  at: string
+}
+
+// GET /payroll/summary/company — company-wide payroll snippet for the Dashboard.
+export interface CompanyPayrollSummary {
+  driver_count: number
+  total_minutes: number
+  total_pay_cents: number
+}
