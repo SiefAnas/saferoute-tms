@@ -7,6 +7,39 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-27 (even later) — Parent Dashboard restyled from a real Stitch reference
+
+Mid-turn, Anas sent an actual Stitch HTML export (unlike the two earlier "attached
+screenshot" mentions that never came through) with explicit direction: adapt it, don't
+clone it, and ask if anything's unclear. Asked 4 clarifying questions before touching
+styling (map hero, fake ETA number, multi-student layout, nav structure) since guessing
+wrong on a from-reference visual redesign wastes real effort. Answers:
+
+1. **Map hero**: keep as a static/decorative placeholder for now — Anas explicitly framed
+   live GPS as a V2 item for the whole app, not just this page. Built as a pure-CSS grid
+   pattern + a decorative pulsing bus marker (no external map imagery hotlinked from the
+   Stitch export's own placeholder photo URLs, which aren't ours to embed).
+2. **"5 mins away" ETA**: Anas explicitly said keep the fake number for now, note it for V2
+   once real GPS exists. Done — `StatusCard` only shows it when status is "In Transit",
+   clearly code-commented as a fixed placeholder, not derived from anything real.
+3. **Multiple students**: tab/pill switcher (his choice) — one student's full view at a
+   time, replacing the earlier stacked-sections approach.
+4. **Nav structure**: build the reference's own top-bar + bottom-tab-bar shell (his choice),
+   not the shared `AdminLayout` sidebar every other role uses. New `ParentLayout.tsx`,
+   parent-only. Tabs are real destinations only (Students, Profile) — did not copy the
+   reference's "Route"/"Incidents" tabs since those aren't real features in this app.
+
+Everything real stayed real and unchanged: vehicle info, driver contact, trip timeline
+(restyled to the reference's vertical-line/checkmark language, not its data). "Skip Today's
+Pickup" relabeled "Report Absence" to match the reference's wording — same backend logic.
+New `ParentProfilePage.tsx` for the Profile tab (read-only, matches the earlier mockup's
+profile section).
+
+**Verification**: `npx tsc -b` and lint clean. Live-verified: student tab switcher, Profile
+tab navigation, and all real data (Emma's real vehicle/driver/timeline, Liam's real "no
+assignment" fallback) confirmed working end-to-end against the real dummy parent account.
+No backend changes this pass.
+
 ## 2026-08-27 (latest) — Mockup removed, real Parent Dashboard built out, dummy account added
 
 Anas caught that `/mockup/parent-dashboard` was live and unauthenticated on the public
