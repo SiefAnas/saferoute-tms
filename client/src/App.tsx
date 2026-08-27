@@ -3,6 +3,7 @@ import { useAuth } from './lib/auth'
 import { ROLE_HOME } from './lib/roleHome'
 import { ProtectedRoute } from './routes/ProtectedRoute'
 import { AdminLayout } from './layouts/AdminLayout'
+import { ParentLayout } from './layouts/ParentLayout'
 import { LoginPage } from './pages/login/LoginPage'
 import { RegisterPage } from './pages/register/RegisterPage'
 import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
@@ -19,6 +20,7 @@ import { StaffAccessPage } from './pages/school-admin/StaffAccessPage'
 import { SchoolProfilePage } from './pages/school-admin/SchoolProfilePage'
 import { SchoolStaffDashboard } from './pages/school-staff/SchoolStaffDashboard'
 import { ParentHomePage } from './pages/parent/ParentHomePage'
+import { ParentProfilePage } from './pages/parent/ParentProfilePage'
 
 // Order per Anas's explicit request: dashboard, driver, fleet, students, parents,
 // assignments, payroll.
@@ -38,7 +40,6 @@ const SCHOOL_ADMIN_NAV = [
 ]
 const SCHOOL_STAFF_NAV = [{ to: '/school-staff', label: 'My Students', icon: 'groups', end: true }]
 const DRIVER_NAV = [{ to: '/driver', label: 'Dashboard', icon: 'dashboard', end: true }]
-const PARENT_NAV = [{ to: '/parent', label: 'My Students', icon: 'groups', end: true }]
 
 function RootRedirect() {
   const { user, token } = useAuth()
@@ -86,8 +87,9 @@ function App() {
       </Route>
 
       <Route element={<ProtectedRoute roles={['parent']} />}>
-        <Route element={<AdminLayout title="Parent Portal" navItems={PARENT_NAV} />}>
+        <Route element={<ParentLayout />}>
           <Route path="/parent" element={<ParentHomePage />} />
+          <Route path="/parent/profile" element={<ParentProfilePage />} />
         </Route>
       </Route>
 
