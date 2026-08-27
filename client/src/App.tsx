@@ -19,7 +19,6 @@ import { StaffAccessPage } from './pages/school-admin/StaffAccessPage'
 import { SchoolProfilePage } from './pages/school-admin/SchoolProfilePage'
 import { SchoolStaffDashboard } from './pages/school-staff/SchoolStaffDashboard'
 import { ParentHomePage } from './pages/parent/ParentHomePage'
-import { ParentDashboardMockup } from './mockups/parent-dashboard/ParentDashboardMockup'
 
 // Order per Anas's explicit request: dashboard, driver, fleet, students, parents,
 // assignments, payroll.
@@ -53,11 +52,6 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
-      {/* TEMPORARY design-review route, unauthenticated on purpose — remove before any real
-          deploy. Renders the isolated Parent Dashboard mockup (fake data except the Skip
-          button) so it can be viewed without wiring it into real auth/data. See
-          client/src/mockups/parent-dashboard/ParentDashboardMockup.tsx. */}
-      <Route path="/mockup/parent-dashboard" element={<ParentDashboardMockup />} />
 
       <Route element={<ProtectedRoute roles={['driver']} />}>
         <Route element={<AdminLayout title="Driver Portal" navItems={DRIVER_NAV} />}>
