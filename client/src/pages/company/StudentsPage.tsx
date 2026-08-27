@@ -5,7 +5,7 @@ import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { StateAutocomplete } from '../../components/StateAutocomplete'
-import type { SchoolSummary, Student, StudentContact } from '../../types/api'
+import type { PublicUser, SchoolSummary, Student, StudentContact } from '../../types/api'
 
 interface GuardianRow {
   name: string
@@ -33,17 +33,24 @@ export function CompanyStudentsPage() {
   const queryClient = useQueryClient()
   const studentsQuery = useQuery({ queryKey: ['students'], queryFn: () => api.get<Student[]>('/students') })
   const schoolsQuery = useQuery({ queryKey: ['schools'], queryFn: () => api.get<SchoolSummary[]>('/schools') })
+  const driversQuery = useQuery({ queryKey: ['users', 'driver'], queryFn: () => api.get<PublicUser[]>('/users?role=driver') })
 
   const schoolName = useMemo(() => {
     const map = new Map((schoolsQuery.data ?? []).map((s) => [s.id, s.name]))
     return (id: string) => map.get(id) ?? '—'
   }, [schoolsQuery.data])
 
+  const driverName = useMemo(() => {
+    const map = new Map((driversQuery.data ?? []).map((d) => [d.id, d.full_name]))
+    return (id: string | null) => (id ? (map.get(id) ?? null) : null)
+  }, [driversQuery.data])
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [fullName, setFullName] = useState('')
   const [grade, setGrade] = useState('')
   const [age, setAge] = useState('')
   const [guardians, setGuardians] = useState<GuardianRow[]>([{ name: '', phone: '' }])
+  const [driverUserId, setDriverUserId] = useState('')
   const [streetAddress, setStreetAddress] = useState('')
   const [city, setCity] = useState('')
   const [stateCode, setStateCode] = useState('')
@@ -65,6 +72,7 @@ export function CompanyStudentsPage() {
     setGrade('')
     setAge('')
     setGuardians([{ name: '', phone: '' }])
+    setDriverUserId('')
     setStreetAddress('')
     setCity('')
     setStateCode('')
@@ -81,6 +89,7 @@ export function CompanyStudentsPage() {
     setGrade(s.grade ?? '')
     setAge(s.age ? String(s.age) : '')
     setGuardians([{ name: s.parent_name ?? '', phone: s.parent_phone ?? '' }])
+    setDriverUserId(s.driver_user_id ?? '')
     setStreetAddress(s.street_address ?? '')
     setCity(s.city ?? '')
     setStateCode(s.state ?? '')
@@ -124,6 +133,7 @@ export function CompanyStudentsPage() {
         age: Number(age),
         parent_name: primary.name,
         parent_phone: primary.phone,
+        driver_user_id: driverUserId || undefined,
         street_address: streetAddress,
         city,
         state: stateCode,
@@ -158,6 +168,7 @@ export function CompanyStudentsPage() {
         age: Number(age),
         parent_name: guardians[0].name,
         parent_phone: guardians[0].phone,
+        driver_user_id: driverUserId || null,
         street_address: streetAddress,
         city,
         state: stateCode,
@@ -197,7 +208,7 @@ export function CompanyStudentsPage() {
             <table className="w-full text-left">
               <thead className="border-b border-outline-variant bg-surface-container-low">
                 <tr>
-                  {['Name', 'Grade', 'School', 'Address', 'Parent/Guardian', 'Phone', ''].map((h) => (
+                  {['Name', 'Grade', 'School', 'Address', 'Parent/Guardian', 'Phone', 'Driver', ''].map((h) => (
                     <th key={h} className="px-6 py-2 text-label-md text-secondary uppercase">
                       {h}
                     </th>
@@ -207,7 +218,7 @@ export function CompanyStudentsPage() {
               <tbody className="divide-y divide-outline-variant">
                 {(studentsQuery.data ?? []).length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-4 text-body-md text-on-surface-variant">
+                    <td colSpan={8} className="px-6 py-4 text-body-md text-on-surface-variant">
                       {studentsQuery.isLoading ? 'Loading…' : 'No students yet.'}
                     </td>
                   </tr>
@@ -224,6 +235,9 @@ export function CompanyStudentsPage() {
                       </td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '—'}</td>
                       <td className="px-6 py-3 text-data-mono text-secondary">{s.parent_phone ?? '—'}</td>
+                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
+                        {driversQuery.isLoading ? '…' : (driverName(s.driver_user_id) ?? '(no driver assigned)')}
+                      </td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
                         <button
                           type="button"
@@ -239,7 +253,7 @@ export function CompanyStudentsPage() {
                     </tr>,
                     expandedContactsId === s.id ? (
                       <tr key={`${s.id}-contacts`}>
-                        <td colSpan={7} className="bg-surface-container-low px-6 py-4">
+                        <td colSpan={8} className="bg-surface-container-low px-6 py-4">
                           <ContactsPanel studentId={s.id} />
                         </td>
                       </tr>
@@ -299,6 +313,15 @@ export function CompanyStudentsPage() {
                 </button>
               )}
             </div>
+
+            <select value={driverUserId} onChange={(e) => setDriverUserId(e.target.value)} className={selectClass}>
+              <option value="">Assign a driver (optional)…</option>
+              {(driversQuery.data ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name}
+                </option>
+              ))}
+            </select>
 
             <Input required placeholder="Street address" value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} />
             <div className="flex gap-2">

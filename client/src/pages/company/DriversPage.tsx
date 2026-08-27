@@ -27,6 +27,8 @@ export function DriversPage() {
   const [driverName, setDriverName] = useState('')
   const [driverEmail, setDriverEmail] = useState('')
   const [driverPhone, setDriverPhone] = useState('')
+  const [driverAddress, setDriverAddress] = useState('')
+  const [driverLicense, setDriverLicense] = useState('')
   const [driverPassword, setDriverPassword] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
   const [addMsg, setAddMsg] = useState<string | null>(null)
@@ -34,11 +36,15 @@ export function DriversPage() {
 
   const addDriver = useMutation({
     mutationFn: () =>
+      // The password set here is real and permanent — the driver signs in with it directly,
+      // no forced first-login change (none exists anywhere in this app).
       api.post<PublicUser>('/users', {
         role: 'driver',
         fullName: driverName,
         email: driverEmail,
         phone: driverPhone || undefined,
+        address: driverAddress || undefined,
+        licenseNumber: driverLicense || undefined,
         password: driverPassword,
       }),
     onSuccess: (driver) => {
@@ -47,6 +53,8 @@ export function DriversPage() {
       setDriverName('')
       setDriverEmail('')
       setDriverPhone('')
+      setDriverAddress('')
+      setDriverLicense('')
       setDriverPassword('')
     },
     onError: (err) => setAddError(err instanceof ApiError ? err.message : 'Could not create driver account.'),
@@ -153,11 +161,17 @@ export function DriversPage() {
               onChange={(e) => setDriverEmail(e.target.value)}
             />
             <Input placeholder="Phone (optional)" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
+            <Input placeholder="Address (optional)" value={driverAddress} onChange={(e) => setDriverAddress(e.target.value)} />
+            <Input
+              placeholder="Driver license number (optional)"
+              value={driverLicense}
+              onChange={(e) => setDriverLicense(e.target.value)}
+            />
             <Input
               required
               type="password"
               minLength={8}
-              placeholder="Temporary password"
+              placeholder="Password"
               value={driverPassword}
               onChange={(e) => setDriverPassword(e.target.value)}
             />

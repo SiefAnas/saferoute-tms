@@ -21,7 +21,7 @@ const CREATABLE = {
 };
 
 async function createUser(req, body = {}) {
-  const { email, password, fullName, role, phone } = body;
+  const { email, password, fullName, role, phone, address, licenseNumber } = body;
   const allowed = CREATABLE[req.auth.role];
   if (!allowed) throw new HttpError(403, 'your role cannot create users');
   if (!email || !password || !fullName || !role) {
@@ -31,10 +31,16 @@ async function createUser(req, body = {}) {
   assertPasswordStrength(password);
   assertMaxLength(fullName, 200, 'fullName');
   assertMaxLength(phone, 30, 'phone');
+  assertMaxLength(address, 300, 'address');
+  assertMaxLength(licenseNumber, 50, 'licenseNumber');
   if (!allowed.includes(role)) {
     throw new HttpError(403, `a ${req.auth.role} cannot create a ${role}`);
   }
 
+  // Passwords set here are real, permanent passwords the admin chooses — not a temporary
+  // value forcing a first-login reset. No such forced-change mechanism exists anywhere in
+  // this app (checked: no must_change_password-style flag on users, no reset-on-first-login
+  // code path); the account can just log in with whatever's set here.
   const password_hash = await hashPassword(password);
   try {
     // req.db stamps the caller's tenant column (company_id or school_id); the DB CHECK
@@ -47,6 +53,8 @@ async function createUser(req, body = {}) {
       full_name: fullName,
       role,
       phone: phone ?? null,
+      address: address ?? null,
+      license_number: licenseNumber ?? null,
       email_verified_at: new Date().toISOString(),
       created_by_user_id: req.auth.userId,
     });
@@ -89,7 +97,7 @@ async function updateUser(req, id, body = {}) {
   }
 
   const patch = {};
-  for (const key of ['full_name', 'phone', 'is_active']) {
+  for (const key of ['full_name', 'phone', 'is_active', 'address', 'license_number']) {
     if (body[key] !== undefined) patch[key] = body[key];
   }
   if (body.email !== undefined) {
@@ -103,6 +111,8 @@ async function updateUser(req, id, body = {}) {
   if (Object.keys(patch).length === 0) throw new HttpError(400, 'nothing to update');
   assertMaxLength(patch.full_name, 200, 'full_name');
   assertMaxLength(patch.phone, 30, 'phone');
+  assertMaxLength(patch.address, 300, 'address');
+  assertMaxLength(patch.license_number, 50, 'license_number');
 
   try {
     const row = await req.db.update('users', id, patch);
@@ -122,6 +132,8 @@ function publicUser(u) {
     full_name: u.full_name,
     role: u.role,
     phone: u.phone,
+    address: u.address ?? null,
+    license_number: u.license_number ?? null,
     is_active: u.is_active,
     email_verified_at: u.email_verified_at,
     created_by_user_id: u.created_by_user_id ?? null,

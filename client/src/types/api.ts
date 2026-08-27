@@ -49,6 +49,8 @@ export interface PublicUser {
   full_name: string
   role: Role
   phone: string | null
+  address: string | null
+  license_number: string | null
   is_active: boolean
   email_verified_at: string | null
   created_by_user_id: string | null
@@ -127,6 +129,10 @@ export interface Student {
   state: string | null
   zip_code: string | null
   notes: string | null
+  // Optional direct "assigned driver" tag (2026-08-27) — mirrors vans.driver_user_id's
+  // pattern. Separate from the operational `assignments` table, which stays authoritative
+  // for actual scheduling/payroll/the parent dashboard's vehicle+driver display.
+  driver_user_id: string | null
   created_at: string
   updated_at: string
   // Only present on GET /students/:id (merged server-side), not on the list endpoint.

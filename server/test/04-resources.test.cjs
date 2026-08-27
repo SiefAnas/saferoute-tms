@@ -67,6 +67,16 @@ async function main() {
       const driverA = await login('drvA@co.com');
       eq('driver GET /users -> 403 (not an admin)', (await api('GET', '/users', driverA)).status, 403);
 
+      const mkWithFields = await api('POST', '/users', adminA, {
+        role: 'driver', email: 'drvC@co.com', fullName: 'Driver C', password: PW,
+        address: '9 Oak St', licenseNumber: 'D1234567',
+      });
+      (mkWithFields.status === 201 && mkWithFields.body.address === '9 Oak St' && mkWithFields.body.license_number === 'D1234567')
+        ? ok('driver create accepts address/licenseNumber') : bad(`driver create fields: ${JSON.stringify(mkWithFields.body)}`);
+      const editFields = await api('PATCH', `/users/${mkWithFields.body.id}`, adminA, { address: '10 Pine St', license_number: 'D7654321' });
+      (editFields.body.address === '10 Pine St' && editFields.body.license_number === 'D7654321')
+        ? ok('driver edit updates address/license_number') : bad(`driver edit fields: ${JSON.stringify(editFields.body)}`);
+
       console.log('\n--- Vans ---');
       const vanFields = { brand: 'Ford', model: 'Transit', year: 2022, color: 'White' };
       const vanA = (await api('POST', '/vans', adminA, { license_plate: 'AAA-1', ...vanFields, driver_user_id: driverAId })).body;
@@ -101,6 +111,21 @@ async function main() {
         400
       );
       eq('student with bogus school_id -> 400 (FK)', (await api('POST', '/students', adminA, { full_name: 'x', school_id: '00000000-0000-0000-0000-000000000000', ...studentFields })).status, 400);
+
+      const stuWithDriver = await api('POST', '/students', adminA, {
+        full_name: 'Kid With Driver', school_id: S.id, ...studentFields, driver_user_id: driverAId,
+      });
+      (stuWithDriver.status === 201 && stuWithDriver.body.driver_user_id === driverAId)
+        ? ok('student create accepts optional driver_user_id') : bad(`student w/ driver: ${JSON.stringify(stuWithDriver.body)}`);
+      const stuNoDriver = await api('POST', '/students', adminA, { full_name: 'Kid No Driver', school_id: S.id, ...studentFields });
+      stuNoDriver.body.driver_user_id === null ? ok('student create omits driver -> driver_user_id null') : bad('driver_user_id not null when omitted');
+      eq(
+        'student create with driver from another company -> 400 (cross-company FK)',
+        (await api('POST', '/students', adminA, { full_name: 'x', school_id: S.id, ...studentFields, driver_user_id: driverBId })).status,
+        400
+      );
+      const patchDriver = await api('PATCH', `/students/${stuNoDriver.body.id}`, adminA, { driver_user_id: driverAId });
+      patchDriver.body.driver_user_id === driverAId ? ok('student patch assigns a driver') : bad(`patch driver: ${JSON.stringify(patchDriver.body)}`);
       const schoolView = await api('GET', '/students', schoolAdmin);
       schoolView.body.some((s) => s.id === stu.body.id) ? ok('school_admin sees the student via school scope (cross-side read)') : bad('school_admin cannot see its student');
       (await api('GET', '/students', adminB)).body.length === 0 ? ok('admin B sees no Company A students (isolation)') : bad('student leaked to Company B');

@@ -21,6 +21,8 @@ export function EditAccountModal({
   const queryClient = useQueryClient()
   const [fullName, setFullName] = useState(user.full_name)
   const [phone, setPhone] = useState(user.phone ?? '')
+  const [address, setAddress] = useState(user.address ?? '')
+  const [licenseNumber, setLicenseNumber] = useState(user.license_number ?? '')
   const [email, setEmail] = useState(user.email)
   const [isActive, setIsActive] = useState(user.is_active)
   const [password, setPassword] = useState('')
@@ -31,6 +33,7 @@ export function EditAccountModal({
       api.patch<PublicUser>(`/users/${user.id}`, {
         full_name: fullName,
         phone: phone || null,
+        ...(user.role === 'driver' ? { address: address || null, license_number: licenseNumber || null } : {}),
         email,
         is_active: isActive,
         ...(password ? { password } : {}),
@@ -61,6 +64,16 @@ export function EditAccountModal({
         <Input required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
         <Input required type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        {user.role === 'driver' && (
+          <>
+            <Input placeholder="Address (optional)" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <Input
+              placeholder="Driver license number (optional)"
+              value={licenseNumber}
+              onChange={(e) => setLicenseNumber(e.target.value)}
+            />
+          </>
+        )}
         <Input
           type="password"
           minLength={8}

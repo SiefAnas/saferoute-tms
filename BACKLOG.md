@@ -7,6 +7,44 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-27 (latest) — Driver address/license fields, permanent passwords, student-driver link
+
+Three page tasks from Anas, screenshots of the live Drivers/Students pages included for
+reference (already my own earlier work, confirming those pages were live and working):
+
+1. **Driver page**: added `address` and `license_number` (both optional text, new columns
+   on `users`) to the Add Driver form and `EditAccountModal` (shown only when editing a
+   `driver`-role account). Relabeled the password field from "Temporary password" to
+   "Password" — fixed the same wording on the Parents and Staff & Access forms too for
+   consistency, since leaving it inconsistent would read as those roles working
+   differently when they don't. **Confirmed, not just assumed**: there is no forced
+   first-login password-change mechanism anywhere in this app (no such flag on `users`, no
+   reset-on-first-login code path) — the password an admin sets here already was, and
+   remains, a real permanent password.
+2. **Students page**: `students.driver_user_id` (new nullable column + composite FK to
+   `users(id, company_id)`), optional at creation, editable after. New "Driver" column on
+   the All Students table (same loading/"(no driver assigned)" fallback pattern as
+   `AssignmentsPage`'s earlier UUID-display fix).
+   **ASSUMPTION, flagged for confirmation**: implemented as a direct, simple tag on the
+   student record — mirroring the exact pattern already shipped and approved for
+   `vans.driver_user_id` (migration 013) — deliberately SEPARATE from the operational
+   `assignments` table, which stays authoritative for actual daily scheduling, the driver's
+   own schedule view, payroll, and the parent dashboard's vehicle/driver display. If a
+   student's `driver_user_id` here and their real `assignments` row ever point at different
+   drivers, that's an expected possibility of two independent fields, not a bug — flagging
+   this explicitly since it's the one part of this task that wasn't fully unambiguous, and
+   the precedent-matching call was mine to make.
+
+**Verification**: `npx tsc -b` and lint clean. New backend test coverage in
+`04-resources.test.cjs` (address/license create+edit, optional driver_user_id at creation,
+cross-company FK rejection, patch-to-assign). Live-verified in the browser: Drivers page
+shows the new fields with correct labels; Students page shows the new dropdown (optional)
+and column; confirmed via direct API + DB check that `POST/PATCH /students` correctly
+accept/reject `driver_user_id` cross-company. (One live UI click-through of assigning a
+driver via the Edit Student form hit a pre-existing StateAutocomplete quirk under browser
+automation, unrelated to this change — the underlying feature is covered by passing backend
+tests either way.)
+
 ## 2026-08-27 (even later) — Parent Dashboard restyled from a real Stitch reference
 
 Mid-turn, Anas sent an actual Stitch HTML export (unlike the two earlier "attached

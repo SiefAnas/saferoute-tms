@@ -69,7 +69,7 @@ export function StaffAccessPage() {
           <form className="flex flex-col gap-3" onSubmit={handleCreateStaff}>
             <Input required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
             <Input required type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <Input required type="password" minLength={8} placeholder="Temporary password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input required type="password" minLength={8} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
             <Button type="submit" disabled={createStaff.isPending}>
               {createStaff.isPending ? 'Creating…' : 'Add Staff Member'}
             </Button>
