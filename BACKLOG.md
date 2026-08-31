@@ -7,6 +7,59 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-08-31 — Full dummy data reset
+
+Anas asked for a complete clean-slate reset of all dummy/test accounts and a fresh,
+richer synthetic dataset. Two things flagged and confirmed before touching anything,
+since this is destructive/irreversible on the shared live dev DB:
+
+1. **What actually counts as "dummy data."** He named `admin@3bees.test` specifically to
+   double-check. Investigation turned up something he *didn't* ask about that mattered
+   more: `anassief1@gmail.com` (his own real email), `company_admin` of an otherwise-empty
+   company called "DMO1," created 2026-07-19 — doesn't match the `.test`/seed-name
+   convention at all. Flagged it explicitly rather than assuming either way. Confirmed:
+   delete everything, no exceptions — DMO1, all of `3bees`/Willow Creek (`.test` convention,
+   built up entirely through prior test/demo sessions per this file's own history, not a
+   real customer), `Zehan@willowcreek.edu`, and `parent1@dummy.edu` ("SamaCrazy," his own
+   earlier manual test of the Parents page) all confirmed for deletion.
+2. **A real schema conflict in the requested parent-link cases.** One required case was
+   "one parent linked to 2 kids at 2 different schools served by 2 different companies" —
+   structurally impossible: `parent_students`' own composite FKs (added when the table was
+   built) require the parent and the linked student to share one `company_id`; a parent
+   tenant-scoped to Company A cannot link to a Company B student, full stop. Flagged with
+   three concrete options (relax the case / change the schema to support cross-company
+   parent links / skip the case) rather than silently substituting something. Anas chose:
+   relax to "2 kids, 2 different schools, same company" — still exercises the multi-school
+   spirit, no schema change.
+
+**What was built**: `server/scripts/seed-dummy-data.js`, a real, reviewable, rerunnable
+seed script (not a one-off throwaway) — 3 companies x 2 drivers (6), 3 schools x 6 staff
+(18) + a school_admin each, 18 students (6/school, split across each school's two serving
+companies so cross-company/cross-school relationships actually exist), 6 vans, 18 real
+Assignments (student+driver+van, not the old standalone tags), and 25 parent accounts
+covering all three required relationship cases (verified directly against the DB, not just
+assumed from the script's logic): David Sullivan -> Ava Sullivan (Maple Grove/Co1) + Ryan
+Sullivan (Oakwood/Co1) for the relaxed multi-school case; Susan Park -> Lily + Wyatt Park
+(same school) for the simple 2-kids case; Benjamin Osei <- Angela Osei, Kevin Osei, and
+Priscilla Adeyemi (three independent parent accounts) for the 3-guardians case. Every one
+of the 18 students has at least one linked guardian (verified with a `LEFT JOIN ... IS
+NULL` query, not eyeballed). Email pattern exactly as specified
+(`driver1@company1.com`, `staff1@school1.com`, `parent1@company1.com`, ...), all on the
+same `Secret123!` password already used throughout this project's dummy data. Company
+admin/school admin accounts (not itemized in the task) got the same email convention
+extended for consistency (`admin@company1.com` / `admin@school1.com`) — the one small
+assumption in an otherwise fully-specified task.
+
+**Verification**: full backend suite still passing against isolated embedded-Postgres
+instances (untouched by this — data-only change, no application code modified). Live-
+verified directly against the reset dev DB across three different real role logins:
+company_admin (`admin@company1.com` — Live Driver Status, Fleet, Students all show the new
+real data, including both Sullivan children on the Students table), the Students/Parents
+pages (David Sullivan's link panel shows both Ava and Ryan marked "Linked," everyone else
+"Not linked"), and a parent login (`parent1@company3.com`, one of Benjamin Osei's three
+guardians) — real dashboard showing his real assigned van (VAN-301, Ford Transit 2022,
+white) and real school (Riverside Middle School).
+
 ## 2026-08-28 — Search, Dashboard redesign, CSV import/export, collapsible sidebar
 
 Four features in one batch. Part 1 of this task (the student/driver Assignment sync fix)
