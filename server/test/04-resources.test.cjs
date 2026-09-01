@@ -49,17 +49,20 @@ async function main() {
       console.log('--- Placeholder creation (role/side gated) ---');
       const ph = await api('POST', '/placeholders/school', adminA, { name: 'Maple Elementary', address: '1 Rd' });
       (ph.status === 201 && ph.body.claim_status === 'unclaimed') ? ok('company_admin creates school placeholder (unclaimed)') : bad(`ph create: ${ph.status}`);
-      eq('school_admin creates company placeholder -> 201', (await api('POST', '/placeholders/company', schoolAdmin, { name: 'Acme Bus' })).status, 201);
-      eq('company_admin creating a company placeholder -> 403 (wrong side)', (await api('POST', '/placeholders/company', adminA, { name: 'x' })).status, 403);
+      eq('school_admin creates company placeholder -> 201', (await api('POST', '/placeholders/company', schoolAdmin, { name: 'Acme Bus', address: '1 Bus Way' })).status, 201);
+      eq('company_admin creating a company placeholder -> 403 (wrong side)', (await api('POST', '/placeholders/company', adminA, { name: 'x', address: 'y' })).status, 403);
+      eq('placeholder missing address -> 400 (now required)', (await api('POST', '/placeholders/company', schoolAdmin, { name: 'No Address Co' })).status, 400);
 
       console.log('\n--- Users ---');
-      const mk = await api('POST', '/users', adminA, { role: 'driver', email: 'drvA@co.com', fullName: 'Driver A', password: PW });
+      const driverBasics = { phone: '555-0100', address: '1 Main St', licenseNumber: 'D0000001' };
+      const mk = await api('POST', '/users', adminA, { role: 'driver', email: 'drvA@co.com', fullName: 'Driver A', password: PW, ...driverBasics });
       (mk.status === 201 && mk.body.email_verified_at) ? ok('company_admin creates driver, email_verified stamped (invariant)') : bad(`user create: ${mk.status} ${JSON.stringify(mk.body)}`);
       const driverAId = mk.body.id;
       eq('company_admin creating a school_staff -> 403 (cross-side role)', (await api('POST', '/users', adminA, { role: 'school_staff', email: 'x@x.com', fullName: 'x', password: PW })).status, 403);
-      eq('school_admin creating a driver -> 403 (cross-side role, reverse direction, BACKLOG #3)', (await api('POST', '/users', schoolAdmin, { role: 'driver', email: 'y@y.com', fullName: 'y', password: PW })).status, 403);
-      eq('duplicate email -> 409', (await api('POST', '/users', adminA, { role: 'driver', email: 'drvA@co.com', fullName: 'dup', password: PW })).status, 409);
-      const drvB = await api('POST', '/users', adminB, { role: 'driver', email: 'drvB@co.com', fullName: 'Driver B', password: PW });
+      eq('school_admin creating a driver -> 403 (cross-side role, reverse direction, BACKLOG #3)', (await api('POST', '/users', schoolAdmin, { role: 'driver', email: 'y@y.com', fullName: 'y', password: PW, ...driverBasics })).status, 403);
+      eq('driver create missing phone -> 400 (now required)', (await api('POST', '/users', adminA, { role: 'driver', email: 'nophone@co.com', fullName: 'No Phone', password: PW, address: '1 St', licenseNumber: 'D1' })).status, 400);
+      eq('duplicate email -> 409', (await api('POST', '/users', adminA, { role: 'driver', email: 'drvA@co.com', fullName: 'dup', password: PW, ...driverBasics })).status, 409);
+      const drvB = await api('POST', '/users', adminB, { role: 'driver', email: 'drvB@co.com', fullName: 'Driver B', password: PW, ...driverBasics });
       const driverBId = drvB.body.id;
       const listA = await api('GET', '/users', adminA);
       listA.body.every((u) => u.email !== 'drvB@co.com') ? ok('admin A user list excludes Company B users (isolation)') : bad('admin A saw a Company B user');
@@ -69,7 +72,7 @@ async function main() {
 
       const mkWithFields = await api('POST', '/users', adminA, {
         role: 'driver', email: 'drvC@co.com', fullName: 'Driver C', password: PW,
-        address: '9 Oak St', licenseNumber: 'D1234567',
+        phone: '555-0102', address: '9 Oak St', licenseNumber: 'D1234567',
       });
       (mkWithFields.status === 201 && mkWithFields.body.address === '9 Oak St' && mkWithFields.body.license_number === 'D1234567')
         ? ok('driver create accepts address/licenseNumber') : bad(`driver create fields: ${JSON.stringify(mkWithFields.body)}`);
@@ -95,7 +98,7 @@ async function main() {
       console.log('\n--- Students (dual-tenant) ---');
       const studentFields = {
         grade: '3', age: 8, parent_name: 'Pat Guardian', parent_phone: '555-1000',
-        street_address: '5 Elm St', city: 'Boston', state: 'ma', zip_code: '02139',
+        street_address: '5 Elm St', city: 'Boston', state: 'ma', zip_code: '02139', notes: 'None',
       };
       const stu = await api('POST', '/students', adminA, { full_name: 'Kid One', school_id: S.id, ...studentFields });
       stu.status === 201 && stu.body.company_id === A.id && stu.body.school_id === S.id ? ok('company_admin creates student (company stamped, school linked)') : bad(`student create: ${stu.status}`);
@@ -106,6 +109,11 @@ async function main() {
         400
       );
       eq('student with bogus school_id -> 400 (FK)', (await api('POST', '/students', adminA, { full_name: 'x', school_id: '00000000-0000-0000-0000-000000000000', ...studentFields })).status, 400);
+      eq(
+        'student create missing notes -> 400 (§7 item 6: no more optional fields)',
+        (await api('POST', '/students', adminA, { full_name: 'x', school_id: S.id, ...studentFields, notes: undefined })).status,
+        400
+      );
 
       // Rework (2026-08-27, later): students no longer have a standalone driver_user_id
       // field at all — sending one is simply ignored (not a validation error), since "which
@@ -199,6 +207,40 @@ async function main() {
       })).status, 400);
       const patchTime = await api('PATCH', `/assignments/${asg2.body.id}`, adminA, { pickup_time: '08:00' });
       eq('assignment patch updates pickup_time -> 200', patchTime.status, 200);
+
+      console.log('\n--- Assignments: real conflict enforcement (open-ended asg2 = driverA/vanA/stu, from 2020-01-01) ---');
+      const vanA2 = (await api('POST', '/vans', adminA, { license_plate: 'AAA-2', ...vanFields })).body;
+      const driverCId = mkWithFields.body.id;
+      eq(
+        'same driver+van, different student, overlapping dates -> 201 (normal multi-student route, not a conflict)',
+        (await api('POST', '/assignments', adminA, { student_id: stu2.body.id, driver_user_id: driverAId, van_id: vanA.id, start_date: '2026-07-01' })).status,
+        201
+      );
+      eq(
+        'different driver, same van, overlapping dates -> 409 (van already has a different driver)',
+        (await api('POST', '/assignments', adminA, { student_id: stu2.body.id, driver_user_id: driverCId, van_id: vanA.id, start_date: '2026-07-01' })).status,
+        409
+      );
+      eq(
+        'different driver, same student, overlapping dates -> 409 (student already has a different driver)',
+        (await api('POST', '/assignments', adminA, { student_id: stu.body.id, driver_user_id: driverCId, van_id: vanA2.id, start_date: '2026-07-01' })).status,
+        409
+      );
+      eq(
+        'same driver, different van, overlapping dates -> 409 (driver already driving a different van)',
+        (await api('POST', '/assignments', adminA, { student_id: stu2.body.id, driver_user_id: driverAId, van_id: vanA2.id, start_date: '2026-07-01' })).status,
+        409
+      );
+      const nonOverlapping = await api('POST', '/assignments', adminA, {
+        student_id: stu.body.id, driver_user_id: driverCId, van_id: vanA2.id, start_date: '2010-01-01', end_date: '2010-06-01',
+      });
+      eq('different driver+van but a date range before asg2 even starts -> 201 (no overlap, no conflict)', nonOverlapping.status, 201);
+      eq(
+        'PATCH moving a van onto a driver who already drives a different van in that range -> 409',
+        (await api('PATCH', `/assignments/${nonOverlapping.body.id}`, adminA, { driver_user_id: driverAId, start_date: '2026-08-01', end_date: null })).status,
+        409
+      );
+      eq('DELETE the just-created probe assignments so they do not affect later suites', (await api('DELETE', `/assignments/${nonOverlapping.body.id}`, adminA)).status, 204);
 
       console.log('\n--- GET /schedule/today (no override yet) ---');
       const today1 = await api('GET', '/schedule/today', driverA);

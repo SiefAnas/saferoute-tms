@@ -105,7 +105,7 @@ async function main() {
         403
       );
 
-      const mkDriverX = await api('POST', '/users', tA1, { role: 'driver', email: 'driverx@co.com', fullName: 'Driver X', password: PW });
+      const mkDriverX = await api('POST', '/users', tA1, { role: 'driver', email: 'driverx@co.com', fullName: 'Driver X', password: PW, phone: '555-0200', address: '2 Oak St', licenseNumber: 'D2000002' });
       const driverXId = mkDriverX.body.id;
 
       console.log('\n--- Creator-only edit ---');
@@ -137,7 +137,7 @@ async function main() {
       // Required fields per the Students page task (2026-08-27) — see server/src/routes/students.js.
       const studentFields = {
         grade: '3', age: 8, parent_name: 'Pat Guardian', parent_phone: '555-1000',
-        street_address: '5 Elm St', city: 'Boston', state: 'MA', zip_code: '02139',
+        street_address: '5 Elm St', city: 'Boston', state: 'MA', zip_code: '02139', notes: 'None',
       };
       const stuEligible = (await api('POST', '/students', tA1, { full_name: 'Elig Kid', school_id: S.id, ...studentFields })).body;
       const stuIneligible = (await api('POST', '/students', tA1, { full_name: 'Inelig Kid', school_id: S.id, ...studentFields })).body;

@@ -5,6 +5,7 @@ import { isAssignmentActiveToday } from '../../lib/format'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
+import { Modal } from '../../components/Modal'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import type { CsvColumn } from '../../lib/csv'
 import type { Assignment, PublicUser, Van } from '../../types/api'
@@ -62,6 +63,7 @@ export function VansPage() {
   const [year, setYear] = useState('')
   const [color, setColor] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
+  const [showModal, setShowModal] = useState(false)
 
   function resetForm() {
     setEditingId(null)
@@ -71,6 +73,12 @@ export function VansPage() {
     setYear('')
     setColor('')
     setFormError(null)
+    setShowModal(false)
+  }
+
+  function startAdd() {
+    resetForm()
+    setShowModal(true)
   }
 
   function startEdit(van: Van) {
@@ -81,6 +89,7 @@ export function VansPage() {
     setYear(String(van.year))
     setColor(van.color ?? '')
     setFormError(null)
+    setShowModal(true)
   }
 
   const invalidateVans = () => queryClient.invalidateQueries({ queryKey: ['vans'] })
@@ -173,17 +182,23 @@ export function VansPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-headline-lg text-primary">Fleet</h1>
-        <CsvImportExport
-          entityName="Fleet"
-          columns={CSV_COLUMNS}
-          rows={vansQuery.data ?? []}
-          onImportRow={handleImportRow}
-          onImportComplete={invalidateVans}
-        />
+        <div className="flex items-center gap-3">
+          <CsvImportExport
+            entityName="Fleet"
+            columns={CSV_COLUMNS}
+            rows={vansQuery.data ?? []}
+            onImportRow={handleImportRow}
+            onImportComplete={invalidateVans}
+          />
+          <Button type="button" onClick={startAdd} className="flex items-center gap-1">
+            <span className="material-symbols-outlined !text-[18px]">local_shipping</span>
+            Add a Van
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">
+        <Card className="col-span-12 flex flex-col overflow-hidden">
           <CardHeader>
             <h2 className="text-title-lg text-primary">Vans</h2>
           </CardHeader>
@@ -251,21 +266,19 @@ export function VansPage() {
             </table>
           </div>
         </Card>
+      </div>
 
-        <Card className="col-span-12 p-5 lg:col-span-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-title-lg text-primary">{editingId ? 'Edit Van' : 'Add a Van'}</h2>
-            <span className="material-symbols-outlined text-secondary">local_shipping</span>
-          </div>
+      {showModal && (
+        <Modal title={editingId ? 'Edit Van' : 'Add a Van'} onClose={resetForm}>
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-            <Input required placeholder="License plate" value={licensePlate} onChange={(e) => setLicensePlate(e.target.value)} />
+            <Input required placeholder="License plate (e.g. AAA-1234)" value={licensePlate} onChange={(e) => setLicensePlate(e.target.value)} />
             <div className="flex gap-2">
               <Input required placeholder="Brand (e.g. Ford)" value={brand} onChange={(e) => setBrand(e.target.value)} />
               <Input required placeholder="Model (e.g. Transit SE)" value={model} onChange={(e) => setModel(e.target.value)} />
             </div>
             <div className="flex gap-2">
-              <Input required type="number" placeholder="Year" value={year} onChange={(e) => setYear(e.target.value)} />
-              <Input required placeholder="Color" value={color} onChange={(e) => setColor(e.target.value)} />
+              <Input required type="number" placeholder="Year (e.g. 2022)" value={year} onChange={(e) => setYear(e.target.value)} />
+              <Input required placeholder="Color (e.g. White)" value={color} onChange={(e) => setColor(e.target.value)} />
             </div>
             <p className="text-label-md text-on-surface-variant">
               To assign a driver to this van, create or edit an Assignment on the Assignments page — "Driver" above
@@ -275,11 +288,9 @@ export function VansPage() {
               <Button type="submit" variant="secondary" disabled={saving} className="flex-1">
                 {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Van'}
               </Button>
-              {editingId && (
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancel
-                </Button>
-              )}
+              <Button type="button" variant="outline" onClick={resetForm}>
+                Cancel
+              </Button>
             </div>
             {formError && (
               <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
@@ -287,8 +298,8 @@ export function VansPage() {
               </p>
             )}
           </form>
-        </Card>
-      </div>
+        </Modal>
+      )}
     </div>
   )
 }

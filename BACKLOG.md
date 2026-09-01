@@ -7,6 +7,104 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-09-01 — Add-form modals, assignment conflict enforcement, contact links, required fields, password rules
+
+Seven-item UI/logic batch from live screenshots.
+
+1. **"Add a..." forms → modal**, applied consistently to Students, Drivers, Fleet, Parents,
+   School Staff, and school_admin's "Add a Company" — all previously permanent side-Card
+   forms, now a `Modal` triggered by a button with an icon, closing on submit/cancel.
+   `EditAccountModal` was already modal-based, untouched structurally.
+
+2. **Students table column order** → Student, Driver, School, Grade, then the existing
+   Address/Parent-Guardian/Phone columns.
+
+3. **Real assignment-conflict enforcement** (the highest-risk item — new business logic on
+   the core table). Three rules, one shared overlap-conflict check: a van can't be driven by
+   two different drivers over overlapping date ranges; a student can't be assigned to two
+   different drivers over overlapping ranges; a driver can't be recorded driving two
+   different vans over overlapping ranges (this is what makes "the van must be the one the
+   driver is actually driving" enforceable — a driver's *other* overlapping rows are the
+   source of truth for their van). `server/src/services/assignmentConflicts.js`, wired into
+   both `POST`/`PATCH /assignments`, checked BEFORE the FK-existence check so a foreign
+   van/student/driver id still gets its existing 400 rather than a spurious 409. Client-side
+   mirror (`client/src/lib/assignmentRules.ts`) live-filters the pickers on both the
+   Assignments page and the Students page's driver+van quick-assign: picking a driver
+   auto-locks the van to whichever one they're already driving (or narrows the choices if
+   not), and narrows the student list to exclude students already on a different driver.
+   Backend is the actual authority — verified independently via a direct fetch bypassing the
+   UI filtering entirely (assigning an already-assigned student to a different driver on the
+   same van → 409, not 201). New test coverage in `04-resources.test.cjs` (7 cases: all 3
+   conflict rules, the "same driver+van, different student" non-conflict, a non-overlapping
+   date range succeeding, and a PATCH-triggered conflict).
+
+4. **Drivers table**: phone (as a `tel:` link) under the name instead of email.
+
+5. **Global click-to-call / click-to-copy (phone) and click-to-email / click-to-copy
+   (email)** — new `client/src/components/ContactLink.tsx`, a small popover (Call/Copy or
+   Email/Copy) replacing every plain phone/email display found across the app: Drivers,
+   Students (both company and school_admin views + contacts panels), Parents, Staff & Access,
+   Driver Dashboard (parent contact, school detail, additional contacts), School Staff
+   Dashboard (driver contact, parent contact), Parent Profile, and the admin sidebar's own
+   email. Left two spots deliberately unconverted: the Parent Home page's driver
+   "Contact {name}" button (already a dedicated, more prominent call CTA — swapping it for
+   the generic menu would be a downgrade, not an upgrade) and CSV export column
+   values/search-matching logic (not a rendered display).
+
+6. **All "(optional)" fields removed, made required, with hint placeholders**: driver
+   phone/address/license (Add Driver form, `EditAccountModal`), student notes, "New school"
+   address, and company/school placeholder address — client (`required` attr + descriptive
+   placeholder) and server (`server/src/routes/students.js`, `server/src/services/users.js`,
+   `server/src/services/placeholders.js`) both updated. **Two deliberate exceptions, not
+   swept in**: `EditAccountModal`'s password field (blank = keep current password — making
+   it required would break "don't force a password change" as a concept, not just add
+   friction) and Students' driver+van assignment picker (structurally paired-optional by
+   design — a student can legitimately exist with no assignment yet, same as the table
+   already shows "(no driver assigned)"; this isn't a plain data field, it's a relationship
+   to a separate table). Backend test fixtures updated everywhere the new requirements would
+   otherwise break existing test rows (driver creation now needs phone/address/license in
+   `04-resources.test.cjs`/`09-parent-and-permissions.test.cjs`, student creation now needs
+   notes in all three suites that create one, placeholder creation now needs address).
+   **Live data backfill**: the 6 already-seeded drivers and 18 already-seeded students
+   predated this rule and had real NULLs — backfilled via a new, re-runnable, idempotent
+   script (`server/scripts/backfill-required-fields.js`, `COALESCE`-guarded so it only fills
+   actual NULLs, never overwrites a real value) using the same values `seed-dummy-data.js`
+   would generate for a fresh seed, so the two stay consistent.
+
+7. **Password fields everywhere**: eye-icon show/hide, `PasswordStrengthMeter`, and a
+   strength-rules hint applied to every password-*setting* field app-wide (`DriversPage`,
+   `ParentsPage`, `StaffAccessPage`, `EditAccountModal`) — `RegisterPage` already had this
+   pattern from an earlier task, only its hint text needed the "a number" addition. Backend
+   `assertPasswordStrength` (`server/src/validate.js`) now also requires a digit, matching
+   the new hint text everywhere — this single shared function is what every password-setting
+   code path (signup, admin-created accounts, account edits) already routes through, so one
+   change enforces it everywhere at once. The existing seed password `Secret123!` already
+   satisfies the new rule (contains "123"), so no reseed was needed for that. Login's own
+   password field intentionally untouched beyond the eye icon it already had — strength
+   rules/meter don't apply to *entering* an existing password, only to *setting* one.
+
+**Verification**: full backend suite — all 12 suites passing (embedded Postgres, isolated;
+`04-resources.test.cjs` alone at 81/81 including the new conflict-rule cases), `tsc -b`,
+lint, and `vite build` all clean. Live-verified against the real dev
+server + the same Neon DB the whole project uses: modal open/close on Drivers/Students/
+Vans/Parents/Staff/"Add a Company"; the assignment picker's live van-lock and student-
+narrowing (picking a driver correctly locked the van field and narrowed the student list to
+only that driver's own students); a weak password rejected by the live API with the new
+digit-inclusive message; a real driver created end-to-end through the modal with all new
+required fields; the conflict rule confirmed authoritative server-side via a raw fetch that
+bypassed the UI's own filtering (still got 409); click-to-call/copy and click-to-email/copy
+dropdowns opening correctly without disturbing a parent/staff row's own selection state
+(the row-select `<button>` had to become a `<div role="button">` for two of these lists —
+`ContactLink` renders its own `<button>`, and a `<button>` can't validly nest inside
+another). Test-only artifacts (one live-created driver account) cleaned up after
+verification.
+
+**Minor pre-existing issue noticed in passing, not fixed** (out of scope for this batch):
+`assignments.js`'s FK-error mapping only catches Postgres code `23503` (foreign key
+violation) — a syntactically invalid id (not a real UUID at all) throws a different code and
+surfaces as a raw 500 instead of a 400. Not reachable through the actual UI (selects always
+send real ids), only found by directly hand-crafting an API call during verification.
+
 ## 2026-08-31 — Full dummy data reset
 
 Anas asked for a complete clean-slate reset of all dummy/test accounts and a fresh,

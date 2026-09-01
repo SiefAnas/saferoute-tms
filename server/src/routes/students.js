@@ -29,6 +29,10 @@ function readScope(req) {
 // DB NOT NULL) since existing students have real NULLs in several of these — same precedent
 // as the van fleet fields alongside this change.
 //
+// §7 item 6 (2026-09-01): notes is no longer the one exception — every field is required now,
+// including notes (the frontend hints "'None' if there's nothing to flag" so this doesn't
+// force a real note where there isn't one).
+//
 // Rework (2026-08-27, later): students no longer carry their own "assigned driver" field.
 // That standalone tag could silently disagree with the real assignments table — removed per
 // Anas's direction once flagged. "Which driver" for a student is now purely a read-side
@@ -49,12 +53,13 @@ router.post('/', companyAdmin, async (req, res, next) => {
     if (!street_address || !city || !state || !zip_code) {
       throw new HttpError(400, 'street_address, city, state and zip_code are required');
     }
+    if (!notes) throw new HttpError(400, 'notes is required');
     assertValidZip(zip_code);
     const normalizedState = assertValidState(state);
     const row = await req.db.insert('students', {
       full_name, grade, parent_name, parent_phone, school_id, age,
       street_address, city, state: normalizedState, zip_code,
-      notes: notes ?? null,
+      notes,
     });
     res.status(201).json(row);
   } catch (e) { next(mapFk(e)); }

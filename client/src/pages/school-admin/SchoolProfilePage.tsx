@@ -73,29 +73,29 @@ export function SchoolProfilePage() {
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-label-md text-on-surface-variant">Address</label>
-            <Input value={address} onChange={(e) => setAddress(e.target.value)} />
+            <Input required placeholder="Street address" value={address} onChange={(e) => setAddress(e.target.value)} />
           </div>
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-2">
               <label className="text-label-md text-on-surface-variant">Zip code</label>
-              <Input value={zip} onChange={(e) => setZip(e.target.value)} />
+              <Input required placeholder="e.g. 02139" value={zip} onChange={(e) => setZip(e.target.value)} />
             </div>
             <div className="flex flex-1 flex-col gap-2">
               <label className="text-label-md text-on-surface-variant">State</label>
-              <StateAutocomplete value={state} onChange={setState} />
+              <StateAutocomplete required value={state} onChange={setState} />
             </div>
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-label-md text-on-surface-variant">Phone</label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="555-0123" />
+            <Input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="555-0123" />
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-label-md text-on-surface-variant">Operational hours</label>
-            <Input value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Mon-Fri 7am-4pm" />
+            <Input required value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Mon-Fri 7am-4pm" />
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-label-md text-on-surface-variant">Website</label>
-            <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" />
+            <Input required value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" />
           </div>
 
           {error && (

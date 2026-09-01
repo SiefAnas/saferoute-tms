@@ -65,7 +65,7 @@ async function main() {
 
       const stu = (await api('POST', '/students', admin, {
         full_name: 'Kid One', school_id: S.id, grade: '3', age: 8, parent_name: 'Pat Guardian', parent_phone: '555-1000',
-        street_address: '5 Elm St', city: 'Boston', state: 'MA', zip_code: '02139',
+        street_address: '5 Elm St', city: 'Boston', state: 'MA', zip_code: '02139', notes: 'None',
       })).body;
       const asg = (await api('POST', '/assignments', admin, {
         student_id: stu.id, driver_user_id: driver.id, van_id: van.id, start_date: '2020-01-01',

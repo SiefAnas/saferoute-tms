@@ -9,6 +9,7 @@ import { Button } from '../../components/Button'
 import { StatusBadge } from '../../components/StatusBadge'
 import { Modal } from '../../components/Modal'
 import { MonthCalendar } from '../../components/MonthCalendar'
+import { ContactLink } from '../../components/ContactLink'
 import type { DriverSession, Student, SchoolDetail, Trip, TripType, TodayScheduleItem, PaySummary } from '../../types/api'
 
 function monthRange(d: Date) {
@@ -242,7 +243,14 @@ export function DriverDashboard() {
                         </button>
                       </div>
                       <p className="text-body-md text-on-surface-variant">
-                        {item.student.parent_name ?? '—'} {item.student.parent_phone ? `· ${item.student.parent_phone}` : ''}
+                        {item.student.parent_name ?? '—'}{' '}
+                        {item.student.parent_phone ? (
+                          <>
+                            · <ContactLink type="phone" value={item.student.parent_phone} />
+                          </>
+                        ) : (
+                          ''
+                        )}
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1 text-right">
@@ -398,7 +406,9 @@ function StudentDetailModal({ studentId, trips, onClose }: { studentId: string; 
             <dt className="text-on-surface-variant">Parent/Guardian</dt>
             <dd>{s.parent_name ?? '—'}</dd>
             <dt className="text-on-surface-variant">Parent Phone</dt>
-            <dd>{s.parent_phone ?? '—'}</dd>
+            <dd>
+              <ContactLink type="phone" value={s.parent_phone} />
+            </dd>
           </dl>
 
           {s.notes && (
@@ -415,7 +425,14 @@ function StudentDetailModal({ studentId, trips, onClose }: { studentId: string; 
                   <li key={c.id}>
                     {c.name}
                     {c.relationship ? ` (${c.relationship})` : ''}
-                    {c.phone ? ` — ${c.phone}` : ''}
+                    {c.phone ? (
+                      <>
+                        {' — '}
+                        <ContactLink type="phone" value={c.phone} />
+                      </>
+                    ) : (
+                      ''
+                    )}
                   </li>
                 ))}
               </ul>
@@ -448,7 +465,9 @@ function SchoolDetailModal({ schoolId, onClose }: { schoolId: string; onClose: (
             {s.state ?? '—'} {s.zip_code ?? ''}
           </dd>
           <dt className="text-on-surface-variant">Phone</dt>
-          <dd>{s.phone ?? '—'}</dd>
+          <dd>
+            <ContactLink type="phone" value={s.phone} />
+          </dd>
           <dt className="text-on-surface-variant">Hours</dt>
           <dd>{s.hours ?? '—'}</dd>
           <dt className="text-on-surface-variant">Website</dt>

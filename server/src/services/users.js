@@ -36,6 +36,15 @@ async function createUser(req, body = {}) {
   if (!allowed.includes(role)) {
     throw new HttpError(403, `a ${req.auth.role} cannot create a ${role}`);
   }
+  // Phone/address/license used to be optional for a driver account — no longer (§7 item 6):
+  // the Add Driver form collects all three and now marks them required, so enforce the same
+  // here rather than leaving it a client-only rule. Parent/school_staff creation don't collect
+  // these fields at all, so this stays scoped to role === 'driver'.
+  if (role === 'driver') {
+    if (!phone) throw new HttpError(400, 'phone is required for a driver account');
+    if (!address) throw new HttpError(400, 'address is required for a driver account');
+    if (!licenseNumber) throw new HttpError(400, 'licenseNumber is required for a driver account');
+  }
 
   // Passwords set here are real, permanent passwords the admin chooses — not a temporary
   // value forcing a first-login reset. No such forced-change mechanism exists anywhere in

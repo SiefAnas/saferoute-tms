@@ -4,6 +4,7 @@ import { api, ApiError } from '../lib/api'
 import { Modal } from './Modal'
 import { Button } from './Button'
 import { Input } from './Input'
+import { PasswordStrengthMeter } from './PasswordStrengthMeter'
 import type { PublicUser } from '../types/api'
 
 // Shared edit form for an admin-created account (driver/parent/school_staff) — gives the
@@ -26,6 +27,7 @@ export function EditAccountModal({
   const [email, setEmail] = useState(user.email)
   const [isActive, setIsActive] = useState(user.is_active)
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const save = useMutation({
@@ -61,26 +63,44 @@ export function EditAccountModal({
   return (
     <Modal title={`Edit ${user.full_name}`} onClose={onClose}>
       <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-        <Input required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        <Input required type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Input placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <Input required placeholder="Full name (as it should appear in the app)" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        <Input required type="email" placeholder="Email address (used to log in)" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Input required type="tel" placeholder="Phone number (e.g. 555-123-4567)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         {user.role === 'driver' && (
           <>
-            <Input placeholder="Address (optional)" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <Input required placeholder="Home address (street, city, state, zip)" value={address} onChange={(e) => setAddress(e.target.value)} />
             <Input
-              placeholder="Driver license number (optional)"
+              required
+              placeholder="Driver license number"
               value={licenseNumber}
               onChange={(e) => setLicenseNumber(e.target.value)}
             />
           </>
         )}
-        <Input
-          type="password"
-          minLength={8}
-          placeholder="New password (leave blank to keep current)"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="flex flex-col gap-2">
+          <div className="relative flex items-center">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              minLength={8}
+              placeholder="New password (leave blank to keep current)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="pr-12"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              className="absolute right-4 text-outline hover:text-secondary"
+            >
+              <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
+            </button>
+          </div>
+          <p className="text-label-md text-on-surface-variant">
+            Leave blank to keep the current password. To set a new one: at least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character.
+          </p>
+          <PasswordStrengthMeter password={password} />
+        </div>
         <label className="flex cursor-pointer items-center gap-2 text-body-md text-on-surface">
           <input
             type="checkbox"

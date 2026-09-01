@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { ContactLink } from '../components/ContactLink'
 
 interface NavItem {
   to: string
@@ -53,7 +54,9 @@ export function AdminLayout({
           {!collapsed && (
             <div>
               <h1 className="text-headline-md font-bold text-primary">{title}</h1>
-              <p className="text-label-md text-secondary opacity-70">{user?.email}</p>
+              <p className="text-label-md text-secondary opacity-70">
+                <ContactLink type="email" value={user?.email} />
+              </p>
             </div>
           )}
         </div>

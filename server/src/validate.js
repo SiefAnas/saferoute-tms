@@ -15,19 +15,20 @@ function assertValidEmail(email, field = 'email') {
   }
 }
 
-// Length + character-class complexity (registration rework): at least one uppercase,
-// one lowercase, one non-alphanumeric character, matching the frontend's requirements text.
+// Length + character-class complexity: at least one uppercase, one lowercase, one digit,
+// one non-alphanumeric character, matching the frontend's requirements text.
 function assertPasswordStrength(password, field = 'password') {
   if (
     typeof password !== 'string' ||
     password.length < MIN_PASSWORD_LEN ||
     !/[A-Z]/.test(password) ||
     !/[a-z]/.test(password) ||
+    !/[0-9]/.test(password) ||
     !/[^A-Za-z0-9]/.test(password)
   ) {
     throw new HttpError(
       400,
-      `${field} must be at least ${MIN_PASSWORD_LEN} characters and include an uppercase letter, a lowercase letter, and a special character`
+      `${field} must be at least ${MIN_PASSWORD_LEN} characters and include an uppercase letter, a lowercase letter, a number, and a special character`
     );
   }
 }

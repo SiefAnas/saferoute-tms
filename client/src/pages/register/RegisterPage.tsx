@@ -312,7 +312,7 @@ export function RegisterPage() {
               </button>
             </div>
             <p className="text-label-md text-on-surface-variant">
-              Must be at least 8 characters, with an uppercase letter, a lowercase letter, and a special character.
+              Must be at least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character.
             </p>
             <PasswordStrengthMeter password={password} />
           </div>

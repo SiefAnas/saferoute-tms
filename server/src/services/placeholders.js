@@ -24,6 +24,7 @@ async function createPlaceholder(actor, kind, { name, address } = {}) {
     throw new HttpError(403, `only a ${CREATOR_ROLE[kind]} may create a ${kind} placeholder`);
   }
   if (!name) throw new HttpError(400, 'name is required');
+  if (!address) throw new HttpError(400, 'address is required');
   assertMaxLength(name, 200, 'name');
   assertMaxLength(address, 500, 'address');
 

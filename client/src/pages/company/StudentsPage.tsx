@@ -4,8 +4,11 @@ import { api, ApiError } from '../../lib/api'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
+import { Modal } from '../../components/Modal'
+import { ContactLink } from '../../components/ContactLink'
 import { StateAutocomplete } from '../../components/StateAutocomplete'
 import { isAssignmentActiveToday } from '../../lib/format'
+import { driverCurrentVanId, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import type { CsvColumn } from '../../lib/csv'
 import type { Assignment, PublicUser, SchoolSummary, Student, StudentContact, Van } from '../../types/api'
@@ -114,6 +117,16 @@ export function CompanyStudentsPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [formMsg, setFormMsg] = useState<string | null>(null)
   const [expandedContactsId, setExpandedContactsId] = useState<string | null>(null)
+  const [showModal, setShowModal] = useState(false)
+
+  // Live conflict filtering (§7 item 3) — this form always assigns "as of today" (syncAssignment
+  // always opens a new assignment with start_date = today), so the picker narrows against today.
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const range = useMemo(() => ({ start_date: today, end_date: null as string | null }), [today])
+  const assignments = assignmentsQuery.data ?? []
+  const excludeAssignmentId = editingId ? currentAssignmentFor(editingId)?.id : undefined
+  const lockedVanId = driverUserId ? driverCurrentVanId(assignments, driverUserId, range, excludeAssignmentId) : null
+  const excludedVanIds = driverUserId ? vansTakenByOtherDrivers(assignments, driverUserId, range, excludeAssignmentId) : new Set<string>()
 
   function resetForm() {
     setEditingId(null)
@@ -131,6 +144,12 @@ export function CompanyStudentsPage() {
     setNewSchoolName('')
     setNewSchoolAddress('')
     setSchoolId('')
+    setShowModal(false)
+  }
+
+  function startAdd() {
+    resetForm()
+    setShowModal(true)
   }
 
   function startEdit(s: Student) {
@@ -148,6 +167,20 @@ export function CompanyStudentsPage() {
     setZipCode(s.zip_code ?? '')
     setNotes(s.notes ?? '')
     setFormError(null)
+    setShowModal(true)
+  }
+
+  // Only fires on the user actively changing the driver dropdown (not on the programmatic
+  // startEdit population) — locks the van to whatever van that driver is already driving
+  // today, if any, matching the real Assignment picker on the Assignments page.
+  function handleDriverSelect(id: string) {
+    setDriverUserId(id)
+    if (!id) {
+      setVanId('')
+      return
+    }
+    const locked = driverCurrentVanId(assignments, id, range, excludeAssignmentId)
+    setVanId(locked ?? '')
   }
 
   function updateGuardian(index: number, field: keyof GuardianRow, value: string) {
@@ -319,17 +352,23 @@ export function CompanyStudentsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-headline-lg text-primary">Students</h1>
-        <CsvImportExport
-          entityName="Students"
-          columns={csvColumns}
-          rows={studentsQuery.data ?? []}
-          onImportRow={handleImportRow}
-          onImportComplete={invalidateStudents}
-        />
+        <div className="flex items-center gap-3">
+          <CsvImportExport
+            entityName="Students"
+            columns={csvColumns}
+            rows={studentsQuery.data ?? []}
+            onImportRow={handleImportRow}
+            onImportComplete={invalidateStudents}
+          />
+          <Button type="button" onClick={startAdd} className="flex items-center gap-1">
+            <span className="material-symbols-outlined !text-[18px]">person_add</span>
+            Add a Student
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">
+        <Card className="col-span-12 flex flex-col overflow-hidden">
           <CardHeader>
             <h2 className="text-title-lg text-primary">All Students</h2>
           </CardHeader>
@@ -337,7 +376,7 @@ export function CompanyStudentsPage() {
             <table className="w-full text-left">
               <thead className="border-b border-outline-variant bg-surface-container-low">
                 <tr>
-                  {['Name', 'Grade', 'School', 'Address', 'Parent/Guardian', 'Phone', 'Driver', ''].map((h) => (
+                  {['Student', 'Driver', 'School', 'Grade', 'Address', 'Parent/Guardian', 'Phone', ''].map((h) => (
                     <th key={h} className="px-6 py-2 text-label-md text-secondary uppercase">
                       {h}
                     </th>
@@ -355,19 +394,21 @@ export function CompanyStudentsPage() {
                   (studentsQuery.data ?? []).flatMap((s) => [
                     <tr key={s.id} className="hover:bg-surface-container-low">
                       <td className="px-6 py-3 text-body-md font-medium">{s.full_name}</td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {schoolsQuery.isLoading ? '…' : schoolName(s.school_id)}
-                      </td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {s.street_address ? `${s.street_address}, ${s.city}, ${s.state} ${s.zip_code}` : '—'}
-                      </td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '—'}</td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">{s.parent_phone ?? '—'}</td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">
                         {driversQuery.isLoading || assignmentsQuery.isLoading
                           ? '…'
                           : (driverName(currentAssignmentFor(s.id)?.driver_user_id ?? null) ?? '(no driver assigned)')}
+                      </td>
+                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
+                        {schoolsQuery.isLoading ? '…' : schoolName(s.school_id)}
+                      </td>
+                      <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
+                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
+                        {s.street_address ? `${s.street_address}, ${s.city}, ${s.state} ${s.zip_code}` : '—'}
+                      </td>
+                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '—'}</td>
+                      <td className="px-6 py-3 text-data-mono text-secondary">
+                        <ContactLink type="phone" value={s.parent_phone} />
                       </td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
                         <button
@@ -396,13 +437,15 @@ export function CompanyStudentsPage() {
           </div>
         </Card>
 
-        <Card className="col-span-12 p-5 lg:col-span-4">
-          <h2 className="mb-3 text-title-lg text-primary">{editingId ? 'Edit Student' : 'Add a Student'}</h2>
+      </div>
+
+      {showModal && (
+        <Modal title={editingId ? 'Edit Student' : 'Add a Student'} onClose={resetForm}>
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-            <Input required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <Input required placeholder="Full name (as it should appear in the app)" value={fullName} onChange={(e) => setFullName(e.target.value)} />
             <div className="flex gap-2">
-              <Input required placeholder="Grade" value={grade} onChange={(e) => setGrade(e.target.value)} />
-              <Input required type="number" placeholder="Age" value={age} onChange={(e) => setAge(e.target.value)} />
+              <Input required placeholder="Grade (e.g. 3)" value={grade} onChange={(e) => setGrade(e.target.value)} />
+              <Input required type="number" placeholder="Age (years)" value={age} onChange={(e) => setAge(e.target.value)} />
             </div>
 
             <div className="flex flex-col gap-2">
@@ -447,10 +490,11 @@ export function CompanyStudentsPage() {
 
             <div className="flex flex-col gap-1">
               <p className="text-label-md text-on-surface-variant">
-                Assign a driver + van (optional — creates a real Assignment; both required together)
+                Assign a driver + van (optional — creates a real Assignment; both required together). Picking a
+                driver narrows the van to whichever one they're already driving, if any.
               </p>
               <div className="flex gap-2">
-                <select value={driverUserId} onChange={(e) => setDriverUserId(e.target.value)} className={selectClass}>
+                <select value={driverUserId} onChange={(e) => handleDriverSelect(e.target.value)} className={selectClass}>
                   <option value="">Driver…</option>
                   {(driversQuery.data ?? []).map((d) => (
                     <option key={d.id} value={d.id}>
@@ -458,15 +502,22 @@ export function CompanyStudentsPage() {
                     </option>
                   ))}
                 </select>
-                <select value={vanId} onChange={(e) => setVanId(e.target.value)} className={selectClass}>
+                <select value={vanId} onChange={(e) => setVanId(e.target.value)} disabled={!!lockedVanId} className={selectClass}>
                   <option value="">Van…</option>
-                  {(vansQuery.data ?? []).map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.license_plate}
-                    </option>
-                  ))}
+                  {(vansQuery.data ?? [])
+                    .filter((v) => (lockedVanId ? v.id === lockedVanId : !excludedVanIds.has(v.id)))
+                    .map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.license_plate}
+                      </option>
+                    ))}
                 </select>
               </div>
+              {lockedVanId && (
+                <p className="text-label-md text-on-surface-variant">
+                  This driver is currently driving {vansQuery.data?.find((v) => v.id === lockedVanId)?.license_plate ?? 'this van'} — locked to match.
+                </p>
+              )}
             </div>
 
             <Input required placeholder="Street address" value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} />
@@ -479,7 +530,8 @@ export function CompanyStudentsPage() {
             </div>
 
             <textarea
-              placeholder="Notes (optional — e.g. needs help buckling, needs a monitor)"
+              required
+              placeholder="Notes — e.g. needs help buckling, needs a monitor. Enter 'None' if there's nothing to flag."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
@@ -528,7 +580,8 @@ export function CompanyStudentsPage() {
                   <>
                     <Input required placeholder="School name" value={newSchoolName} onChange={(e) => setNewSchoolName(e.target.value)} />
                     <Input
-                      placeholder="School address (optional)"
+                      required
+                      placeholder="School address (street, city, state, zip)"
                       value={newSchoolAddress}
                       onChange={(e) => setNewSchoolAddress(e.target.value)}
                     />
@@ -541,11 +594,9 @@ export function CompanyStudentsPage() {
               <Button type="submit" variant="secondary" disabled={saving} className="flex-1">
                 {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Student'}
               </Button>
-              {editingId && (
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancel
-                </Button>
-              )}
+              <Button type="button" variant="outline" onClick={resetForm}>
+                Cancel
+              </Button>
             </div>
             {formMsg && <p className="text-body-md text-on-surface-variant">{formMsg}</p>}
             {formError && (
@@ -554,8 +605,8 @@ export function CompanyStudentsPage() {
               </p>
             )}
           </form>
-        </Card>
-      </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -603,7 +654,14 @@ function ContactsPanel({ studentId }: { studentId: string }) {
               <span>
                 {c.name}
                 {c.relationship ? ` (${c.relationship})` : ''}
-                {c.phone ? ` — ${c.phone}` : ''}
+                {c.phone ? (
+                  <>
+                    {' — '}
+                    <ContactLink type="phone" value={c.phone} />
+                  </>
+                ) : (
+                  ''
+                )}
               </span>
               <button
                 type="button"

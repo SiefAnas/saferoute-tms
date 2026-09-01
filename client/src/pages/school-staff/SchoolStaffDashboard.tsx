@@ -5,6 +5,7 @@ import { formatClock } from '../../lib/format'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { StatusBadge } from '../../components/StatusBadge'
+import { ContactLink } from '../../components/ContactLink'
 import type { Student, Trip } from '../../types/api'
 
 // School Staff dashboard (§7.4): view granted students, and confirm custody for their
@@ -59,7 +60,14 @@ export function SchoolStaffDashboard() {
                     </h3>
                     <p className="text-body-md text-on-surface-variant">
                       Driver: {trip.driver_name ?? 'Unknown'}
-                      {trip.driver_phone ? ` · ${trip.driver_phone}` : ''}
+                      {trip.driver_phone ? (
+                        <>
+                          {' · '}
+                          <ContactLink type="phone" value={trip.driver_phone} />
+                        </>
+                      ) : (
+                        ''
+                      )}
                     </p>
                     <StatusBadge tone="active" label="Awaiting your confirmation" pulse />
                     {confirm.isError && confirm.variables === trip.id && (
@@ -104,7 +112,14 @@ export function SchoolStaffDashboard() {
                     <td className="px-6 py-3 text-body-md font-medium">{s.full_name}</td>
                     <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
                     <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                      {s.parent_name ?? '—'} {s.parent_phone ? `· ${s.parent_phone}` : ''}
+                      {s.parent_name ?? '—'}{' '}
+                      {s.parent_phone ? (
+                        <>
+                          · <ContactLink type="phone" value={s.parent_phone} />
+                        </>
+                      ) : (
+                        ''
+                      )}
                     </td>
                   </tr>
                 ))}

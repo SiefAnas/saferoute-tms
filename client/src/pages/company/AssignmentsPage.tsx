@@ -1,10 +1,11 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { formatTimeOfDay } from '../../lib/format'
+import { driverCurrentVanId, studentsTakenByOtherDrivers, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
 import type { Assignment, PublicUser, ScheduleOverride, Student, Van } from '../../types/api'
 
 // Company Admin — Assignments (§6 frontend gap): which driver+van is assigned to which
@@ -34,6 +35,22 @@ export function AssignmentsPage() {
   const [pickupTime, setPickupTime] = useState('')
   const [dropoffTime, setDropoffTime] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
+
+  // Live conflict filtering (§7 item 3) — computed against today when no start date is
+  // picked yet, so the picker is already narrowed before the user gets to the date field.
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const range = useMemo(() => ({ start_date: startDate || today, end_date: null }), [startDate, today])
+  const assignments = assignmentsQuery.data ?? []
+  const lockedVanId = driverId ? driverCurrentVanId(assignments, driverId, range) : null
+  const excludedVanIds = driverId ? vansTakenByOtherDrivers(assignments, driverId, range) : new Set<string>()
+  const excludedStudentIds = driverId ? studentsTakenByOtherDrivers(assignments, driverId, range) : new Set<string>()
+
+  // The driver's own current van (if any) is the only valid choice — lock the picker to it
+  // rather than let the admin pick a van that doesn't match reality.
+  useEffect(() => {
+    setVanId(lockedVanId ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedVanId])
 
   const [editingTimesId, setEditingTimesId] = useState<string | null>(null)
   const [editPickup, setEditPickup] = useState('')
@@ -228,11 +245,13 @@ export function AssignmentsPage() {
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
             <select required value={studentId} onChange={(e) => setStudentId(e.target.value)} className={selectClass}>
               <option value="">Select a student…</option>
-              {(studentsQuery.data ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.full_name}
-                </option>
-              ))}
+              {(studentsQuery.data ?? [])
+                .filter((s) => s.id === studentId || !excludedStudentIds.has(s.id))
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.full_name}
+                  </option>
+                ))}
             </select>
             <select required value={driverId} onChange={(e) => setDriverId(e.target.value)} className={selectClass}>
               <option value="">Select a driver…</option>
@@ -242,14 +261,21 @@ export function AssignmentsPage() {
                 </option>
               ))}
             </select>
-            <select required value={vanId} onChange={(e) => setVanId(e.target.value)} className={selectClass}>
+            <select required value={vanId} onChange={(e) => setVanId(e.target.value)} disabled={!!lockedVanId} className={selectClass}>
               <option value="">Select a van…</option>
-              {(vansQuery.data ?? []).map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.license_plate}
-                </option>
-              ))}
+              {(vansQuery.data ?? [])
+                .filter((v) => (lockedVanId ? v.id === lockedVanId : !excludedVanIds.has(v.id)))
+                .map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.license_plate}
+                  </option>
+                ))}
             </select>
+            {lockedVanId && (
+              <p className="text-label-md text-on-surface-variant">
+                This driver is currently driving {vansById.get(lockedVanId)?.license_plate ?? 'this van'} for this date range — the van is locked to match.
+              </p>
+            )}
             <input
               required
               type="date"
@@ -257,6 +283,7 @@ export function AssignmentsPage() {
               onChange={(e) => setStartDate(e.target.value)}
               className="h-14 w-full rounded-lg border border-outline bg-surface-container-lowest px-4 text-body-lg outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20"
             />
+            <p className="text-label-md text-on-surface-variant">Leave the start date blank to use today when narrowing the driver/van/student choices above.</p>
             <div className="flex gap-2">
               <div className="flex flex-1 flex-col gap-1">
                 <label className="text-label-md text-on-surface-variant">Usual pickup time</label>

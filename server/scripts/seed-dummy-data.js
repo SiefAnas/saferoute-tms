@@ -47,11 +47,11 @@ async function main() {
     schools.push(await q("INSERT INTO schools(name,claim_status,claimed_at) VALUES($1,'claimed',now()) RETURNING id", [name]));
   }
 
-  async function createUser({ email, fullName, role, companyId, schoolId }) {
+  async function createUser({ email, fullName, role, companyId, schoolId, phone, address, licenseNumber }) {
     return q(
-      `INSERT INTO users(email,password_hash,full_name,role,company_id,school_id,email_verified_at,is_active)
-       VALUES($1,$2,$3,$4,$5,$6,now(),true) RETURNING id`,
-      [email, hash, fullName, role, companyId ?? null, schoolId ?? null]
+      `INSERT INTO users(email,password_hash,full_name,role,company_id,school_id,phone,address,license_number,email_verified_at,is_active)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),true) RETURNING id`,
+      [email, hash, fullName, role, companyId ?? null, schoolId ?? null, phone ?? null, address ?? null, licenseNumber ?? null]
     );
   }
 
@@ -62,17 +62,27 @@ async function main() {
     ['Sofia Martinez', 'Derek Chan'],
     ['Aisha Bello', 'Tom Bennett'],
   ];
+  const driverStreets = [
+    ['12 Birchwood Ln', '48 Cedar Ct'],
+    ['205 Harbor View Dr', '77 Maple Ridge Rd'],
+    ['9 Willow Creek Way', '331 Foxglove St'],
+  ];
   const drivers = []; // drivers[companyIndex] = [{id}, {id}]
   for (let c = 0; c < 3; c++) {
     const domain = `company${c + 1}.com`;
     await createUser({ email: `admin@${domain}`, fullName: `${companyAdminNames[c]} (Company Admin)`, role: 'company_admin', companyId: companies[c].id });
     const pair = [];
     for (let d = 0; d < 2; d++) {
+      // Driver phone/address/license are required fields now (§7 item 6) — seed realistic
+      // values so the dummy drivers aren't left with blank phone numbers in the UI.
       const u = await createUser({
         email: `driver${d + 1}@${domain}`,
         fullName: `${driverNames[c][d]} (Driver ${d + 1})`,
         role: 'driver',
         companyId: companies[c].id,
+        phone: `555-${2000 + c * 100 + d * 10}`,
+        address: `${driverStreets[c][d]}, Springfield, IL 62701`,
+        licenseNumber: `D${c + 1}${d + 1}${1000000 + c * 1000 + d}`,
       });
       pair.push(u.id);
     }
@@ -151,8 +161,8 @@ async function main() {
     const companyId = companies[companyIdx].id;
     const schoolId = schools[schoolIdx].id;
     const student = await q(
-      `INSERT INTO students(company_id,school_id,full_name,grade,age,parent_name,parent_phone,street_address,city,state,zip_code)
-       VALUES($1,$2,$3,$4,$5,'TBD','555-0000',$6,'Springfield','CA','90210') RETURNING id`,
+      `INSERT INTO students(company_id,school_id,full_name,grade,age,parent_name,parent_phone,street_address,city,state,zip_code,notes)
+       VALUES($1,$2,$3,$4,$5,'TBD','555-0000',$6,'Springfield','CA','90210','None') RETURNING id`,
       [companyId, schoolId, name, grade, age, streetPool[asgCount % streetPool.length]]
     );
     students[name] = { id: student.id, companyId, driverId: drivers[companyIdx][driverIdx], vanId: vans[companyIdx][vanIdx] };

@@ -4,6 +4,8 @@ import { api, ApiError } from '../../lib/api'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
+import { Modal } from '../../components/Modal'
+import { ContactLink } from '../../components/ContactLink'
 import type { Student } from '../../types/api'
 
 // School Admin — Students (§7.3): search/filter by name/grade, plus a Company placeholder
@@ -35,13 +37,15 @@ export function StudentsPage() {
   const [companyName, setCompanyName] = useState('')
   const [companyAddress, setCompanyAddress] = useState('')
   const [companyMsg, setCompanyMsg] = useState<string | null>(null)
+  const [showAddCompanyModal, setShowAddCompanyModal] = useState(false)
   const createCompany = useMutation({
-    mutationFn: () => api.post('/placeholders/company', { name: companyName, address: companyAddress || undefined }),
+    mutationFn: () => api.post('/placeholders/company', { name: companyName, address: companyAddress }),
     onSuccess: () => {
       setCompanyMsg(`Placeholder created for "${companyName}". It'll appear once that company signs up and claims it.`)
       setCompanyName('')
       setCompanyAddress('')
       queryClient.invalidateQueries({ queryKey: ['students'] })
+      setShowAddCompanyModal(false)
     },
     onError: (err) => setCompanyMsg(err instanceof ApiError ? err.message : 'Could not create placeholder.'),
   })
@@ -54,10 +58,16 @@ export function StudentsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-headline-lg text-primary">Students</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-headline-lg text-primary">Students</h1>
+        <Button type="button" onClick={() => setShowAddCompanyModal(true)} className="flex items-center gap-1">
+          <span className="material-symbols-outlined !text-[18px]">add_business</span>
+          Add a Company
+        </Button>
+      </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">
+        <Card className="col-span-12 flex flex-col overflow-hidden">
           <CardHeader className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-title-lg text-primary">All Students</h2>
             <div className="flex gap-2">
@@ -105,7 +115,9 @@ export function StudentsPage() {
                       <td className="px-6 py-3 text-body-md font-medium">{s.full_name}</td>
                       <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '—'}</td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">{s.parent_phone ?? '—'}</td>
+                      <td className="px-6 py-3 text-data-mono text-secondary">
+                        <ContactLink type="phone" value={s.parent_phone} />
+                      </td>
                     </tr>
                   ))
                 )}
@@ -113,23 +125,29 @@ export function StudentsPage() {
             </table>
           </div>
         </Card>
+      </div>
 
-        <Card className="col-span-12 p-5 lg:col-span-4">
-          <h2 className="mb-1 text-title-lg text-primary">Add a Company</h2>
+      {showAddCompanyModal && (
+        <Modal title="Add a Company" onClose={() => setShowAddCompanyModal(false)}>
           <p className="mb-3 text-body-md text-on-surface-variant">
             Not seeing the transportation company you work with? Create a placeholder — once they sign up, they can
             claim it and the relationship shows up automatically through shared students.
           </p>
           <form className="flex flex-col gap-3" onSubmit={handleCreateCompany}>
             <Input required placeholder="Company name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
-            <Input placeholder="Address (optional)" value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} />
-            <Button type="submit" variant="secondary" disabled={createCompany.isPending}>
-              {createCompany.isPending ? 'Creating…' : 'Create Placeholder'}
-            </Button>
+            <Input required placeholder="Address (street, city, state, zip)" value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} />
+            <div className="flex gap-2">
+              <Button type="submit" variant="secondary" disabled={createCompany.isPending} className="flex-1">
+                {createCompany.isPending ? 'Creating…' : 'Create Placeholder'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowAddCompanyModal(false)}>
+                Cancel
+              </Button>
+            </div>
             {companyMsg && <p className="text-body-md text-on-surface-variant">{companyMsg}</p>}
           </form>
-        </Card>
-      </div>
+        </Modal>
+      )}
     </div>
   )
 }

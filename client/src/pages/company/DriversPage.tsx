@@ -8,6 +8,9 @@ import { Input } from '../../components/Input'
 import { StatusBadge } from '../../components/StatusBadge'
 import { EditAccountModal } from '../../components/EditAccountModal'
 import { CsvImportExport } from '../../components/CsvImportExport'
+import { ContactLink } from '../../components/ContactLink'
+import { Modal } from '../../components/Modal'
+import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter'
 import type { CsvColumn } from '../../lib/csv'
 import type { DriverSession, PublicUser } from '../../types/api'
 
@@ -45,9 +48,11 @@ export function DriversPage() {
   const [driverAddress, setDriverAddress] = useState('')
   const [driverLicense, setDriverLicense] = useState('')
   const [driverPassword, setDriverPassword] = useState('')
+  const [showDriverPassword, setShowDriverPassword] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
   const [addMsg, setAddMsg] = useState<string | null>(null)
   const [editUser, setEditUser] = useState<PublicUser | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   const addDriver = useMutation({
     mutationFn: () =>
@@ -71,6 +76,7 @@ export function DriversPage() {
       setDriverAddress('')
       setDriverLicense('')
       setDriverPassword('')
+      setShowAddModal(false)
     },
     onError: (err) => setAddError(err instanceof ApiError ? err.message : 'Could not create driver account.'),
   })
@@ -139,17 +145,23 @@ export function DriversPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-headline-lg text-primary">Drivers</h1>
-        <CsvImportExport
-          entityName="Drivers"
-          columns={CSV_COLUMNS}
-          rows={driversQuery.data ?? []}
-          onImportRow={handleImportRow}
-          onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['users', 'driver'] })}
-        />
+        <div className="flex items-center gap-3">
+          <CsvImportExport
+            entityName="Drivers"
+            columns={CSV_COLUMNS}
+            rows={driversQuery.data ?? []}
+            onImportRow={handleImportRow}
+            onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['users', 'driver'] })}
+          />
+          <Button type="button" onClick={() => setShowAddModal(true)} className="flex items-center gap-1">
+            <span className="material-symbols-outlined !text-[18px]">person_add</span>
+            Add a Driver
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">
+        <Card className="col-span-12 flex flex-col overflow-hidden">
           <CardHeader>
             <h2 className="text-title-lg text-primary">Live Driver Status</h2>
           </CardHeader>
@@ -176,7 +188,9 @@ export function DriversPage() {
                     <tr key={driver.id} className="hover:bg-surface-container-low">
                       <td className="px-6 py-3 text-body-md font-medium">
                         {driver.full_name}
-                        <div className="text-label-md text-on-surface-variant">{driver.email}</div>
+                        <div className="text-label-md text-on-surface-variant">
+                          <ContactLink type="phone" value={driver.phone} />
+                        </div>
                       </td>
                       <td className="px-6 py-3">
                         {open ? (
@@ -210,38 +224,71 @@ export function DriversPage() {
           </div>
         </Card>
 
-        <Card className="col-span-12 p-5 lg:col-span-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-title-lg text-primary">Add Driver</h2>
-            <span className="material-symbols-outlined text-secondary">person_add</span>
-          </div>
+      </div>
+
+      {showAddModal && (
+        <Modal title="Add a Driver" onClose={() => setShowAddModal(false)}>
           <form className="flex flex-col gap-3" onSubmit={handleAdd}>
-            <Input required placeholder="Full name" value={driverName} onChange={(e) => setDriverName(e.target.value)} />
+            <Input required placeholder="Full name (e.g. Jordan Ellis)" value={driverName} onChange={(e) => setDriverName(e.target.value)} />
             <Input
               required
               type="email"
-              placeholder="Email address"
+              placeholder="Email address (used to log in)"
               value={driverEmail}
               onChange={(e) => setDriverEmail(e.target.value)}
             />
-            <Input placeholder="Phone (optional)" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
-            <Input placeholder="Address (optional)" value={driverAddress} onChange={(e) => setDriverAddress(e.target.value)} />
             <Input
-              placeholder="Driver license number (optional)"
-              value={driverLicense}
-              onChange={(e) => setDriverLicense(e.target.value)}
+              required
+              type="tel"
+              placeholder="Phone number (e.g. 555-123-4567)"
+              value={driverPhone}
+              onChange={(e) => setDriverPhone(e.target.value)}
             />
             <Input
               required
-              type="password"
-              minLength={8}
-              placeholder="Password"
-              value={driverPassword}
-              onChange={(e) => setDriverPassword(e.target.value)}
+              placeholder="Home address (street, city, state, zip)"
+              value={driverAddress}
+              onChange={(e) => setDriverAddress(e.target.value)}
             />
-            <Button type="submit" variant="secondary" disabled={addDriver.isPending}>
-              {addDriver.isPending ? 'Creating…' : 'Add Driver'}
-            </Button>
+            <Input
+              required
+              placeholder="Driver license number"
+              value={driverLicense}
+              onChange={(e) => setDriverLicense(e.target.value)}
+            />
+            <div className="flex flex-col gap-2">
+              <div className="relative flex items-center">
+                <Input
+                  required
+                  type={showDriverPassword ? 'text' : 'password'}
+                  minLength={8}
+                  placeholder="Password"
+                  value={driverPassword}
+                  onChange={(e) => setDriverPassword(e.target.value)}
+                  className="pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowDriverPassword((v) => !v)}
+                  aria-label={showDriverPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-4 text-outline hover:text-secondary"
+                >
+                  <span className="material-symbols-outlined">{showDriverPassword ? 'visibility_off' : 'visibility'}</span>
+                </button>
+              </div>
+              <p className="text-label-md text-on-surface-variant">
+                At least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character.
+              </p>
+              <PasswordStrengthMeter password={driverPassword} />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" variant="secondary" disabled={addDriver.isPending} className="flex-1">
+                {addDriver.isPending ? 'Creating…' : 'Add Driver'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>
+                Cancel
+              </Button>
+            </div>
             {addMsg && <p className="text-body-md text-on-surface-variant">{addMsg}</p>}
             {addError && (
               <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
@@ -249,8 +296,8 @@ export function DriversPage() {
               </p>
             )}
           </form>
-        </Card>
-      </div>
+        </Modal>
+      )}
 
       {editUser && (
         <EditAccountModal user={editUser} invalidateKey={['users', 'driver']} onClose={() => setEditUser(null)} />

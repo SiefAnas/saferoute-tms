@@ -8,6 +8,7 @@ const { requireOperable, requireRole, ownerScope } = require('../middleware/auth
 const { HttpError } = require('../errors');
 const { assertValidTime } = require('../validate');
 const { upsertOverride, listOverrides, deleteOverride } = require('../services/schedule');
+const { assertNoConflicts } = require('../services/assignmentConflicts');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
@@ -27,6 +28,18 @@ router.post('/', companyAdmin, async (req, res, next) => {
     }
     if (pickup_time !== undefined && pickup_time !== null) assertValidTime(pickup_time, 'pickup_time');
     if (dropoff_time !== undefined && dropoff_time !== null) assertValidTime(dropoff_time, 'dropoff_time');
+    // Conflict-checking only makes sense against ids that actually belong to this company —
+    // otherwise a foreign van/student/driver id could spuriously "conflict" with a real one
+    // that happens to share another leg, masking what should be the FK 400 below.
+    const belongsToTenant = await Promise.all([
+      req.db.findById('vans', van_id),
+      req.db.findById('students', student_id),
+      req.db.findById('users', driver_user_id),
+    ]);
+    if (belongsToTenant.every(Boolean)) {
+      const others = await req.db.findMany('assignments', {});
+      assertNoConflicts(others, { student_id, driver_user_id, van_id, start_date, end_date: end_date ?? null });
+    }
     const row = await req.db.insert('assignments', {
       student_id, driver_user_id, van_id, start_date, end_date: end_date ?? null,
       pickup_time: pickup_time ?? null, dropoff_time: dropoff_time ?? null,
@@ -57,6 +70,24 @@ router.patch('/:id', companyAdmin, async (req, res, next) => {
     if (Object.keys(patch).length === 0) throw new HttpError(400, 'nothing to update');
     if (patch.pickup_time !== null && patch.pickup_time !== undefined) assertValidTime(patch.pickup_time, 'pickup_time');
     if (patch.dropoff_time !== null && patch.dropoff_time !== undefined) assertValidTime(patch.dropoff_time, 'dropoff_time');
+    const existing = await req.db.findById('assignments', req.params.id, { owner: ownerScope(req, 'assignments') });
+    if (!existing) throw new HttpError(404, 'assignment not found');
+    if (patch.driver_user_id !== undefined || patch.van_id !== undefined || patch.start_date !== undefined || patch.end_date !== undefined) {
+      const belongsToTenant = await Promise.all([
+        patch.van_id !== undefined ? req.db.findById('vans', patch.van_id) : true,
+        patch.driver_user_id !== undefined ? req.db.findById('users', patch.driver_user_id) : true,
+      ]);
+      if (belongsToTenant.every(Boolean)) {
+        const others = (await req.db.findMany('assignments', {})).filter((a) => a.id !== req.params.id);
+        assertNoConflicts(others, {
+          student_id: existing.student_id,
+          driver_user_id: patch.driver_user_id ?? existing.driver_user_id,
+          van_id: patch.van_id ?? existing.van_id,
+          start_date: patch.start_date ?? existing.start_date,
+          end_date: patch.end_date !== undefined ? patch.end_date : existing.end_date,
+        });
+      }
+    }
     const row = await req.db.update('assignments', req.params.id, patch);
     if (!row) throw new HttpError(404, 'assignment not found');
     res.json(row);

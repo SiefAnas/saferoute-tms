@@ -4,6 +4,9 @@ import { api, ApiError } from '../../lib/api'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
+import { Modal } from '../../components/Modal'
+import { ContactLink } from '../../components/ContactLink'
+import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter'
 import type { PublicUser, Student, StaffAccessGrant } from '../../types/api'
 
 // School Admin — Staff & Access (§7.3): create/invite School Staff, and grant/revoke
@@ -20,7 +23,9 @@ export function StaffAccessPage() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
   const createStaff = useMutation({
     mutationFn: () => api.post<PublicUser>('/users', { role: 'school_staff', fullName, email, password }),
     onSuccess: (staff) => {
@@ -29,6 +34,7 @@ export function StaffAccessPage() {
       setEmail('')
       setPassword('')
       setSelectedStaffId(staff.id)
+      setShowAddModal(false)
     },
     onError: (err) => setCreateError(err instanceof ApiError ? err.message : 'Could not create staff account.'),
   })
@@ -61,39 +67,34 @@ export function StaffAccessPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-headline-lg text-primary">Staff & Access</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-headline-lg text-primary">Staff & Access</h1>
+        <Button type="button" onClick={() => setShowAddModal(true)} className="flex items-center gap-1">
+          <span className="material-symbols-outlined !text-[18px]">person_add</span>
+          Add School Staff
+        </Button>
+      </div>
 
       <div className="grid grid-cols-12 gap-5">
         <Card className="col-span-12 p-5 lg:col-span-4">
-          <h2 className="mb-3 text-title-lg text-primary">Add School Staff</h2>
-          <form className="flex flex-col gap-3" onSubmit={handleCreateStaff}>
-            <Input required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            <Input required type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <Input required type="password" minLength={8} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <Button type="submit" disabled={createStaff.isPending}>
-              {createStaff.isPending ? 'Creating…' : 'Add Staff Member'}
-            </Button>
-            {createError && (
-              <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
-                {createError}
-              </p>
-            )}
-          </form>
-
-          <h2 className="mt-6 mb-3 text-title-lg text-primary">Staff</h2>
+          <h2 className="mb-3 text-title-lg text-primary">Staff</h2>
           <ul className="flex flex-col gap-1">
             {(staffQuery.data ?? []).map((s) => (
               <li key={s.id}>
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedStaffId(s.id)}
-                  className={`w-full rounded-lg px-3 py-2 text-left text-body-md transition-colors ${
+                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelectedStaffId(s.id)}
+                  className={`w-full cursor-pointer rounded-lg px-3 py-2 text-left text-body-md transition-colors ${
                     selectedStaffId === s.id ? 'bg-primary-fixed text-on-primary-fixed-variant' : 'hover:bg-surface-container'
                   }`}
                 >
                   {s.full_name}
-                  <span className="ml-2 text-label-md text-on-surface-variant">{s.email}</span>
-                </button>
+                  <span className="ml-2 text-label-md text-on-surface-variant" onClick={(e) => e.stopPropagation()}>
+                    <ContactLink type="email" value={s.email} />
+                  </span>
+                </div>
               </li>
             ))}
             {staffQuery.data?.length === 0 && <p className="px-3 text-body-md text-on-surface-variant">No staff yet.</p>}
@@ -148,6 +149,53 @@ export function StaffAccessPage() {
           )}
         </Card>
       </div>
+
+      {showAddModal && (
+        <Modal title="Add School Staff" onClose={() => setShowAddModal(false)}>
+          <form className="flex flex-col gap-3" onSubmit={handleCreateStaff}>
+            <Input required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <Input required type="email" placeholder="Email address (used to log in)" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <div className="flex flex-col gap-2">
+              <div className="relative flex items-center">
+                <Input
+                  required
+                  type={showPassword ? 'text' : 'password'}
+                  minLength={8}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-4 text-outline hover:text-secondary"
+                >
+                  <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
+                </button>
+              </div>
+              <p className="text-label-md text-on-surface-variant">
+                At least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character.
+              </p>
+              <PasswordStrengthMeter password={password} />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={createStaff.isPending} className="flex-1">
+                {createStaff.isPending ? 'Creating…' : 'Add Staff Member'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>
+                Cancel
+              </Button>
+            </div>
+            {createError && (
+              <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
+                {createError}
+              </p>
+            )}
+          </form>
+        </Modal>
+      )}
     </div>
   )
 }
