@@ -9,9 +9,10 @@ import { ContactLink } from '../../components/ContactLink'
 import { StateAutocomplete } from '../../components/StateAutocomplete'
 import { isAssignmentActiveToday } from '../../lib/format'
 import { driverCurrentVanId, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
+import { findBestParentMatch } from '../../lib/parentMatch'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import type { CsvColumn } from '../../lib/csv'
-import type { Assignment, PublicUser, SchoolSummary, Student, StudentContact, Van } from '../../types/api'
+import type { Assignment, ParentStudentLink, PublicUser, SchoolSummary, Student, StudentContact, Van } from '../../types/api'
 
 
 interface GuardianRow {
@@ -53,6 +54,8 @@ export function CompanyStudentsPage() {
   const driversQuery = useQuery({ queryKey: ['users', 'driver'], queryFn: () => api.get<PublicUser[]>('/users?role=driver') })
   const vansQuery = useQuery({ queryKey: ['vans'], queryFn: () => api.get<Van[]>('/vans') })
   const assignmentsQuery = useQuery({ queryKey: ['assignments'], queryFn: () => api.get<Assignment[]>('/assignments') })
+  const parentsQuery = useQuery({ queryKey: ['users', 'parent'], queryFn: () => api.get<PublicUser[]>('/users?role=parent') })
+  const parentLinksQuery = useQuery({ queryKey: ['parent-access'], queryFn: () => api.get<ParentStudentLink[]>('/parent-access') })
 
   const schoolName = useMemo(() => {
     const map = new Map((schoolsQuery.data ?? []).map((s) => [s.id, s.name]))
@@ -118,6 +121,19 @@ export function CompanyStudentsPage() {
   const [formMsg, setFormMsg] = useState<string | null>(null)
   const [expandedContactsId, setExpandedContactsId] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [matchSuggestion, setMatchSuggestion] = useState<{ student: Student; parent: PublicUser; signals: string[] } | null>(null)
+
+  // Auto-match suggestion (§ auto-match task, 2026-09-01) — run after a student is
+  // created/edited (not live per keystroke, so it only ever fires against a real saved
+  // record). Never auto-links; just surfaces a confirm prompt when a good candidate exists.
+  // See client/src/lib/parentMatch.ts for the matching logic + sensitivity tuning notes.
+  function checkForParentMatch(student: Student) {
+    const alreadyLinkedParentIds = new Set(
+      (parentLinksQuery.data ?? []).filter((l) => l.student_id === student.id).map((l) => l.parent_user_id),
+    )
+    const match = findBestParentMatch(student, parentsQuery.data ?? [], alreadyLinkedParentIds)
+    if (match) setMatchSuggestion({ student, parent: match.parent, signals: match.signals })
+  }
 
   // Live conflict filtering (§7 item 3) — this form always assigns "as of today" (syncAssignment
   // always opens a new assignment with start_date = today), so the picker narrows against today.
@@ -304,6 +320,7 @@ export function CompanyStudentsPage() {
       if (schoolMode === 'new') queryClient.invalidateQueries({ queryKey: ['schools'] })
       setFormMsg(`Added ${student.full_name}.`)
       resetForm()
+      checkForParentMatch(student)
     },
     onError: (err) => setFormError(err instanceof ApiError ? err.message : 'Could not create student.'),
   })
@@ -328,10 +345,11 @@ export function CompanyStudentsPage() {
       await syncAssignment(id, currentAssignmentFor(id))
       return student
     },
-    onSuccess: () => {
+    onSuccess: (student) => {
       invalidateStudents()
       setFormMsg('Changes saved.')
       resetForm()
+      checkForParentMatch(student)
     },
     onError: (err) => setFormError(err instanceof ApiError ? err.message : 'Could not update student.'),
   })
@@ -607,7 +625,111 @@ export function CompanyStudentsPage() {
           </form>
         </Modal>
       )}
+
+      {matchSuggestion && (
+        <ParentMatchModal
+          student={matchSuggestion.student}
+          parent={matchSuggestion.parent}
+          signals={matchSuggestion.signals}
+          onClose={() => setMatchSuggestion(null)}
+        />
+      )}
     </div>
+  )
+}
+
+// Confirmation prompt for an auto-detected parent<->student match (§ auto-match task). Never
+// links anything until the admin explicitly says yes — see checkForParentMatch above for when
+// this fires and client/src/lib/parentMatch.ts for the matching logic itself.
+function ParentMatchModal({
+  student,
+  parent,
+  signals,
+  onClose,
+}: {
+  student: Student
+  parent: PublicUser
+  signals: string[]
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const studentAddress = [student.street_address, student.city, student.state, student.zip_code].filter(Boolean).join(', ')
+  const missingPhone = !parent.phone && Boolean(student.parent_phone)
+  const missingAddress = !parent.address && Boolean(studentAddress)
+  const [fillPhone, setFillPhone] = useState(missingPhone)
+  const [fillAddress, setFillAddress] = useState(missingAddress)
+  const [error, setError] = useState<string | null>(null)
+
+  const confirm = useMutation({
+    mutationFn: async () => {
+      await api.post<ParentStudentLink>('/parent-access', { parent_user_id: parent.id, student_id: student.id })
+      const patch: Record<string, string> = {}
+      if (fillPhone && missingPhone && student.parent_phone) patch.phone = student.parent_phone
+      if (fillAddress && missingAddress && studentAddress) patch.address = studentAddress
+      if (Object.keys(patch).length > 0) await api.patch(`/users/${parent.id}`, patch)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parent-access'] })
+      queryClient.invalidateQueries({ queryKey: ['users', 'parent'] })
+      onClose()
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not link parent.'),
+  })
+
+  return (
+    <Modal title="Possible Parent Match" onClose={onClose}>
+      <div className="flex flex-col gap-3">
+        <p className="text-body-lg text-on-surface">
+          Is <strong>{parent.full_name}</strong> the parent/guardian of <strong>{student.full_name}</strong>?
+        </p>
+        <p className="text-label-md text-on-surface-variant">Matched on: {signals.join(', ')}.</p>
+
+        {(missingPhone || missingAddress) && (
+          <div className="flex flex-col gap-2 rounded-lg border border-outline-variant bg-surface-container p-3">
+            <p className="text-label-md text-on-surface-variant">
+              {parent.full_name}&rsquo;s account is missing info this student form just captured — fill it in too?
+            </p>
+            {missingPhone && (
+              <label className="flex items-center gap-2 text-body-md">
+                <input
+                  type="checkbox"
+                  checked={fillPhone}
+                  onChange={(e) => setFillPhone(e.target.checked)}
+                  className="h-4 w-4 rounded border-outline text-primary focus:ring-primary-container"
+                />
+                Also set phone to {student.parent_phone}
+              </label>
+            )}
+            {missingAddress && (
+              <label className="flex items-center gap-2 text-body-md">
+                <input
+                  type="checkbox"
+                  checked={fillAddress}
+                  onChange={(e) => setFillAddress(e.target.checked)}
+                  className="h-4 w-4 rounded border-outline text-primary focus:ring-primary-container"
+                />
+                Also set address to {studentAddress}
+              </label>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
+            {error}
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>
+            No
+          </Button>
+          <Button type="button" onClick={() => confirm.mutate()} disabled={confirm.isPending}>
+            {confirm.isPending ? 'Linking…' : 'Yes, link them'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

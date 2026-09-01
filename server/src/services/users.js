@@ -38,12 +38,19 @@ async function createUser(req, body = {}) {
   }
   // Phone/address/license used to be optional for a driver account — no longer (§7 item 6):
   // the Add Driver form collects all three and now marks them required, so enforce the same
-  // here rather than leaving it a client-only rule. Parent/school_staff creation don't collect
-  // these fields at all, so this stays scoped to role === 'driver'.
+  // here rather than leaving it a client-only rule. school_staff creation doesn't collect
+  // these fields at all, so this stays scoped to driver/parent.
   if (role === 'driver') {
     if (!phone) throw new HttpError(400, 'phone is required for a driver account');
     if (!address) throw new HttpError(400, 'address is required for a driver account');
     if (!licenseNumber) throw new HttpError(400, 'licenseNumber is required for a driver account');
+  }
+  // Parent phone/address (added for the parent<->student auto-match suggestion task,
+  // 2026-09-01): the Add Parent form now collects both, and the match logic works far better
+  // with real data to compare against, so required here too rather than left optional.
+  if (role === 'parent') {
+    if (!phone) throw new HttpError(400, 'phone is required for a parent account');
+    if (!address) throw new HttpError(400, 'address is required for a parent account');
   }
 
   // Passwords set here are real, permanent passwords the admin chooses — not a temporary

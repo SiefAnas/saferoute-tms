@@ -35,7 +35,8 @@ export function EditAccountModal({
       api.patch<PublicUser>(`/users/${user.id}`, {
         full_name: fullName,
         phone: phone || null,
-        ...(user.role === 'driver' ? { address: address || null, license_number: licenseNumber || null } : {}),
+        ...(user.role === 'driver' || user.role === 'parent' ? { address: address || null } : {}),
+        ...(user.role === 'driver' ? { license_number: licenseNumber || null } : {}),
         email,
         is_active: isActive,
         ...(password ? { password } : {}),
@@ -66,16 +67,16 @@ export function EditAccountModal({
         <Input required placeholder="Full name (as it should appear in the app)" value={fullName} onChange={(e) => setFullName(e.target.value)} />
         <Input required type="email" placeholder="Email address (used to log in)" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Input required type="tel" placeholder="Phone number (e.g. 555-123-4567)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        {(user.role === 'driver' || user.role === 'parent') && (
+          <Input required placeholder="Home address (street, city, state, zip)" value={address} onChange={(e) => setAddress(e.target.value)} />
+        )}
         {user.role === 'driver' && (
-          <>
-            <Input required placeholder="Home address (street, city, state, zip)" value={address} onChange={(e) => setAddress(e.target.value)} />
-            <Input
-              required
-              placeholder="Driver license number"
-              value={licenseNumber}
-              onChange={(e) => setLicenseNumber(e.target.value)}
-            />
-          </>
+          <Input
+            required
+            placeholder="Driver license number"
+            value={licenseNumber}
+            onChange={(e) => setLicenseNumber(e.target.value)}
+          />
         )}
         <div className="flex flex-col gap-2">
           <div className="relative flex items-center">

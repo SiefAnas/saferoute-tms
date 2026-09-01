@@ -93,7 +93,7 @@ async function main() {
       );
 
       console.log('\n--- Parent role creation ---');
-      const mkParent = await api('POST', '/users', tA1, { role: 'parent', email: 'parent1@co.com', fullName: 'Parent One', password: PW });
+      const mkParent = await api('POST', '/users', tA1, { role: 'parent', email: 'parent1@co.com', fullName: 'Parent One', password: PW, phone: '555-0300', address: '3 Willow Ln, Springfield, IL 62701' });
       (mkParent.status === 201 && mkParent.body.role === 'parent' && mkParent.body.email_verified_at)
         ? ok('company_admin creates parent account (email_verified stamped)')
         : bad(`parent create: ${mkParent.status} ${JSON.stringify(mkParent.body)}`);

@@ -4,6 +4,7 @@ import { api, ApiError } from '../../lib/api'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
+import { Modal } from '../../components/Modal'
 import { formatTimeOfDay } from '../../lib/format'
 import { driverCurrentVanId, studentsTakenByOtherDrivers, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
 import type { Assignment, PublicUser, ScheduleOverride, Student, Van } from '../../types/api'
@@ -35,6 +36,7 @@ export function AssignmentsPage() {
   const [pickupTime, setPickupTime] = useState('')
   const [dropoffTime, setDropoffTime] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
 
   // Live conflict filtering (§7 item 3) — computed against today when no start date is
   // picked yet, so the picker is already narrowed before the user gets to the date field.
@@ -77,6 +79,7 @@ export function AssignmentsPage() {
       setStartDate('')
       setPickupTime('')
       setDropoffTime('')
+      setShowAddModal(false)
     },
     onError: (err) => setFormError(err instanceof ApiError ? err.message : 'Could not create assignment.'),
   })
@@ -118,10 +121,16 @@ export function AssignmentsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-headline-lg text-primary">Assignments</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-headline-lg text-primary">Assignments</h1>
+        <Button type="button" onClick={() => setShowAddModal(true)} className="flex items-center gap-1">
+          <span className="material-symbols-outlined !text-[18px]">assignment_add</span>
+          New Assignment
+        </Button>
+      </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">
+        <Card className="col-span-12 flex flex-col overflow-hidden">
           <CardHeader>
             <h2 className="text-title-lg text-primary">Student → Driver / Van</h2>
           </CardHeader>
@@ -239,9 +248,10 @@ export function AssignmentsPage() {
             </table>
           </div>
         </Card>
+      </div>
 
-        <Card className="col-span-12 p-5 lg:col-span-4">
-          <h2 className="mb-3 text-title-lg text-primary">New Assignment</h2>
+      {showAddModal && (
+        <Modal title="New Assignment" onClose={() => setShowAddModal(false)}>
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
             <select required value={studentId} onChange={(e) => setStudentId(e.target.value)} className={selectClass}>
               <option value="">Select a student…</option>
@@ -294,17 +304,22 @@ export function AssignmentsPage() {
                 <input type="time" value={dropoffTime} onChange={(e) => setDropoffTime(e.target.value)} className={`${timeInputClass} w-full`} />
               </div>
             </div>
-            <Button type="submit" variant="secondary" disabled={createAssignment.isPending}>
-              {createAssignment.isPending ? 'Creating…' : 'Create Assignment'}
-            </Button>
+            <div className="flex gap-2">
+              <Button type="submit" variant="secondary" disabled={createAssignment.isPending} className="flex-1">
+                {createAssignment.isPending ? 'Creating…' : 'Create Assignment'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>
+                Cancel
+              </Button>
+            </div>
             {formError && (
               <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
                 {formError}
               </p>
             )}
           </form>
-        </Card>
-      </div>
+        </Modal>
+      )}
     </div>
   )
 }

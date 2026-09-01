@@ -7,6 +7,103 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-09-01 — Payroll/Assignments modals, Parents table redesign, parent<->student auto-match
+
+Four-item batch, same day as the modal/required-fields/click-to-call batch below.
+
+1. **Modal-ify the remaining "Add a..." forms** — Payroll's "Set Pay Rate" and "Add
+   Adjustment" (were two permanent side Cards), and Assignments' "New Assignment" (was a
+   permanent side Card). Same pattern as the earlier batch: a header button opens a `Modal`,
+   closes on submit/cancel. Assignments' existing live conflict-filtering (driver/van
+   lock-in, excluded students) carried over unchanged — it was already keyed off component
+   state, not the old layout.
+
+2. **Parents page rebuilt as a real table**, matching Drivers/Students: Name, Email, Phone,
+   Address, Linked Students columns. The old design was a plain list + a separate side panel
+   that needed a parent selected first; the per-parent student-access checklist still exists
+   with identical link/unlink behavior, just as an expandable row under each parent (same
+   pattern as Students' "Contacts" panel) instead of a side panel.
+
+3. **Add a Parent popup**: added required Phone + Address fields (previously only Full
+   name/Email/Password — parent accounts had no phone/address at all before this), and
+   in-modal student linking — a search box filtering a scrollable checkbox list, so an admin
+   can link a parent to one or more students at creation instead of only afterward through
+   the access panel. Selected students get linked via the existing `/parent-access` endpoint
+   right after the parent is created.
+   **Convention-consistency call, not explicitly asked**: made phone/address *required* on
+   parent creation (client + `server/src/services/users.js`), matching the "no optional
+   fields" rule the previous batch established app-wide, and extended `EditAccountModal` to
+   show/require address for parent accounts too (it was driver-only before — a parent's
+   phone was already unconditionally required there, which would otherwise have blocked
+   editing ANY existing parent's account, including just toggling active, until they had a
+   phone on file).
+
+4. **Parent<->Student auto-match suggestion** — the main logic piece. New
+   `client/src/lib/parentMatch.ts`, entirely client-side (advisory only, never auto-links or
+   writes anything by itself):
+   - **Student form (add/edit)**: after a successful save, the just-saved student's guardian
+     name/phone/street address are scored against every *unlinked* parent account. A
+     qualifying match opens a confirm dialog — "Is `{parent}` the parent/guardian of
+     `{student}`?" — showing which signals matched. "Yes" links them via the existing
+     `/parent-access` POST; if the parent record is missing phone or address that the
+     student form just captured, a checkbox (checked by default) offers to fill it in too,
+     via a plain `PATCH /users/:id`. "No" does nothing further — manual linking through the
+     Parents page's access panel still works exactly as before.
+   - **Parents page access panel**: the inverse direction — each *unlinked* student row is
+     scored against the currently-expanded parent, and a qualifying match gets a passive
+     amber highlight + a "Possible match" badge (hover shows which signals matched) rather
+     than a popup, so the admin notices it while manually reviewing the list without being
+     interrupted.
+   - **Matching logic, documented in code (`parentMatch.ts`'s own header comment) so the
+     sensitivity can be retuned later without re-deriving it**:
+     - Phone (weight 3, strong signal alone): normalized to digits-only, last 7–10 compared
+       — tolerates formatting/country-code differences. Two different families essentially
+       never share a phone number, so this alone clears the suggestion threshold.
+     - Name (weight 1, weak alone): normalized exact match, one name containing the other
+       (handles a middle name/initial), or ≥82% Levenshtein similarity. Deliberately weak on
+       its own — the seed data alone has two different "Sullivan" families and two different
+       "Reilly" families.
+     - Street address (weight 2, weak alone): the parent's single free-text address field is
+       split on the first comma for its "street" part, compared to the student's structured
+       `street_address` at ≥75% similarity (more forgiving than name — "St" vs "Street" and
+       similar formatting drift are common and shouldn't block a match). Deliberately weak
+       alone too: the seed data's dummy street pool is intentionally reused across multiple
+       *unrelated* students, so an address-only match would false-positive across the whole
+       seeded dataset if it counted alone.
+     - **Suggestion threshold: total score ≥ 3.** Phone alone qualifies (3). Name + address
+       together qualifies (1+2=3). Name alone (1) or address alone (2) do not. To change
+       sensitivity later: adjust the `WEIGHTS` object or `MATCH_THRESHOLD` at the top of
+       `parentMatch.ts` — both are the only numbers that matter, not scattered through the
+       call sites.
+   - **Scoping decision, flagged**: matching runs against the student's *primary* guardian
+     (`parent_name`/`parent_phone`, the same fields shown in the Students table) only, not
+     the additional "Add another parent/guardian" rows (those are plain `student_contacts`
+     text, not parent login accounts, and multiplying the match surface across every extra
+     contact felt like real scope growth beyond what was asked for a first pass).
+   - **Backend**: no new endpoint — matching is pure client-side computation over data both
+     pages already load (`/users?role=parent`, `/students`, `/parent-access`); the actual
+     link/unlink and phone/address fill-in both go through existing, already-tested routes.
+
+**Live-data consistency**: since parent phone/address are now required going forward, the 25
+already-seeded parent accounts (created before this feature, all NULL) got backfilled —
+`server/scripts/backfill-required-fields.js` extended to derive each parent's phone/address
+from their *first linked student's* own `parent_phone`/address (same person in the dummy
+data by construction), so the seeded parents are genuine matches for their own students
+under the real matching logic rather than blank-but-linked records. `seed-dummy-data.js`
+updated the same way so a fresh reseed stays consistent without needing a backfill re-run.
+
+**Verification**: full backend suite — all 12 suites passing (one test fixture updated:
+parent creation in `09-parent-and-permissions.test.cjs` now sends phone/address), `tsc -b`,
+lint, and `vite build` all clean. Live-verified against the real dev server + the same Neon
+DB the whole project uses: Payroll/Assignments modals open and submit correctly; the Parents
+table shows the backfilled phone/address/linked-students data; created a test student with a
+guardian name+phone matching an existing seeded parent ("Karen Reilly" / 555-0102) and
+confirmed the match dialog fired with the exact matched signals, then confirmed linking
+actually happened (verified on the Parents table's Linked Students column); the Add Parent
+modal's search-filtered student picker correctly narrowed the list and linked on create;
+`EditAccountModal` now shows/requires a parent's address and pre-populates it correctly.
+Test-only records created during verification (one student, one parent) deleted afterward.
+
 ## 2026-09-01 — Add-form modals, assignment conflict enforcement, contact links, required fields, password rules
 
 Seven-item UI/logic batch from live screenshots.

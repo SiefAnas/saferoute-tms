@@ -155,17 +155,24 @@ async function main() {
     [2, 'Willow Foster', '7', 12, 0, 1, 1],
   ];
   const streetPool = ['12 Maple St', '48 Oak Ave', '7 Birch Ln', '203 Cedar Rd', '19 Pine Ct', '5 Elm Dr'];
-  const students = {}; // keyed by name -> {id, companyId}
+  const students = {}; // keyed by name -> {id, companyId, street, address}
   let asgCount = 0;
   for (const [schoolIdx, name, grade, age, companyIdx, driverIdx, vanIdx] of studentSpecs) {
     const companyId = companies[companyIdx].id;
     const schoolId = schools[schoolIdx].id;
+    const street = streetPool[asgCount % streetPool.length];
     const student = await q(
       `INSERT INTO students(company_id,school_id,full_name,grade,age,parent_name,parent_phone,street_address,city,state,zip_code,notes)
        VALUES($1,$2,$3,$4,$5,'TBD','555-0000',$6,'Springfield','CA','90210','None') RETURNING id`,
-      [companyId, schoolId, name, grade, age, streetPool[asgCount % streetPool.length]]
+      [companyId, schoolId, name, grade, age, street]
     );
-    students[name] = { id: student.id, companyId, driverId: drivers[companyIdx][driverIdx], vanId: vans[companyIdx][vanIdx] };
+    students[name] = {
+      id: student.id,
+      companyId,
+      driverId: drivers[companyIdx][driverIdx],
+      vanId: vans[companyIdx][vanIdx],
+      address: `${street}, Springfield, CA 90210`,
+    };
     await pool.query(
       `INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date,pickup_time,dropoff_time)
        VALUES($1,$2,$3,$4,CURRENT_DATE,'08:00','15:15')`,
@@ -217,10 +224,16 @@ async function main() {
     perCompanyCounter[companyIdx]++;
     const n = perCompanyCounter[companyIdx];
     const email = `parent${n}@company${companyIdx + 1}.com`;
+    const phone = `555-0${100 + n}`;
+    // Address/phone are now required on a parent account (§ auto-match task) — reuse the
+    // first linked student's own address/phone so the seeded parent is a genuine match for
+    // that student under the real matching logic (client/src/lib/parentMatch.ts), not just a
+    // linked-but-unrelated-looking record.
+    const address = students[studentNames[0]]?.address ?? null;
     const parent = await q(
-      `INSERT INTO users(email,password_hash,full_name,role,company_id,email_verified_at,is_active,created_by_user_id)
-       VALUES($1,$2,$3,'parent',$4,now(),true,$5) RETURNING id`,
-      [email, hash, `${first} ${last} (Parent)`, companies[companyIdx].id, creatorAdminId[companyIdx]]
+      `INSERT INTO users(email,password_hash,full_name,role,company_id,phone,address,email_verified_at,is_active,created_by_user_id)
+       VALUES($1,$2,$3,'parent',$4,$5,$6,now(),true,$7) RETURNING id`,
+      [email, hash, `${first} ${last} (Parent)`, companies[companyIdx].id, phone, address, creatorAdminId[companyIdx]]
     );
     for (const studentName of studentNames) {
       const s = students[studentName];
@@ -232,7 +245,7 @@ async function main() {
       // from the FIRST parent linked, so the row isn't left with the placeholder 'TBD'.
       await pool.query(
         `UPDATE students SET parent_name=$1, parent_phone=$2 WHERE id=$3 AND parent_name='TBD'`,
-        [`${first} ${last}`, `555-0${100 + n}`, s.id]
+        [`${first} ${last}`, phone, s.id]
       );
     }
   }

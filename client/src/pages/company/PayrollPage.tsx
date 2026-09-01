@@ -68,6 +68,7 @@ export function PayrollPage() {
   const [rateDollars, setRateDollars] = useState('')
   const [rateMsg, setRateMsg] = useState<string | null>(null)
   const [rateError, setRateError] = useState<string | null>(null)
+  const [showRateModal, setShowRateModal] = useState(false)
 
   const setRule = useMutation({
     mutationFn: () =>
@@ -81,6 +82,7 @@ export function PayrollPage() {
       queryClient.invalidateQueries({ queryKey: ['payroll-unpaid-summary', rule.driver_id] })
       setRateMsg('Rate saved.')
       setRateDollars('')
+      setShowRateModal(false)
     },
     onError: (err) => setRateError(err instanceof ApiError ? err.message : 'Could not save rate.'),
   })
@@ -98,6 +100,7 @@ export function PayrollPage() {
   const [adjDate, setAdjDate] = useState('')
   const [adjMsg, setAdjMsg] = useState<string | null>(null)
   const [adjError, setAdjError] = useState<string | null>(null)
+  const [showAdjModal, setShowAdjModal] = useState(false)
 
   const addAdjustment = useMutation({
     mutationFn: () =>
@@ -114,6 +117,7 @@ export function PayrollPage() {
       setAdjDollars('')
       setAdjNote('')
       setAdjDate('')
+      setShowAdjModal(false)
     },
     onError: (err) => setAdjError(err instanceof ApiError ? err.message : 'Could not record adjustment.'),
   })
@@ -134,17 +138,27 @@ export function PayrollPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-headline-lg text-primary">Payroll</h1>
-        <CsvImportExport
-          entityName="Payroll"
-          columns={CSV_COLUMNS}
-          rows={payrollCsvRows}
-          onImportRow={handleImportRow}
-          onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['payroll-rules'] })}
-        />
+        <div className="flex items-center gap-3">
+          <CsvImportExport
+            entityName="Payroll"
+            columns={CSV_COLUMNS}
+            rows={payrollCsvRows}
+            onImportRow={handleImportRow}
+            onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['payroll-rules'] })}
+          />
+          <Button type="button" variant="outline" onClick={() => setShowAdjModal(true)} className="flex items-center gap-1">
+            <span className="material-symbols-outlined !text-[18px]">add_card</span>
+            Add Adjustment
+          </Button>
+          <Button type="button" onClick={() => setShowRateModal(true)} className="flex items-center gap-1">
+            <span className="material-symbols-outlined !text-[18px]">payments</span>
+            Set Pay Rate
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">
+        <Card className="col-span-12 flex flex-col overflow-hidden">
           <CardHeader>
             <h2 className="text-title-lg text-primary">Driver Pay Rates</h2>
           </CardHeader>
@@ -176,83 +190,94 @@ export function PayrollPage() {
           </div>
         </Card>
 
-        <div className="col-span-12 flex flex-col gap-5 lg:col-span-4">
-          <Card className="p-5">
-            <h2 className="mb-3 text-title-lg text-primary">Set Pay Rate</h2>
-            <form className="flex flex-col gap-3" onSubmit={handleSetRule}>
-              <select required value={rateDriverId} onChange={(e) => setRateDriverId(e.target.value)} className={selectClass}>
-                <option value="">Select a driver…</option>
-                {(driversQuery.data ?? []).map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.full_name}
-                  </option>
-                ))}
-              </select>
-              <select value={rateType} onChange={(e) => setRateType(e.target.value as RateType)} className={selectClass}>
-                <option value="hourly">Hourly</option>
-                <option value="daily">Daily</option>
-              </select>
-              <Input
-                required
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Rate in dollars"
-                value={rateDollars}
-                onChange={(e) => setRateDollars(e.target.value)}
-              />
-              <Button type="submit" variant="secondary" disabled={setRule.isPending}>
+      </div>
+
+      {showRateModal && (
+        <Modal title="Set Pay Rate" onClose={() => setShowRateModal(false)}>
+          <form className="flex flex-col gap-3" onSubmit={handleSetRule}>
+            <select required value={rateDriverId} onChange={(e) => setRateDriverId(e.target.value)} className={selectClass}>
+              <option value="">Select a driver…</option>
+              {(driversQuery.data ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name}
+                </option>
+              ))}
+            </select>
+            <select value={rateType} onChange={(e) => setRateType(e.target.value as RateType)} className={selectClass}>
+              <option value="hourly">Hourly</option>
+              <option value="daily">Daily</option>
+            </select>
+            <Input
+              required
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Rate in dollars (e.g. 18.50)"
+              value={rateDollars}
+              onChange={(e) => setRateDollars(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button type="submit" variant="secondary" disabled={setRule.isPending} className="flex-1">
                 {setRule.isPending ? 'Saving…' : 'Save Rate'}
               </Button>
-              {rateMsg && <p className="text-body-md text-on-surface-variant">{rateMsg}</p>}
-              {rateError && (
-                <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
-                  {rateError}
-                </p>
-              )}
-            </form>
-          </Card>
+              <Button type="button" variant="outline" onClick={() => setShowRateModal(false)}>
+                Cancel
+              </Button>
+            </div>
+            {rateMsg && <p className="text-body-md text-on-surface-variant">{rateMsg}</p>}
+            {rateError && (
+              <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
+                {rateError}
+              </p>
+            )}
+          </form>
+        </Modal>
+      )}
 
-          <Card className="p-5">
-            <h2 className="mb-3 text-title-lg text-primary">Add Adjustment</h2>
-            <form className="flex flex-col gap-3" onSubmit={handleAddAdjustment}>
-              <select required value={adjDriverId} onChange={(e) => setAdjDriverId(e.target.value)} className={selectClass}>
-                <option value="">Select a driver…</option>
-                {(driversQuery.data ?? []).map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.full_name}
-                  </option>
-                ))}
-              </select>
-              <Input
-                required
-                type="number"
-                step="0.01"
-                placeholder="Amount in dollars (negative to deduct)"
-                value={adjDollars}
-                onChange={(e) => setAdjDollars(e.target.value)}
-              />
-              <Input required placeholder="Note" value={adjNote} onChange={(e) => setAdjNote(e.target.value)} />
-              <input
-                required
-                type="date"
-                value={adjDate}
-                onChange={(e) => setAdjDate(e.target.value)}
-                className="h-14 w-full rounded-lg border border-outline bg-surface-container-lowest px-4 text-body-lg outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20"
-              />
-              <Button type="submit" variant="secondary" disabled={addAdjustment.isPending}>
+      {showAdjModal && (
+        <Modal title="Add Adjustment" onClose={() => setShowAdjModal(false)}>
+          <form className="flex flex-col gap-3" onSubmit={handleAddAdjustment}>
+            <select required value={adjDriverId} onChange={(e) => setAdjDriverId(e.target.value)} className={selectClass}>
+              <option value="">Select a driver…</option>
+              {(driversQuery.data ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name}
+                </option>
+              ))}
+            </select>
+            <Input
+              required
+              type="number"
+              step="0.01"
+              placeholder="Amount in dollars (negative to deduct)"
+              value={adjDollars}
+              onChange={(e) => setAdjDollars(e.target.value)}
+            />
+            <Input required placeholder="Note (e.g. Overtime, Bonus, Deduction)" value={adjNote} onChange={(e) => setAdjNote(e.target.value)} />
+            <input
+              required
+              type="date"
+              value={adjDate}
+              onChange={(e) => setAdjDate(e.target.value)}
+              className="h-14 w-full rounded-lg border border-outline bg-surface-container-lowest px-4 text-body-lg outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20"
+            />
+            <div className="flex gap-2">
+              <Button type="submit" variant="secondary" disabled={addAdjustment.isPending} className="flex-1">
                 {addAdjustment.isPending ? 'Saving…' : 'Add Adjustment'}
               </Button>
-              {adjMsg && <p className="text-body-md text-on-surface-variant">{adjMsg}</p>}
-              {adjError && (
-                <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
-                  {adjError}
-                </p>
-              )}
-            </form>
-          </Card>
-        </div>
-      </div>
+              <Button type="button" variant="outline" onClick={() => setShowAdjModal(false)}>
+                Cancel
+              </Button>
+            </div>
+            {adjMsg && <p className="text-body-md text-on-surface-variant">{adjMsg}</p>}
+            {adjError && (
+              <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
+                {adjError}
+              </p>
+            )}
+          </form>
+        </Modal>
+      )}
 
       {detailDriver && <DriverCycleDetailModal driver={detailDriver} onClose={() => setDetailDriver(null)} />}
     </div>
