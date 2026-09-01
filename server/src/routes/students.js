@@ -7,14 +7,14 @@ const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
-const { HttpError } = require('../errors');
+const { HttpError, mapMissingRefError } = require('../errors');
 const { assertValidZip, assertValidState } = require('../validate');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
 const companyAdmin = requireRole('company_admin');
 
-const mapFk = (err) => (err.code === '23503' ? new HttpError(400, 'school_id not found') : err);
+const mapFk = (err) => mapMissingRefError(err, 'school_id not found');
 
 // school_staff -> only students granted via staff_student_access (§7.4); everyone else
 // (company_admin, school_admin) gets the full tenant scope. Same pattern as Trips' readScope.

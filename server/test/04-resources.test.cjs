@@ -190,6 +190,11 @@ async function main() {
       const asg = await api('POST', '/assignments', adminA, { student_id: stu.body.id, driver_user_id: driverAId, van_id: vanA.id, start_date: '2026-07-01' });
       eq('company_admin creates assignment -> 201', asg.status, 201);
       eq('assignment using Company B van -> 400 (cross-company FK)', (await api('POST', '/assignments', adminA, { student_id: stu.body.id, driver_user_id: driverAId, van_id: vanB.id, start_date: '2026-07-01' })).status, 400);
+      eq(
+        'assignment with a syntactically-invalid van_id (not a UUID) -> 400, not 500',
+        (await api('POST', '/assignments', adminA, { student_id: stu.body.id, driver_user_id: driverAId, van_id: 'not-a-uuid', start_date: '2026-07-01' })).status,
+        400
+      );
       const drvAsg = await api('GET', '/assignments', driverA);
       drvAsg.body.length === 1 ? ok('driver sees own assignment (owner sub-scope)') : bad(`driver assignments ${drvAsg.body.length}`);
       (await api('GET', '/assignments', adminB)).body.length === 0 ? ok('admin B sees no Company A assignments (isolation)') : bad('assignment leaked');

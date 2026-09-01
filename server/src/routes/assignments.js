@@ -5,7 +5,7 @@ const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole, ownerScope } = require('../middleware/authorize');
-const { HttpError } = require('../errors');
+const { HttpError, mapMissingRefError } = require('../errors');
 const { assertValidTime } = require('../validate');
 const { upsertOverride, listOverrides, deleteOverride } = require('../services/schedule');
 const { assertNoConflicts } = require('../services/assignmentConflicts');
@@ -15,10 +15,7 @@ router.use(authenticate, requireOperable, attachScopedDb);
 
 const companyAdmin = requireRole('company_admin');
 
-const mapFkError = (err) => {
-  if (err.code === '23503') return new HttpError(400, 'student, driver, or van not found in your company');
-  return err;
-};
+const mapFkError = (err) => mapMissingRefError(err, 'student, driver, or van not found in your company');
 
 router.post('/', companyAdmin, async (req, res, next) => {
   try {

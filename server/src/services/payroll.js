@@ -1,7 +1,7 @@
 // Payroll (§7.2). Per-driver rate (hourly OR daily) + freeform "extra work" adjustments,
 // and a summary = hours*rate (or days*rate) + adjustments. Money is integer cents throughout.
 const pool = require('../db/pool');
-const { HttpError } = require('../errors');
+const { HttpError, mapMissingRefError } = require('../errors');
 
 // Upsert the single pay rule for a driver in the caller's company. The composite FK
 // (driver_id, company_id) -> users guarantees the driver belongs to this company, so an
@@ -20,8 +20,7 @@ async function upsertRule(req, driverId, body = {}) {
     );
     return rows[0];
   } catch (err) {
-    if (err.code === '23503') throw new HttpError(400, 'driver not found in your company');
-    throw err;
+    throw mapMissingRefError(err, 'driver not found in your company');
   }
 }
 
@@ -36,8 +35,7 @@ async function addAdjustment(req, body = {}) {
   try {
     return await req.db.insert('pay_adjustments', { driver_id, amount_cents, note, work_date });
   } catch (err) {
-    if (err.code === '23503') throw new HttpError(400, 'driver not found in your company');
-    throw err;
+    throw mapMissingRefError(err, 'driver not found in your company');
   }
 }
 
