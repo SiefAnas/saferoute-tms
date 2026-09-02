@@ -109,7 +109,7 @@ export function EditAccountModal({
             onChange={(e) => setIsActive(e.target.checked)}
             className="h-4 w-4 rounded border-outline text-primary focus:ring-primary-container"
           />
-          Account active{!isActive && ' — this account will not be able to log in'}
+          Account active{!isActive && '. This account will not be able to log in'}
         </label>
 
         {error && (

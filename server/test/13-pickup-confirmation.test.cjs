@@ -118,11 +118,11 @@ async function main() {
       eq('driver logging a schedule change -> 403', (await api('POST', `/schedule-changes/students/${stu.id}`, driverTok, { change_type: 'left_early' })).status, 403);
       eq('invalid change_type -> 400', (await api('POST', `/schedule-changes/students/${stu.id}`, schoolAdminTok, { change_type: 'nope' })).status, 400);
 
-      console.log('\n--- "staying_later": logs + notifies, does NOT touch the pickup override ---');
+      console.log('\n--- "staying_later": logs + notifies + ALSO skips today\'s pickup (same real effect as left_early) ---');
       mailer._reset();
       const staying = await api('POST', `/schedule-changes/students/${stu.id}`, staff1Tok, { change_type: 'staying_later', note: 'Practice runs long' });
-      (staying.status === 201 && staying.body.change_type === 'staying_later' && staying.body.skipped_assignment_id === null)
-        ? ok('staying_later logs a change, does not touch any override')
+      (staying.status === 201 && staying.body.change_type === 'staying_later' && staying.body.skipped_assignment_id === asg.id)
+        ? ok('staying_later logs a change and cancels the scheduled pickup, same as left_early')
         : bad(`staying_later: ${staying.status} ${JSON.stringify(staying.body)}`);
       const sentToStaying = mailer._sent().map((m) => m.to).sort();
       const expectedRecipients = ['admin@co.com', 'sa@sch.com', 'drv@co.com', 'parent@co.com'].sort();
@@ -132,7 +132,9 @@ async function main() {
       const overrideAfterStaying = await pool.query(
         "SELECT skip FROM assignment_schedule_overrides WHERE assignment_id = $1 AND override_date = CURRENT_DATE", [asg.id]
       );
-      eq('no override row created by staying_later', overrideAfterStaying.rowCount, 0);
+      (overrideAfterStaying.rowCount === 1 && overrideAfterStaying.rows[0].skip === true)
+        ? ok('staying_later sets today\'s assignment_schedule_overrides.skip = true too')
+        : bad(`override after staying_later: ${JSON.stringify(overrideAfterStaying.rows)}`);
 
       console.log('\n--- "left_early": logs + notifies + skips today\'s pickup override (cross-tenant write) ---');
       mailer._reset();

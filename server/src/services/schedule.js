@@ -119,7 +119,7 @@ async function upsertOverride(req, assignmentId, { override_date, pickup_time, d
   try {
     return await req.db.insert('assignment_schedule_overrides', data);
   } catch (err) {
-    if (err.code === '23505') throw new HttpError(409, 'an override for this date was just created — please retry');
+    if (err.code === '23505') throw new HttpError(409, 'an override for this date was just created, please retry');
     throw err;
   }
 }

@@ -30,7 +30,7 @@ export function ContactLink({ type, value, className = '' }: ContactLinkProps) {
     }
   }, [open])
 
-  if (!value) return <span className={className}>—</span>
+  if (!value) return <span className={className}>-</span>
 
   async function copy() {
     try {

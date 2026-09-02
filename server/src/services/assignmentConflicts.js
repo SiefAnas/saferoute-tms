@@ -35,7 +35,7 @@ function assertNoConflicts(others, candidate) {
       throw new HttpError(409, 'That student is already assigned to a different driver during this date range.');
     }
     if (row.driver_user_id === candidate.driver_user_id && row.van_id !== candidate.van_id) {
-      throw new HttpError(409, 'That driver is already driving a different van during this date range — pick that van instead.');
+      throw new HttpError(409, 'That driver is already driving a different van during this date range. Pick that van instead.');
     }
   }
 }

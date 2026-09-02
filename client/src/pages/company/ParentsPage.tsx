@@ -203,9 +203,9 @@ export function ParentsPage() {
                       <td className="px-6 py-3 text-data-mono text-secondary">
                         <ContactLink type="phone" value={p.phone} />
                       </td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{p.address ?? '—'}</td>
+                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{p.address ?? '-'}</td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {linkedNames.length > 0 ? linkedNames.join(', ') : '—'}
+                        {linkedNames.length > 0 ? linkedNames.join(', ') : '-'}
                       </td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
                         <button
@@ -272,7 +272,7 @@ export function ParentsPage() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <p className="text-label-md text-on-surface-variant">Link to student(s) — optional, can also be done afterward</p>
+              <p className="text-label-md text-on-surface-variant">Link to student(s) (optional, can also be done afterward)</p>
               <Input
                 placeholder="Search students…"
                 value={studentSearch}
@@ -388,7 +388,7 @@ function StudentAccessPanel({
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
+                <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '-'}</td>
                 <td className="px-6 py-3">
                   <label className="flex cursor-pointer items-center gap-2">
                     <input

@@ -168,7 +168,7 @@ export function AssignmentsPage() {
                           {vansQuery.isLoading ? '…' : (vansById.get(a.van_id)?.license_plate ?? '(deleted van)')}
                         </td>
                         <td className="px-6 py-3 text-data-mono text-secondary">{a.start_date}</td>
-                        <td className="px-6 py-3 text-data-mono text-secondary">{a.end_date ?? '—'}</td>
+                        <td className="px-6 py-3 text-data-mono text-secondary">{a.end_date ?? '-'}</td>
                         {editingTimes ? (
                           <>
                             <td className="px-6 py-3">
@@ -283,7 +283,7 @@ export function AssignmentsPage() {
             </select>
             {lockedVanId && (
               <p className="text-label-md text-on-surface-variant">
-                This driver is currently driving {vansById.get(lockedVanId)?.license_plate ?? 'this van'} for this date range — the van is locked to match.
+                This driver is currently driving {vansById.get(lockedVanId)?.license_plate ?? 'this van'} for this date range. The van is locked to match.
               </p>
             )}
             <input
@@ -380,7 +380,7 @@ function OverridesPanel({ assignmentId }: { assignmentId: string }) {
             <li key={o.id} className="flex items-center justify-between text-body-md">
               <span>
                 {o.override_date}: {o.skip ? 'No pickup/dropoff' : `${formatTimeOfDay(o.pickup_time)} / ${formatTimeOfDay(o.dropoff_time)}`}
-                {o.note ? ` — ${o.note}` : ''}
+                {o.note ? ` (${o.note})` : ''}
               </span>
               <button
                 type="button"

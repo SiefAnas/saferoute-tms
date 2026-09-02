@@ -113,8 +113,8 @@ export function StudentsPage() {
                   filtered.map((s) => (
                     <tr key={s.id} className="hover:bg-surface-container-low">
                       <td className="px-6 py-3 text-body-md font-medium">{s.full_name}</td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '—'}</td>
+                      <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '-'}</td>
+                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '-'}</td>
                       <td className="px-6 py-3 text-data-mono text-secondary">
                         <ContactLink type="phone" value={s.parent_phone} />
                       </td>
@@ -130,7 +130,7 @@ export function StudentsPage() {
       {showAddCompanyModal && (
         <Modal title="Add a Company" onClose={() => setShowAddCompanyModal(false)}>
           <p className="mb-3 text-body-md text-on-surface-variant">
-            Not seeing the transportation company you work with? Create a placeholder — once they sign up, they can
+            Not seeing the transportation company you work with? Create a placeholder. Once they sign up, they can
             claim it and the relationship shows up automatically through shared students.
           </p>
           <form className="flex flex-col gap-3" onSubmit={handleCreateCompany}>

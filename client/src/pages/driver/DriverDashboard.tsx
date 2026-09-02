@@ -243,7 +243,7 @@ export function DriverDashboard() {
                         </button>
                       </div>
                       <p className="text-body-md text-on-surface-variant">
-                        {item.student.parent_name ?? '—'}{' '}
+                        {item.student.parent_name ?? '-'}{' '}
                         {item.student.parent_phone ? (
                           <>
                             · <ContactLink type="phone" value={item.student.parent_phone} />
@@ -272,7 +272,7 @@ export function DriverDashboard() {
 
                   {item.parent_skipped_today && (
                     <p className="rounded-lg bg-secondary-container px-3 py-2 text-label-md text-on-secondary-container">
-                      Parent skipped pickup for this student today — no pickup needed.
+                      Parent skipped pickup for this student today, no pickup needed.
                     </p>
                   )}
 
@@ -349,7 +349,7 @@ export function DriverDashboard() {
                 </div>
                 <div className="flex-1">
                   <h3 className="text-title-lg capitalize">
-                    {trip.trip_type} — {studentName(trip.student_id)}
+                    {trip.trip_type}: {studentName(trip.student_id)}
                   </h3>
                   {trip.status === 'complete' ? (
                     <StatusBadge tone="success" label={trip.auto_completed ? 'Auto-completed' : 'Complete'} />
@@ -398,13 +398,13 @@ function StudentDetailModal({ studentId, trips, onClose }: { studentId: string; 
         <>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-body-md">
             <dt className="text-on-surface-variant">Grade</dt>
-            <dd>{s.grade ?? '—'}</dd>
+            <dd>{s.grade ?? '-'}</dd>
             <dt className="text-on-surface-variant">Age</dt>
-            <dd>{s.age ?? '—'}</dd>
+            <dd>{s.age ?? '-'}</dd>
             <dt className="text-on-surface-variant">Address</dt>
-            <dd>{s.street_address ? `${s.street_address}, ${s.city}, ${s.state} ${s.zip_code}` : '—'}</dd>
+            <dd>{s.street_address ? `${s.street_address}, ${s.city}, ${s.state} ${s.zip_code}` : '-'}</dd>
             <dt className="text-on-surface-variant">Parent/Guardian</dt>
-            <dd>{s.parent_name ?? '—'}</dd>
+            <dd>{s.parent_name ?? '-'}</dd>
             <dt className="text-on-surface-variant">Parent Phone</dt>
             <dd>
               <ContactLink type="phone" value={s.parent_phone} />
@@ -427,7 +427,7 @@ function StudentDetailModal({ studentId, trips, onClose }: { studentId: string; 
                     {c.relationship ? ` (${c.relationship})` : ''}
                     {c.phone ? (
                       <>
-                        {' — '}
+                        {' · '}
                         <ContactLink type="phone" value={c.phone} />
                       </>
                     ) : (
@@ -459,19 +459,19 @@ function SchoolDetailModal({ schoolId, onClose }: { schoolId: string; onClose: (
       ) : (
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-body-md">
           <dt className="text-on-surface-variant">Address</dt>
-          <dd>{s.address ?? '—'}</dd>
+          <dd>{s.address ?? '-'}</dd>
           <dt className="text-on-surface-variant">State/Zip</dt>
           <dd>
-            {s.state ?? '—'} {s.zip_code ?? ''}
+            {s.state ?? '-'} {s.zip_code ?? ''}
           </dd>
           <dt className="text-on-surface-variant">Phone</dt>
           <dd>
             <ContactLink type="phone" value={s.phone} />
           </dd>
           <dt className="text-on-surface-variant">Hours</dt>
-          <dd>{s.hours ?? '—'}</dd>
+          <dd>{s.hours ?? '-'}</dd>
           <dt className="text-on-surface-variant">Website</dt>
-          <dd>{s.website ?? '—'}</dd>
+          <dd>{s.website ?? '-'}</dd>
         </dl>
       )}
     </Modal>

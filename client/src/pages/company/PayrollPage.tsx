@@ -313,7 +313,7 @@ function DriverPayRow({
     ? unpaidQuery.data.rate_type === 'hourly'
       ? formatDuration(unpaidQuery.data.worked_minutes)
       : `${unpaidQuery.data.worked_days} ${unpaidQuery.data.worked_days === 1 ? 'day' : 'days'}`
-    : '—'
+    : '-'
 
   return (
     <tr className="hover:bg-surface-container-low">
@@ -327,14 +327,14 @@ function DriverPayRow({
         )}
       </td>
       <td className="px-6 py-3 text-body-md text-on-surface-variant">
-        {rule ? (rule.rate_type === 'hourly' ? 'Hourly' : 'Daily') : '—'}
+        {rule ? (rule.rate_type === 'hourly' ? 'Hourly' : 'Daily') : '-'}
       </td>
       <td className="px-6 py-3 text-data-mono text-secondary">
         {rule ? `${formatMoney(rule.rate_cents)} / ${rule.rate_type === 'hourly' ? 'hr' : 'day'}` : 'Not set'}
       </td>
-      <td className="px-6 py-3 text-data-mono text-secondary">{rule ? worked : '—'}</td>
+      <td className="px-6 py-3 text-data-mono text-secondary">{rule ? worked : '-'}</td>
       <td className="px-6 py-3 text-data-mono font-medium">
-        {rule && unpaidQuery.data ? formatMoney(unpaidQuery.data.total_pay_cents) : rule ? '…' : '—'}
+        {rule && unpaidQuery.data ? formatMoney(unpaidQuery.data.total_pay_cents) : rule ? '…' : '-'}
       </td>
       <td className="px-6 py-3 text-right">
         {rule && (
@@ -382,7 +382,7 @@ function DriverCycleDetailModal({ driver, onClose }: { driver: PublicUser; onClo
   const loading = unpaidQuery.isLoading || sessionsQuery.isLoading || adjustmentsQuery.isLoading
 
   return (
-    <Modal title={`${driver.full_name} — Current Unpaid Cycle`} onClose={onClose}>
+    <Modal title={`${driver.full_name}: Current Unpaid Cycle`} onClose={onClose}>
       {loading ? (
         <p className="text-body-md text-on-surface-variant">Loading…</p>
       ) : (
@@ -390,7 +390,7 @@ function DriverCycleDetailModal({ driver, onClose }: { driver: PublicUser; onClo
           <p className="text-body-md text-on-surface-variant">
             {paidThroughAt
               ? `Since last paid on ${new Date(paidThroughAt).toLocaleDateString()}.`
-              : 'Since the beginning — this driver has never been marked paid.'}
+              : 'Since the beginning. This driver has never been marked paid.'}
           </p>
 
           <div>
@@ -418,7 +418,7 @@ function DriverCycleDetailModal({ driver, onClose }: { driver: PublicUser; onClo
                 {adjustments.map((a) => (
                   <li key={a.id} className="flex justify-between text-on-surface-variant">
                     <span>
-                      {new Date(a.work_date).toLocaleDateString()} — {a.note}
+                      {new Date(a.work_date).toLocaleDateString()}: {a.note}
                     </span>
                     <span className="text-data-mono">{formatMoney(a.amount_cents)}</span>
                   </li>

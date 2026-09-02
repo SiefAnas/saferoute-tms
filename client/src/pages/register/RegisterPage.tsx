@@ -171,7 +171,7 @@ export function RegisterPage() {
             <span className="material-symbols-outlined !text-[40px] text-on-primary-container">route</span>
           </div>
           <h1 className="text-headline-md text-primary">Register your organization</h1>
-          <p className="text-label-md text-secondary uppercase">Self-serve signup — no verification required for a new org</p>
+          <p className="text-label-md text-secondary uppercase">Self-serve signup: no verification required for a new org</p>
         </div>
 
         <div className="flex gap-2">
@@ -243,7 +243,7 @@ export function RegisterPage() {
                     ))
                   ) : (
                     <p className="p-2 text-body-md text-on-surface-variant">
-                      No match — switch to "Create new" if your organization isn't listed yet.
+                      No match. Switch to "Create new" if your organization isn't listed yet.
                     </p>
                   )}
                 </div>

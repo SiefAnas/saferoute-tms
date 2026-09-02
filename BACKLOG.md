@@ -7,6 +7,82 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-09-02 (later) — School Hub fixes from live testing
+
+Four fixes on the School Hub page (`/school-staff`, `/school-admin/pickup`), same day as the
+pickup-confirmation workflow above — this batch is what live testing on that page turned up.
+
+1. **The actual confirm action was missing.** "Log change" existed but there was no visible
+   way to do the real morning/afternoon custody confirmation the page is supposed to be for.
+   Clicking a student's name now opens it directly. **Real assumption resolved, worth
+   flagging**: figuring out which of `trip_type`'s two values ('pickup'/'dropoff') means
+   "morning, received at school" vs "afternoon, received by driver" required reasoning
+   through several independent signals in the existing code rather than any single explicit
+   spec line — the driver's own toggle defaults to `'pickup'` first thing in the day
+   (matching `assignments.pickup_time`, the morning anchor), and "Mark Absent" is scoped to
+   `type === 'pickup'` only (a home-side no-show concept, morning-specific). That converges
+   on `'pickup'` = morning / "Received at school", `'dropoff'` = afternoon / "Received by
+   driver" — which is the OPPOSITE of the label mapping this same page shipped with earlier
+   today, now corrected. Which leg is "relevant right now" for the modal is a simple
+   wall-clock split (before/after noon) rather than derived from the student's actual
+   scheduled time, since school_staff/school_admin have no endpoint exposing per-student
+   schedule times and the task asked for "whichever is relevant for that time of day", not
+   the exact scheduled time. The modal reuses the trip-confirmation system exactly as it
+   already exists (never creates or bypasses a trip): if today's relevant-leg trip doesn't
+   exist yet, it says so plainly ("the driver hasn't logged this yet") rather than erroring
+   or offering a way around it; if it exists and is pending, it shows the same confirm action
+   as the Pending Confirmations list; if it's already complete, it shows when (and whether it
+   was auto-confirmed by the 5-minute sweep).
+
+2. **"Staying later" now has the same real effect as "left early".** Previously it only
+   logged a note; now both change types cancel today's scheduled company pickup the same way
+   (`assignment_schedule_overrides.skip = true`) — they only differ in which reason gets
+   logged and notified, exactly as asked. `server/src/services/scheduleChanges.js`'s
+   `applyLeftEarlySkip` renamed to `applyPickupSkip` and called unconditionally; the
+   notification text no longer branches on change type either. Test file updated to match:
+   the "staying_later" case now asserts the override was set (previously asserted the
+   opposite), which also exercises the upsert's UPDATE branch for the first time (the
+   following "left_early" case in the same test now updates the row "staying_later" already
+   created, rather than inserting a fresh one) — a bit of accidental extra coverage from the
+   reordering.
+
+3. **Em dashes removed app-wide**, not just this page, per explicit instruction. Two
+   categories, handled differently: the very common "no value" placeholder character
+   (`?? '—'`, ~40 occurrences across nearly every table cell in the app) became a plain
+   hyphen via a targeted sed pass across the 12 files that had it; every other case (a
+   sentence-joining aside, e.g. "X — no pickup needed") was rewritten by hand into normal
+   punctuation, picking whatever reads best in context (period for two separate sentences,
+   colon for a label:detail pattern, parens for an aside, comma for a light pause) rather
+   than a single mechanical substitution. Where an em dash was joining a name with contact
+   info (e.g. "Grandma Jo — 555-1234"), switched to the app's own already-established
+   middle-dot convention ("Grandma Jo · 555-1234") instead of inventing a third separator, to
+   match the pattern already used everywhere else for name+phone. **Scoped to user-facing
+   text only** (JSX content, notification/email subject+body, thrown error messages) — code
+   comments were left alone: they're developer-facing, not "the app's text" a user sees, and
+   this codebase's comments (including this file) use em dashes constantly as a writing
+   habit, so sweeping those too would have been a much larger, unrelated diff. Going forward,
+   new user-facing text avoids them too, per the explicit ask; comments aren't held to that.
+
+4. **Explanation paragraphs replaced with hover tooltips.** New `client/src/components/
+   InfoTooltip.tsx` (small info-icon button, shows a popover on hover/focus, no existing
+   Tooltip component to reuse) replaces the permanent explanatory `<p>` under "Pending
+   Confirmations" and "Absent Today" — the page is shorter by default, the explanation is
+   still there for anyone who wants it.
+
+**Verification**: full backend suite, all 13 suites (the changed `staying_later` assertions
+in `13-pickup-confirmation.test.cjs` pass with the new behavior). `tsc -b`, lint, and `vite
+build` all clean. A final grep for em dashes across `client/src`/`server/src`, excluding
+comments, returns nothing. Live-verified against the real dev server + the same Neon DB the
+whole project uses: clicked a student's name and saw all three modal states (already
+confirmed via the 5-minute auto-sweep; not yet logged by the driver; a genuinely pending
+trip, confirmed successfully through the new flow and the Pending Confirmations list updated
+in step); logged "staying later" for a student and confirmed via a direct DB query that
+`assignment_schedule_overrides.skip` flipped to `true` and all 4 notification emails fired
+with the corrected ("cancelled either way") text. Test-only data (a trial trip, a schedule
+change, its override) cleaned up afterward. (Also hit and worked around an unrelated local
+Vite dev-server crash mid-session, restarted via `preview_start`, not a regression from this
+change.)
+
 ## 2026-09-02 — Parent dashboard mobile redesign + school staff/admin pickup-confirmation workflow
 
 Two-part task. Part 2 explicitly warned to check how a new confirmation status would

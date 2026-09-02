@@ -1,14 +1,18 @@
-// "Left early" / "staying later" schedule-change log (§ pickup-confirmation task, 2026-09-02).
-// school_staff or school_admin logs a same-day change for a student. Notifies company_admin,
-// school_admin, the student's currently-assigned driver, and the student's linked parent(s).
-// "left_early" additionally cancels today's scheduled afternoon company pickup (the driver
-// shouldn't show up for a kid who's already gone) by setting today's assignment override to
-// skip=true — reusing the existing company_admin-built override mechanism
-// (assignment_schedule_overrides), NOT a new parallel "skip" concept.
+// "Left early" / "staying later" schedule-change log (§ pickup-confirmation task, 2026-09-02;
+// revised the same day once live testing showed "staying later" needs the same real effect as
+// "left early", not just a notification). school_staff or school_admin logs a same-day change
+// for a student. Notifies company_admin, school_admin, the student's currently-assigned
+// driver, and the student's linked parent(s). BOTH change types cancel today's scheduled
+// afternoon company pickup (the driver shouldn't show up either way: for "left early" the
+// student is already gone; for "staying later" the student isn't leaving at the scheduled
+// time, so the driver showing up on schedule would be wrong too) by setting today's assignment
+// override to skip=true, reusing the existing company_admin-built override mechanism
+// (assignment_schedule_overrides), NOT a new parallel "skip" concept. change_type only affects
+// which reason/note gets logged and shown, not the actual schedule effect.
 //
-// "left_early" is safe to apply as a whole-day skip (not just "afternoon leg") even though
+// Safe to apply as a whole-day skip (not just "afternoon leg") even though
 // assignment_schedule_overrides has no separate pickup/dropoff skip flags: by the time staff
-// would log "left early," the morning dropoff has already happened and is already recorded in
+// would log either change, the morning dropoff has already happened and is already recorded in
 // `trips` — a forward-looking day-level skip has no retroactive effect on it.
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
@@ -51,7 +55,8 @@ async function logScheduleChange(req, studentId, { change_type, note } = {}) {
     reported_by_user_id: req.auth.userId,
   });
 
-  const skippedAssignmentId = change_type === 'left_early' ? await applyLeftEarlySkip(req, student) : null;
+  // Both change types cancel today's scheduled pickup now — see the file header comment.
+  const skippedAssignmentId = await applyPickupSkip(req, student);
   const notified = await notifyScheduleChangeLogged(student, change_type, note);
 
   return { ...row, notified, skipped_assignment_id: skippedAssignmentId };
@@ -62,7 +67,7 @@ async function logScheduleChange(req, studentId, { change_type, note } = {}) {
 // company_admin-only, "like its parent assignments"), so req.db can't reach it from a
 // school-tenant caller. Raw pool, explicit ownership via the JOIN (only assignments for a
 // student at THIS actor's own school), same precedent as placeholders.js's cross-tenant edits.
-async function applyLeftEarlySkip(req, student) {
+async function applyPickupSkip(req, student) {
   const { rows } = await pool.query(
     `SELECT a.id, a.company_id
        FROM assignments a
@@ -74,7 +79,7 @@ async function applyLeftEarlySkip(req, student) {
     [student.id, req.auth.tenantId]
   );
   const assignment = rows[0];
-  if (!assignment) return null; // no active assignment today — nothing scheduled to skip
+  if (!assignment) return null; // no active assignment today, nothing scheduled to skip
 
   const { rows: existing } = await pool.query(
     `SELECT id FROM assignment_schedule_overrides WHERE assignment_id = $1 AND override_date = CURRENT_DATE`,
@@ -108,14 +113,12 @@ async function notifyScheduleChangeLogged(student, changeType, note) {
   ]);
   const extraRecipients = [...driverRows.rows.map((r) => r.email), ...parentRows.rows.map((r) => r.email)];
 
-  const label = changeType === 'left_early' ? 'left school early today' : 'staying later than usual today';
+  const label = changeType === 'left_early' ? 'left school early today' : 'is staying later than usual today';
   const subject = `Schedule change for ${student.full_name}: ${changeType === 'left_early' ? 'left early' : 'staying later'}`;
   const text =
     `${student.full_name} ${label}.` +
     (note ? ` Note: ${note}` : '') +
-    (changeType === 'left_early'
-      ? " Today's scheduled company pickup for this student has been cancelled."
-      : ' The scheduled pickup time has not been changed automatically — please coordinate timing directly if needed.');
+    " Today's scheduled company pickup for this student has been cancelled.";
 
   return notifyCompanyAndSchoolAdmins(student.company_id, student.school_id, { subject, text, extraRecipients });
 }

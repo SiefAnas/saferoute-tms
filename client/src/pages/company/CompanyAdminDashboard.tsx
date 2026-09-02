@@ -57,7 +57,7 @@ export function CompanyAdminDashboard() {
 
   const vanPlate = useMemo(() => {
     const map = new Map((vansQuery.data ?? []).map((v) => [v.id, v.license_plate]))
-    return (id: string) => map.get(id) ?? '—'
+    return (id: string) => map.get(id) ?? '-'
   }, [vansQuery.data])
 
   // Each driver's current van, derived the same way as Students/Fleet: most-recently-created
@@ -139,8 +139,8 @@ export function CompanyAdminDashboard() {
                       {open ? <StatusBadge tone="success" label="Checked In" pulse /> : <StatusBadge tone="neutral" label="Checked Out" />}
                     </td>
                     <td className="px-6 py-3 text-data-mono text-secondary">{formatDuration(minutesToday)}</td>
-                    <td className="px-6 py-3 text-data-mono text-secondary">{plate ?? '—'}</td>
-                    <td className="px-6 py-3 text-body-md text-on-surface-variant">{lastActivity ? formatRelativeTime(lastActivity) : '—'}</td>
+                    <td className="px-6 py-3 text-data-mono text-secondary">{plate ?? '-'}</td>
+                    <td className="px-6 py-3 text-body-md text-on-surface-variant">{lastActivity ? formatRelativeTime(lastActivity) : '-'}</td>
                   </tr>
                 ))
               )}
@@ -194,7 +194,7 @@ export function CompanyAdminDashboard() {
               {(absentQuery.data ?? []).map((e, i) => (
                 <li key={`${e.student_id}-${i}`} className="flex items-start justify-between text-body-md">
                   <span>
-                    {e.student_name} —{' '}
+                    {e.student_name}:{' '}
                     <span className="text-on-surface-variant">
                       {e.type === 'parent_skipped' ? 'parent skipped pickup' : 'driver reported no-show'}
                     </span>

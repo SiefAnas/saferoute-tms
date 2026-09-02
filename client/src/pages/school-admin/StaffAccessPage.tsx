@@ -127,7 +127,7 @@ export function StaffAccessPage() {
                     return (
                       <tr key={s.id} className="hover:bg-surface-container-low">
                         <td className="px-6 py-3 text-body-md font-medium">{s.full_name}</td>
-                        <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
+                        <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '-'}</td>
                         <td className="px-6 py-3">
                           <label className="flex cursor-pointer items-center gap-2">
                             <input

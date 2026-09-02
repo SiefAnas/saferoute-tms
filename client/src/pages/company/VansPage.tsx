@@ -233,7 +233,7 @@ export function VansPage() {
                         <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.brand}</td>
                         <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.model}</td>
                         <td className="px-6 py-3 text-data-mono text-secondary">{van.year}</td>
-                        <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.color ?? '—'}</td>
+                        <td className="px-6 py-3 text-body-md text-on-surface-variant">{van.color ?? '-'}</td>
                         <td className="px-6 py-3 text-body-md text-on-surface-variant">
                           {driversQuery.isLoading || assignmentsQuery.isLoading
                             ? '…'
@@ -281,7 +281,7 @@ export function VansPage() {
               <Input required placeholder="Color (e.g. White)" value={color} onChange={(e) => setColor(e.target.value)} />
             </div>
             <p className="text-label-md text-on-surface-variant">
-              To assign a driver to this van, create or edit an Assignment on the Assignments page — "Driver" above
+              To assign a driver to this van, create or edit an Assignment on the Assignments page. "Driver" above
               reflects whichever assignment is active today, it isn't set here.
             </p>
             <div className="flex gap-2">

@@ -1,31 +1,49 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
-import { formatClock } from '../../lib/format'
+import { formatClock, isToday } from '../../lib/format'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Modal } from '../../components/Modal'
 import { StatusBadge } from '../../components/StatusBadge'
 import { ContactLink } from '../../components/ContactLink'
+import { InfoTooltip } from '../../components/InfoTooltip'
 import type { AbsentTodayEntry, ScheduleChange, ScheduleChangeType, Student, Trip } from '../../types/api'
 
+// Which trip_type is "relevant" for a student right now, i.e. which confirmation a school
+// staff/admin would plausibly be doing at this moment: mornings, staff confirm the driver
+// dropping a student off at school (trip_type 'pickup' — the driver's own toggle defaults to
+// 'pickup' first thing in the day, matching assignments.pickup_time); afternoons, staff
+// confirm handing the student off to the driver for the ride home (trip_type 'dropoff',
+// matching assignments.dropoff_time). This is a simple wall-clock split (noon), not derived
+// from the student's actual scheduled pickup/dropoff time — school_staff/school_admin have no
+// endpoint that exposes per-student scheduled times today, and a simple AM/PM split matches
+// what the task asked for ("whichever is relevant for that time of day") without adding one.
+function relevantTripType(): 'pickup' | 'dropoff' {
+  return new Date().getHours() < 12 ? 'pickup' : 'dropoff'
+}
+
+function tripTypeLabel(type: 'pickup' | 'dropoff'): string {
+  return type === 'pickup' ? 'Received at school' : 'Received by driver'
+}
+
 // School pickup-confirmation dashboard (§7.4, extended 2026-09-02 for the pickup-confirmation
-// task) — shared by BOTH school_staff and school_admin (mounted at /school-staff and
-// /school-admin/pickup, same component either way). Role difference is entirely server-side:
-// school_staff's reads/writes are narrowed to their granted students (staff_student_access
-// sub-scope); school_admin sees/acts on the whole school. No client-side role branching needed.
+// task, revised the same day after live testing) — shared by BOTH school_staff and
+// school_admin (mounted at /school-staff and /school-admin/pickup, same component either
+// way). Role difference is entirely server-side: school_staff's reads/writes are narrowed to
+// their granted students (staff_student_access sub-scope); school_admin sees/acts on the
+// whole school. No client-side role branching needed.
 //
 // Three pieces:
-//  1. Pending custody confirmations — the staff/admin half of the existing driver<->staff
-//     two-way trip confirmation (trips.js), now open to school_admin too. The "auto-confirm
-//     after 5 minutes if nobody confirms" behavior already exists (services/trips.js's
-//     autoCompleteStaleTrips sweep) — nothing new needed for that part, just the role gate.
+//  1. Pending custody confirmations, PLUS clicking a student's name opens the confirm flow
+//     directly for whichever leg (morning/afternoon) is relevant right now — the "Pending
+//     Confirmations" list alone wasn't a discoverable enough entry point in live testing.
 //  2. Absent Today — read-only surfacing of the EXISTING Skip Pickup (parent) / Mark Absent
 //     (driver) signals, not a new absence system.
-//  3. Schedule changes — "left early" / "staying later" logging, per student.
+//  3. Schedule changes — "left early" / "staying later" logging, per student. Both types now
+//     cancel today's scheduled pickup (they only differ in the reason logged/notified) — see
+//     services/scheduleChanges.js's header comment for why.
 export function SchoolStaffDashboard() {
-  const queryClient = useQueryClient()
-
   // Both endpoints are scoped server-side: school_staff -> granted students only,
   // school_admin -> the whole school.
   const studentsQuery = useQuery({ queryKey: ['students'], queryFn: () => api.get<Student[]>('/students') })
@@ -44,17 +62,13 @@ export function SchoolStaffDashboard() {
     return map
   }, [absentQuery.data])
 
-  const confirm = useMutation({
-    mutationFn: (tripId: string) => api.post<Trip>(`/trips/${tripId}/confirm`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['trips'] }),
-  })
-
   const pendingTrips = useMemo(
     () => (tripsQuery.data ?? []).filter((t) => t.status === 'pending').sort((a, b) => b.created_at.localeCompare(a.created_at)),
     [tripsQuery.data],
   )
 
   const [changeStudent, setChangeStudent] = useState<Student | null>(null)
+  const [confirmStudent, setConfirmStudent] = useState<Student | null>(null)
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,12 +77,11 @@ export function SchoolStaffDashboard() {
       <div className="grid grid-cols-12 gap-5">
         <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-7">
           <CardHeader>
-            <h2 className="text-title-lg text-primary">Pending Confirmations</h2>
+            <h2 className="flex items-center gap-1 text-title-lg text-primary">
+              Pending Confirmations
+              <InfoTooltip text="Morning: confirm a student was received at school. Afternoon: confirm a student was received by their driver for pickup. Unconfirmed after 5 minutes, this auto-confirms for now (temporary)." />
+            </h2>
           </CardHeader>
-          <p className="px-6 pt-4 text-label-md text-on-surface-variant">
-            Morning: confirm a student was received at school. Afternoon: confirm a student was received by their
-            driver for pickup. Unconfirmed after 5 minutes, this auto-confirms for now (temporary — see code TODO).
-          </p>
           {pendingTrips.length === 0 ? (
             <p className="p-6 text-body-md text-on-surface-variant">
               {tripsQuery.isLoading ? 'Loading…' : 'Nothing awaiting confirmation.'}
@@ -76,40 +89,7 @@ export function SchoolStaffDashboard() {
           ) : (
             <div className="flex flex-col divide-y divide-outline-variant">
               {pendingTrips.map((trip) => (
-                <div key={trip.id} className="flex items-center gap-4 p-4">
-                  <div className="flex flex-col items-center">
-                    <span className="text-headline-md font-bold text-primary">{formatClock(trip.created_at)}</span>
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-title-lg capitalize">
-                      {trip.trip_type === 'dropoff' ? 'Received at school' : 'Received by driver'} — {studentName(trip.student_id)}
-                    </h3>
-                    <p className="text-body-md text-on-surface-variant">
-                      Driver: {trip.driver_name ?? 'Unknown'}
-                      {trip.driver_phone ? (
-                        <>
-                          {' · '}
-                          <ContactLink type="phone" value={trip.driver_phone} />
-                        </>
-                      ) : (
-                        ''
-                      )}
-                    </p>
-                    <StatusBadge tone="active" label="Awaiting your confirmation" pulse />
-                    {confirm.isError && confirm.variables === trip.id && (
-                      <p className="mt-1 text-body-md text-error">
-                        {confirm.error instanceof ApiError ? confirm.error.message : 'Could not confirm.'}
-                      </p>
-                    )}
-                  </div>
-                  <Button
-                    variant="secondary"
-                    disabled={confirm.isPending}
-                    onClick={() => confirm.mutate(trip.id)}
-                  >
-                    {confirm.isPending && confirm.variables === trip.id ? 'Confirming…' : 'Confirm'}
-                  </Button>
-                </div>
+                <PendingTripRow key={trip.id} trip={trip} studentName={studentName(trip.student_id)} />
               ))}
             </div>
           )}
@@ -117,11 +97,11 @@ export function SchoolStaffDashboard() {
 
         <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-5">
           <CardHeader>
-            <h2 className="text-title-lg text-primary">Absent Today</h2>
+            <h2 className="flex items-center gap-1 text-title-lg text-primary">
+              Absent Today
+              <InfoTooltip text="Students whose pickup was skipped by a parent, or reported as a no-show by a driver. Not expected today." />
+            </h2>
           </CardHeader>
-          <p className="px-6 pt-4 text-label-md text-on-surface-variant">
-            Students whose pickup was skipped by a parent, or reported as a no-show by a driver — not expected today.
-          </p>
           {(absentQuery.data ?? []).length === 0 ? (
             <p className="p-6 text-body-md text-on-surface-variant">
               {absentQuery.isLoading ? 'Loading…' : 'No skips or no-shows reported today.'}
@@ -145,6 +125,7 @@ export function SchoolStaffDashboard() {
           <CardHeader>
             <h2 className="text-title-lg text-primary">Students</h2>
           </CardHeader>
+          <p className="px-6 pt-4 text-label-md text-on-surface-variant">Click a student's name to confirm pickup or dropoff.</p>
           {(studentsQuery.data ?? []).length === 0 ? (
             <p className="p-6 text-body-md text-on-surface-variant">
               {studentsQuery.isLoading ? 'Loading…' : 'No students yet.'}
@@ -165,10 +146,14 @@ export function SchoolStaffDashboard() {
                   const absent = absentByStudent.get(s.id)
                   return (
                     <tr key={s.id}>
-                      <td className="px-6 py-3 text-body-md font-medium">{s.full_name}</td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
+                      <td className="px-6 py-3 text-body-md font-medium">
+                        <button type="button" onClick={() => setConfirmStudent(s)} className="text-primary hover:underline">
+                          {s.full_name}
+                        </button>
+                      </td>
+                      <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '-'}</td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {s.parent_name ?? '—'}{' '}
+                        {s.parent_name ?? '-'}{' '}
                         {s.parent_phone ? (
                           <>
                             · <ContactLink type="phone" value={s.parent_phone} />
@@ -184,7 +169,7 @@ export function SchoolStaffDashboard() {
                             label={absent.type === 'parent_skipped' ? 'Skipped' : 'No-show'}
                           />
                         ) : (
-                          '—'
+                          '-'
                         )}
                       </td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
@@ -218,7 +203,7 @@ export function SchoolStaffDashboard() {
                 <li key={c.id} className="flex items-center justify-between px-6 py-3">
                   <span className="text-body-md">
                     <span className="font-medium">{studentName(c.student_id)}</span>
-                    {' — '}
+                    {': '}
                     {c.change_type === 'left_early' ? 'Left early' : 'Staying later'}
                     {c.note ? ` (${c.note})` : ''}
                   </span>
@@ -231,7 +216,124 @@ export function SchoolStaffDashboard() {
       </div>
 
       {changeStudent && <LogScheduleChangeModal student={changeStudent} onClose={() => setChangeStudent(null)} />}
+      {confirmStudent && (
+        <ConfirmTripModal
+          student={confirmStudent}
+          todaysTripsForStudent={(tripsQuery.data ?? []).filter((t) => t.student_id === confirmStudent.id && isToday(t.created_at))}
+          onClose={() => setConfirmStudent(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function PendingTripRow({ trip, studentName }: { trip: Trip; studentName: string }) {
+  const queryClient = useQueryClient()
+  const confirm = useMutation({
+    mutationFn: () => api.post<Trip>(`/trips/${trip.id}/confirm`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['trips'] }),
+  })
+
+  return (
+    <div className="flex items-center gap-4 p-4">
+      <div className="flex flex-col items-center">
+        <span className="text-headline-md font-bold text-primary">{formatClock(trip.created_at)}</span>
+      </div>
+      <div className="flex-1">
+        <h3 className="text-title-lg">
+          {tripTypeLabel(trip.trip_type)}: {studentName}
+        </h3>
+        <p className="text-body-md text-on-surface-variant">
+          Driver: {trip.driver_name ?? 'Unknown'}
+          {trip.driver_phone ? (
+            <>
+              {' · '}
+              <ContactLink type="phone" value={trip.driver_phone} />
+            </>
+          ) : (
+            ''
+          )}
+        </p>
+        <StatusBadge tone="active" label="Awaiting your confirmation" pulse />
+        {confirm.isError && (
+          <p className="mt-1 text-body-md text-error">{confirm.error instanceof ApiError ? confirm.error.message : 'Could not confirm.'}</p>
+        )}
+      </div>
+      <Button variant="secondary" disabled={confirm.isPending} onClick={() => confirm.mutate()}>
+        {confirm.isPending ? 'Confirming…' : 'Confirm'}
+      </Button>
+    </div>
+  )
+}
+
+// The actual confirm action for a student, opened by clicking their name (§ pickup-
+// confirmation task, item 1 — "Log change" existed but there was no visible way to do the
+// real morning/afternoon confirmation). Reuses the existing trip-confirmation system as-is:
+// this never creates or bypasses a trip, it only surfaces whatever's already there for
+// whichever leg is relevant right now (see relevantTripType above) and, if it's pending,
+// lets staff confirm it, same POST /trips/:id/confirm the Pending Confirmations list uses.
+function ConfirmTripModal({
+  student,
+  todaysTripsForStudent,
+  onClose,
+}: {
+  student: Student
+  todaysTripsForStudent: Trip[]
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const type = relevantTripType()
+  const trip = todaysTripsForStudent.find((t) => t.trip_type === type)
+
+  const confirm = useMutation({
+    mutationFn: () => api.post<Trip>(`/trips/${trip!.id}/confirm`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trips'] })
+      onClose()
+    },
+  })
+
+  return (
+    <Modal title={`${tripTypeLabel(type)}: ${student.full_name}`} onClose={onClose}>
+      <div className="flex flex-col gap-3">
+        {!trip ? (
+          <p className="text-body-md text-on-surface-variant">
+            The driver hasn't logged this {type === 'pickup' ? 'drop-off at school' : 'pickup from school'} yet. Check back once they
+            have, it'll show up here and in Pending Confirmations.
+          </p>
+        ) : trip.status === 'complete' ? (
+          <p className="text-body-md text-on-surface-variant">
+            Already confirmed at {formatClock(trip.completed_at ?? trip.created_at)}
+            {trip.auto_completed ? ' (auto-confirmed after 5 minutes)' : ''}.
+          </p>
+        ) : (
+          <>
+            <p className="text-body-md text-on-surface-variant">
+              Driver: {trip.driver_name ?? 'Unknown'}
+              {trip.driver_phone ? (
+                <>
+                  {' · '}
+                  <ContactLink type="phone" value={trip.driver_phone} />
+                </>
+              ) : (
+                ''
+              )}
+            </p>
+            {confirm.isError && (
+              <p className="text-body-md text-error">{confirm.error instanceof ApiError ? confirm.error.message : 'Could not confirm.'}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="button" disabled={confirm.isPending} onClick={() => confirm.mutate()}>
+                {confirm.isPending ? 'Confirming…' : 'Confirm'}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
   )
 }
 
@@ -261,23 +363,25 @@ function LogScheduleChangeModal({ student, onClose }: { student: Student; onClos
   }
 
   return (
-    <Modal title={`Log Schedule Change — ${student.full_name}`} onClose={onClose}>
+    <Modal title={`Log Schedule Change: ${student.full_name}`} onClose={onClose}>
       <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
         <div className="flex flex-col gap-2 text-body-md">
           <label className="flex cursor-pointer items-center gap-2">
             <input type="radio" checked={changeType === 'left_early'} onChange={() => setChangeType('left_early')} />
             <span>
-              <strong>Left early</strong> — parent already picked up. Cancels today's scheduled company pickup for
-              this student.
+              <strong>Left early</strong> (parent already picked up)
             </span>
           </label>
           <label className="flex cursor-pointer items-center gap-2">
             <input type="radio" checked={changeType === 'staying_later'} onChange={() => setChangeType('staying_later')} />
             <span>
-              <strong>Staying later</strong> — just a heads-up. Does not change the scheduled pickup time.
+              <strong>Staying later</strong> (not leaving on the usual schedule)
             </span>
           </label>
         </div>
+        <p className="text-label-md text-on-surface-variant">
+          Either way, today's scheduled company pickup for this student is cancelled. Choose whichever reason applies.
+        </p>
         <textarea
           placeholder="Note (optional)"
           value={note}

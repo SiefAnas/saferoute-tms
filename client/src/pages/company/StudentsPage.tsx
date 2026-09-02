@@ -59,7 +59,7 @@ export function CompanyStudentsPage() {
 
   const schoolName = useMemo(() => {
     const map = new Map((schoolsQuery.data ?? []).map((s) => [s.id, s.name]))
-    return (id: string) => map.get(id) ?? '—'
+    return (id: string) => map.get(id) ?? '-'
   }, [schoolsQuery.data])
 
   // CSV columns (2026-08-28) — includes a "School" column derived from school_id, since
@@ -235,7 +235,7 @@ export function CompanyStudentsPage() {
     }
     const school = (schoolsQuery.data ?? []).find((s) => s.name.toLowerCase() === schoolNameInput?.toLowerCase())
     if (!school) {
-      return { ok: false, message: `School "${schoolNameInput ?? ''}" not found — add it first via the form, then re-import` }
+      return { ok: false, message: `School "${schoolNameInput ?? ''}" not found. Add it first via the form, then re-import` }
     }
     try {
       await api.post('/students', {
@@ -420,11 +420,11 @@ export function CompanyStudentsPage() {
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">
                         {schoolsQuery.isLoading ? '…' : schoolName(s.school_id)}
                       </td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '—'}</td>
+                      <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '-'}</td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {s.street_address ? `${s.street_address}, ${s.city}, ${s.state} ${s.zip_code}` : '—'}
+                        {s.street_address ? `${s.street_address}, ${s.city}, ${s.state} ${s.zip_code}` : '-'}
                       </td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '—'}</td>
+                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{s.parent_name ?? '-'}</td>
                       <td className="px-6 py-3 text-data-mono text-secondary">
                         <ContactLink type="phone" value={s.parent_phone} />
                       </td>
@@ -508,7 +508,7 @@ export function CompanyStudentsPage() {
 
             <div className="flex flex-col gap-1">
               <p className="text-label-md text-on-surface-variant">
-                Assign a driver + van (optional — creates a real Assignment; both required together). Picking a
+                Assign a driver + van (optional: creates a real Assignment, both required together). Picking a
                 driver narrows the van to whichever one they're already driving, if any.
               </p>
               <div className="flex gap-2">
@@ -533,7 +533,7 @@ export function CompanyStudentsPage() {
               </div>
               {lockedVanId && (
                 <p className="text-label-md text-on-surface-variant">
-                  This driver is currently driving {vansQuery.data?.find((v) => v.id === lockedVanId)?.license_plate ?? 'this van'} — locked to match.
+                  This driver is currently driving {vansQuery.data?.find((v) => v.id === lockedVanId)?.license_plate ?? 'this van'}, locked to match.
                 </p>
               )}
             </div>
@@ -549,7 +549,7 @@ export function CompanyStudentsPage() {
 
             <textarea
               required
-              placeholder="Notes — e.g. needs help buckling, needs a monitor. Enter 'None' if there's nothing to flag."
+              placeholder="Notes: e.g. needs help buckling, needs a monitor. Enter 'None' if there's nothing to flag."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
@@ -582,7 +582,7 @@ export function CompanyStudentsPage() {
                 {schoolMode === 'existing' ? (
                   (schoolsQuery.data ?? []).length === 0 ? (
                     <p className="text-body-md text-on-surface-variant">
-                      {schoolsQuery.isLoading ? 'Loading schools…' : 'No known schools yet — switch to "New school" to add one.'}
+                      {schoolsQuery.isLoading ? 'Loading schools…' : 'No known schools yet. Switch to "New school" to add one.'}
                     </p>
                   ) : (
                     <select required value={schoolId} onChange={(e) => setSchoolId(e.target.value)} className={selectClass}>
@@ -687,7 +687,7 @@ function ParentMatchModal({
         {(missingPhone || missingAddress) && (
           <div className="flex flex-col gap-2 rounded-lg border border-outline-variant bg-surface-container p-3">
             <p className="text-label-md text-on-surface-variant">
-              {parent.full_name}&rsquo;s account is missing info this student form just captured — fill it in too?
+              {parent.full_name}&rsquo;s account is missing info this student form just captured. Fill it in too?
             </p>
             {missingPhone && (
               <label className="flex items-center gap-2 text-body-md">
@@ -778,7 +778,7 @@ function ContactsPanel({ studentId }: { studentId: string }) {
                 {c.relationship ? ` (${c.relationship})` : ''}
                 {c.phone ? (
                   <>
-                    {' — '}
+                    {' · '}
                     <ContactLink type="phone" value={c.phone} />
                   </>
                 ) : (

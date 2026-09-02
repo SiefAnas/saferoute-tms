@@ -36,7 +36,7 @@ export function ParentHomePage() {
   if (students.length === 0) {
     return (
       <p className="text-body-md text-on-surface-variant">
-        No students are linked to your account yet — ask your transportation company's admin to link one.
+        No students are linked to your account yet. Ask your transportation company's admin to link one.
       </p>
     )
   }
@@ -118,7 +118,7 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
         <div className="min-w-0 flex-1">
           <h2 className="text-headline-sm text-primary">{student.full_name}</h2>
           <p className="text-body-sm text-on-surface-variant">
-            {student.grade ? `Grade ${student.grade}` : 'Grade —'} · {d?.company.name ?? 'No company assigned'}
+            {student.grade ? `Grade ${student.grade}` : 'Grade -'} · {d?.company.name ?? 'No company assigned'}
             {d?.van ? ` · ${d.van.brand} ${d.van.model}` : ''}
           </p>
         </div>
@@ -162,7 +162,7 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
                   ['Brand', d.van.brand],
                   ['Model', d.van.model],
                   ['Year', String(d.van.year)],
-                  ['Color', d.van.color ?? '—'],
+                  ['Color', d.van.color ?? '-'],
                 ].map(([label, value]) => (
                   <div key={label}>
                     <p className="text-label-md text-on-surface-variant uppercase">{label}</p>
@@ -183,7 +183,7 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
 
           <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
             <h3 className="mb-2 text-label-md text-secondary uppercase">Company</h3>
-            <p className="text-body-md text-on-surface">{d?.company.name ?? '—'}</p>
+            <p className="text-body-md text-on-surface">{d?.company.name ?? '-'}</p>
             <p className="text-body-md text-on-surface-variant">
               <ContactLink type="phone" value={d?.company.phone} />
             </p>
@@ -212,7 +212,7 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
                 <p>
                   <ContactLink type="phone" value={profileQuery.data?.phone} />
                 </p>
-                <p>{profileQuery.data?.address ?? '—'}</p>
+                <p>{profileQuery.data?.address ?? '-'}</p>
               </div>
             )}
           </div>
@@ -241,7 +241,7 @@ function TripTimeline({
   const steps = [
     {
       label: 'Picked Up at School',
-      detail: schoolName ?? '—',
+      detail: schoolName ?? '-',
       time: pickupDone && pickupTrip?.completed_at ? formatClock(pickupTrip.completed_at) : formatTimeOfDay(pickupScheduled),
       state: pickupDone ? ('done' as const) : ('upcoming' as const),
     },
@@ -313,7 +313,7 @@ function SkipPickupButton({
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['skip-status', student.id] })
       queryClient.invalidateQueries({ queryKey: ['parent-student-detail', student.id] })
-      onSkipped(`Reported absence for ${student.full_name} — notified ${res.notified.length} people.`)
+      onSkipped(`Reported absence for ${student.full_name}. Notified ${res.notified.length} people.`)
     },
     onError: (err) => onSkipped(err instanceof ApiError ? err.message : 'Could not report absence.'),
   })
