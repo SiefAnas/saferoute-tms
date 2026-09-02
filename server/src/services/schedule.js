@@ -87,7 +87,7 @@ async function markNoShow(req, assignmentId) {
   const driver = await req.db.findById('users', req.auth.userId);
   const subject = `No-show reported for ${student.full_name}`;
   const text = `${driver?.full_name ?? 'The driver'} reported that no one was available for ${student.full_name}'s pickup this morning.`;
-  const notified = await notifyCompanyAndSchoolAdmins(req, student.school_id, { subject, text });
+  const notified = await notifyCompanyAndSchoolAdmins(req.auth.tenantId, student.school_id, { subject, text });
 
   return { reported: true, noShow: inserted.rows[0], notified };
 }

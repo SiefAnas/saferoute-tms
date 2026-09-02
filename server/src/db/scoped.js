@@ -38,6 +38,7 @@ const TABLE_SCOPE = {
   parent_students: { company: 'company_id' }, // parent belongs to company, like driver
   pickup_skips: { company: 'company_id' },
   pickup_no_shows: { company: 'company_id' },
+  schedule_changes: { company: 'company_id', school: 'school_id' }, // dual-tenant, like trips
 };
 
 const IDENT = /^[a-z_][a-z0-9_]*$/;

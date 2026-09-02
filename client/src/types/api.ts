@@ -79,9 +79,9 @@ export interface SkipStatus {
 // GET /parent/students/:id/detail — real vehicle/driver/trip info for the parent
 // dashboard's real (non-mockup) view (added 2026-08-27).
 export interface ParentStudentDetail {
-  student: { id: string; full_name: string }
+  student: { id: string; full_name: string; grade: string | null }
   school: { name: string | null }
-  company: { name: string | null }
+  company: { name: string | null; phone: string | null }
   van: { license_plate: string; brand: string; model: string; year: number; color: string | null } | null
   driver: { full_name: string; phone: string | null } | null
   pickup_time: string | null
@@ -95,6 +95,15 @@ export interface ParentStudentDetail {
     completed_at: string | null
     created_at: string
   }>
+}
+
+// GET /parent/me — the logged-in parent's own account info (phone/address aren't on the
+// cached AuthUser, so this is fetched fresh where needed, e.g. the dashboard's "More info").
+export interface ParentProfile {
+  full_name: string
+  email: string
+  phone: string | null
+  address: string | null
 }
 
 export interface Van {
@@ -294,8 +303,25 @@ export interface Company {
   address: string | null
   zip_code: string | null
   state: string | null
+  phone: string | null
   claim_status: 'claimed' | 'unclaimed' | 'pending_claim'
   created_by_user_id: string | null
+}
+
+export type ScheduleChangeType = 'left_early' | 'staying_later'
+
+// POST /schedule-changes/students/:id, GET /schedule-changes — school_staff/school_admin's
+// "left early" / "staying later" log for a student.
+export interface ScheduleChange {
+  id: string
+  company_id: string
+  school_id: string
+  student_id: string
+  change_type: ScheduleChangeType
+  note: string | null
+  reported_by_user_id: string
+  change_date: string
+  created_at: string
 }
 
 export interface School {
@@ -332,7 +358,8 @@ export interface SchoolSummary {
 }
 
 // GET /dashboard/absent-today — today's real skip/no-show signals (2026-08-28 Dashboard
-// redesign), resets daily since both source tables are keyed by calendar date.
+// redesign), resets daily since both source tables are keyed by calendar date. Extended
+// 2026-09-02 to also serve school_admin/school_staff (own-school scope) — same response shape.
 export interface AbsentTodayEntry {
   student_id: string
   student_name: string

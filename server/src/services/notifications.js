@@ -5,15 +5,23 @@
 const pool = require('../db/pool');
 const { sendMail } = require('../mail/mailer');
 
-// Notifies every active company_admin (via req.db, same tenant) and every active
-// school_admin of the given school (raw pool — narrow, deliberate cross-tenant read, same
-// precedent as services/schools.js), plus any extra recipients (e.g. the assigned driver).
-async function notifyCompanyAndSchoolAdmins(req, schoolId, { subject, text, extraRecipients = [] }) {
+// Notifies every active company_admin of `companyId` and every active school_admin of
+// `schoolId` (both raw pool — narrow, deliberate cross-tenant reads, same precedent as
+// services/schools.js), plus any extra recipients (e.g. the assigned driver, a parent).
+//
+// companyId is an explicit param, NOT derived from req.db/req.auth.tenantId: the original
+// version used req.db.findMany('users', {where:{role:'company_admin'}}), which happened to
+// work only because every existing caller (driver's markNoShow, parent's skipPickup) is
+// itself company-tenant, so req.db's own scoping incidentally matched. Once a school-tenant
+// caller (school_staff/school_admin logging a schedule change) needed this same helper, that
+// assumption broke silently: a school-scoped req.db.findMany('users', ...) filters by
+// school_id, so company_admin rows (school_id IS NULL) never matched — zero company admins
+// notified, no error, just missing recipients. Explicit companyId makes this correct
+// regardless of the caller's own tenant type.
+async function notifyCompanyAndSchoolAdmins(companyId, schoolId, { subject, text, extraRecipients = [] }) {
   const [companyAdmins, schoolAdmins] = await Promise.all([
-    req.db.findMany('users', { where: { role: 'company_admin', is_active: true } }),
-    pool
-      .query(`SELECT email FROM users WHERE school_id = $1 AND role = 'school_admin' AND is_active`, [schoolId])
-      .then((r) => r.rows),
+    pool.query(`SELECT email FROM users WHERE company_id = $1 AND role = 'company_admin' AND is_active`, [companyId]).then((r) => r.rows),
+    pool.query(`SELECT email FROM users WHERE school_id = $1 AND role = 'school_admin' AND is_active`, [schoolId]).then((r) => r.rows),
   ]);
   const recipients = [
     ...new Set([...companyAdmins.map((u) => u.email), ...schoolAdmins.map((u) => u.email), ...extraRecipients]),

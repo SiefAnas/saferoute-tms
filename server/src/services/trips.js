@@ -8,9 +8,9 @@ const { HttpError } = require('../errors');
 const { autoCompleteMinutes } = require('../config');
 
 // Read sub-scope by role:
-//  - driver      -> trips within their own shifts
+//  - driver       -> trips within their own shifts
 //  - school_staff -> trips only for students granted to them (staff_student_access)
-//  - admins      -> full tenant scope (no extra filter)
+//  - admins (company_admin, school_admin) -> full tenant scope (no extra filter)
 function readScope(req) {
   if (req.auth.role === 'driver') {
     return { ownerIn: { column: 'session_id', table: 'sessions', refColumn: 'id', match: { user_id: req.auth.userId } } };
@@ -20,6 +20,12 @@ function readScope(req) {
   }
   return {};
 }
+
+// Who may confirm a trip (the "received at school" / "received by driver" morning/afternoon
+// confirmation). Extended 2026-09-02 to include school_admin alongside school_staff — same
+// requireRole('company_admin', 'school_admin') pairing already used in users.js — since
+// previously only school_staff could confirm, leaving school_admin with no way to do it.
+const CONFIRM_ROLES = ['school_staff', 'school_admin'];
 
 async function logTrip(req, body = {}) {
   if (req.auth.role !== 'driver') throw new HttpError(403, 'only drivers log trips');
@@ -56,7 +62,7 @@ async function logTrip(req, body = {}) {
 }
 
 async function confirmTrip(req, id) {
-  if (req.auth.role !== 'school_staff') throw new HttpError(403, 'only school staff confirm custody');
+  if (!CONFIRM_ROLES.includes(req.auth.role)) throw new HttpError(403, 'only school staff or a school admin confirm custody');
   // findById with the staff grant sub-scope: returns null if the trip isn't for a granted student.
   const trip = await req.db.findById('trips', id, readScope(req));
   if (!trip) throw new HttpError(404, 'trip not found');
@@ -113,6 +119,11 @@ async function getTrip(req, id) {
 
 // Background sweep: complete half-confirmed trips older than the threshold. System-wide
 // (all tenants) since it's a scheduled job, not a user request. Idempotent conditional UPDATE.
+//
+// TODO (V2, explicitly deferred per the pickup-confirmation task): this silent auto-confirm
+// is temporary MVP behavior. V2 should replace it with a reminder to school staff/admin, plus
+// a notification to the school/company admin if a trip goes unconfirmed all the way to the
+// timeout — not just quietly marking it complete as if someone actually confirmed it.
 async function autoCompleteStaleTrips() {
   const { rowCount } = await pool.query(
     `UPDATE trips

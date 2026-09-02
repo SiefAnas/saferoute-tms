@@ -15,6 +15,7 @@ import { VansPage } from './pages/company/VansPage'
 import { AssignmentsPage } from './pages/company/AssignmentsPage'
 import { PayrollPage } from './pages/company/PayrollPage'
 import { CompanyStudentsPage } from './pages/company/StudentsPage'
+import { CompanyProfilePage } from './pages/company/CompanyProfilePage'
 import { StudentsPage } from './pages/school-admin/StudentsPage'
 import { StaffAccessPage } from './pages/school-admin/StaffAccessPage'
 import { SchoolProfilePage } from './pages/school-admin/SchoolProfilePage'
@@ -32,13 +33,15 @@ const COMPANY_NAV = [
   { to: '/company/parents', label: 'Parents', icon: 'family_restroom' },
   { to: '/company/assignments', label: 'Assignments', icon: 'assignment' },
   { to: '/company/payroll', label: 'Payroll', icon: 'payments' },
+  { to: '/company/profile', label: 'Company Profile', icon: 'apartment' },
 ]
 const SCHOOL_ADMIN_NAV = [
   { to: '/school-admin', label: 'Students', icon: 'groups', end: true },
+  { to: '/school-admin/pickup', label: 'Pickup & Dropoff', icon: 'how_to_reg' },
   { to: '/school-admin/staff', label: 'Staff & Access', icon: 'badge' },
   { to: '/school-admin/profile', label: 'School Profile', icon: 'school' },
 ]
-const SCHOOL_STAFF_NAV = [{ to: '/school-staff', label: 'My Students', icon: 'groups', end: true }]
+const SCHOOL_STAFF_NAV = [{ to: '/school-staff', label: 'Pickup & Dropoff', icon: 'how_to_reg', end: true }]
 const DRIVER_NAV = [{ to: '/driver', label: 'Dashboard', icon: 'dashboard', end: true }]
 
 function RootRedirect() {
@@ -69,12 +72,14 @@ function App() {
           <Route path="/company/payroll" element={<PayrollPage />} />
           <Route path="/company/students" element={<CompanyStudentsPage />} />
           <Route path="/company/parents" element={<ParentsPage />} />
+          <Route path="/company/profile" element={<CompanyProfilePage />} />
         </Route>
       </Route>
 
       <Route element={<ProtectedRoute roles={['school_admin']} />}>
         <Route element={<AdminLayout title="School Hub" navItems={SCHOOL_ADMIN_NAV} />}>
           <Route path="/school-admin" element={<StudentsPage />} />
+          <Route path="/school-admin/pickup" element={<SchoolStaffDashboard />} />
           <Route path="/school-admin/staff" element={<StaffAccessPage />} />
           <Route path="/school-admin/profile" element={<SchoolProfilePage />} />
         </Route>

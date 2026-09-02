@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { formatTimeOfDay, formatClock } from '../../lib/format'
 import { Button } from '../../components/Button'
-import type { Student, SkipStatus, ParentStudentDetail } from '../../types/api'
+import { ContactLink } from '../../components/ContactLink'
+import type { Student, SkipStatus, ParentStudentDetail, ParentProfile } from '../../types/api'
 
 // Real Parent dashboard (2026-08-27), restyled to adapt (not clone) a Stitch reference
 // Anas provided — map hero, status highlight card, vertical trip-progress timeline, and
@@ -70,10 +71,22 @@ export function ParentHomePage() {
   )
 }
 
+// TODO (v2, § pickup-confirmation task): this student view has no live map/GPS or live
+// pickup status — both explicitly deferred. The MapHero/StatusCard placeholders that used to
+// sit here (fake "5 mins away" countdown, a static decorative map) were removed as part of
+// the mobile compact-view redesign rather than kept as visual filler; when live GPS/pickup
+// status is actually built, it should cover the app broadly (this dashboard, the company
+// admin fleet view, the driver's own route), not be bolted onto just this one screen.
 function StudentDetailView({ student, onMessage }: { student: Student; onMessage: (msg: string) => void }) {
+  const [showMore, setShowMore] = useState(false)
   const detailQuery = useQuery({
     queryKey: ['parent-student-detail', student.id],
     queryFn: () => api.get<ParentStudentDetail>(`/parent/students/${student.id}/detail`),
+  })
+  const profileQuery = useQuery({
+    queryKey: ['parent-me'],
+    queryFn: () => api.get<ParentProfile>('/parent/me'),
+    enabled: showMore,
   })
   const d = detailQuery.data
 
@@ -82,124 +95,127 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
   const pickupDone = pickupTrip?.status === 'complete'
   const dropoffDone = dropoffTrip?.status === 'complete'
 
-  const status = d?.skip_today
-    ? { label: 'Pickup Skipped Today' }
+  const statusLabel = d?.skip_today
+    ? 'Pickup Skipped Today'
     : dropoffDone
-      ? { label: 'Dropped Off' }
+      ? 'Dropped Off'
       : pickupDone
-        ? { label: 'In Transit' }
-        : { label: 'Not Yet Picked Up' }
+        ? 'In Transit'
+        : 'Not Yet Picked Up'
 
   if (detailQuery.isLoading) {
     return <p className="text-body-md text-on-surface-variant">Loading…</p>
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <MapHero />
+    <div className="flex flex-col gap-4">
+      {/* Compact default view (mobile): kid name, grade, company name, van type — everything
+          else lives behind "More info" so the default screen stays short on a phone. */}
+      <div className="flex items-center gap-3 rounded-2xl border border-outline-variant bg-surface-container-low p-4 shadow-sm">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-secondary-container">
+          <span className="material-symbols-outlined text-on-secondary-container">person</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-headline-sm text-primary">{student.full_name}</h2>
+          <p className="text-body-sm text-on-surface-variant">
+            {student.grade ? `Grade ${student.grade}` : 'Grade —'} · {d?.company.name ?? 'No company assigned'}
+            {d?.van ? ` · ${d.van.brand} ${d.van.model}` : ''}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-primary-container bg-primary-fixed px-3 py-1 text-label-md text-on-primary-fixed-variant">
+          {statusLabel}
+        </span>
+      </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="flex items-center gap-3 rounded-2xl border border-outline-variant bg-surface-container-low p-4 shadow-sm">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-secondary-container">
-            <span className="material-symbols-outlined text-on-secondary-container">person</span>
-          </div>
-          <div>
-            <h2 className="text-headline-sm text-primary">{student.full_name}</h2>
-            <p className="mt-0.5 flex items-center gap-1 text-body-sm text-on-surface-variant">
-              <span className="material-symbols-outlined !text-[14px]">school</span>
-              {d?.school.name ?? '—'}
+      <div className="flex flex-col gap-2">
+        <SkipPickupButton student={student} skipToday={d?.skip_today ?? false} onSkipped={onMessage} />
+        {d?.driver?.phone && (
+          <a
+            href={`tel:${d.driver.phone}`}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-error-container bg-surface-container-low text-body-md font-semibold text-error transition-colors hover:bg-error-container"
+          >
+            <span className="material-symbols-outlined !text-[20px]">call</span>
+            Contact {d.driver.full_name.split(' ')[0]}
+          </a>
+        )}
+        <p className="text-center text-body-sm text-on-surface-variant">For urgent or emergency inquiries only.</p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setShowMore((v) => !v)}
+        className="flex items-center justify-center gap-1 rounded-lg border border-outline-variant py-2 text-label-md text-primary hover:bg-surface-container"
+      >
+        {showMore ? 'Less info' : 'More info'}
+        <span className="material-symbols-outlined !text-[18px]">{showMore ? 'expand_less' : 'expand_more'}</span>
+      </button>
+
+      {showMore && (
+        <div className="flex flex-col gap-5">
+          {!d?.van || !d?.driver ? (
+            <p className="text-body-md text-on-surface-variant">No driver/van currently assigned to this student.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 sm:grid-cols-5">
+                {[
+                  ['Plate', d.van.license_plate],
+                  ['Brand', d.van.brand],
+                  ['Model', d.van.model],
+                  ['Year', String(d.van.year)],
+                  ['Color', d.van.color ?? '—'],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <p className="text-label-md text-on-surface-variant uppercase">{label}</p>
+                    <p className="text-body-md font-medium text-on-surface">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <TripTimeline
+                pickupTrip={pickupTrip}
+                dropoffTrip={dropoffTrip}
+                pickupScheduled={d.pickup_time}
+                dropoffScheduled={d.dropoff_time}
+                schoolName={d.school.name}
+              />
+            </>
+          )}
+
+          <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
+            <h3 className="mb-2 text-label-md text-secondary uppercase">Company</h3>
+            <p className="text-body-md text-on-surface">{d?.company.name ?? '—'}</p>
+            <p className="text-body-md text-on-surface-variant">
+              <ContactLink type="phone" value={d?.company.phone} />
             </p>
           </div>
-        </div>
 
-        <StatusCard label={status.label} />
-      </div>
+          {d?.driver && (
+            <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
+              <h3 className="mb-2 text-label-md text-secondary uppercase">Driver</h3>
+              <p className="text-body-md text-on-surface">{d.driver.full_name}</p>
+              <p className="text-body-md text-on-surface-variant">
+                <ContactLink type="phone" value={d.driver.phone} />
+              </p>
+            </div>
+          )}
 
-      {!d?.van || !d?.driver ? (
-        <p className="text-body-md text-on-surface-variant">No driver/van currently assigned to this student.</p>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 sm:grid-cols-5">
-            {[
-              ['Plate', d.van.license_plate],
-              ['Brand', d.van.brand],
-              ['Model', d.van.model],
-              ['Year', String(d.van.year)],
-              ['Color', d.van.color ?? '—'],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <p className="text-label-md text-on-surface-variant uppercase">{label}</p>
-                <p className="text-body-md font-medium text-on-surface">{value}</p>
+          <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
+            <h3 className="mb-2 text-label-md text-secondary uppercase">Your Info</h3>
+            {profileQuery.isLoading ? (
+              <p className="text-body-md text-on-surface-variant">Loading…</p>
+            ) : (
+              <div className="flex flex-col gap-1 text-body-md text-on-surface-variant">
+                <p className="text-on-surface">{profileQuery.data?.full_name}</p>
+                <p>
+                  <ContactLink type="email" value={profileQuery.data?.email} />
+                </p>
+                <p>
+                  <ContactLink type="phone" value={profileQuery.data?.phone} />
+                </p>
+                <p>{profileQuery.data?.address ?? '—'}</p>
               </div>
-            ))}
-          </div>
-
-          <TripTimeline
-            pickupTrip={pickupTrip}
-            dropoffTrip={dropoffTrip}
-            pickupScheduled={d.pickup_time}
-            dropoffScheduled={d.dropoff_time}
-            schoolName={d.school.name}
-          />
-
-          <div className="flex flex-col gap-2">
-            <SkipPickupButton student={student} skipToday={d.skip_today} onSkipped={onMessage} />
-            {d.driver.phone && (
-              <a
-                href={`tel:${d.driver.phone}`}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-error-container bg-surface-container-low text-body-md font-semibold text-error transition-colors hover:bg-error-container"
-              >
-                <span className="material-symbols-outlined !text-[20px]">call</span>
-                Contact {d.driver.full_name.split(' ')[0]}
-              </a>
             )}
-            <p className="text-center text-body-sm text-on-surface-variant">For urgent or emergency inquiries only.</p>
           </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-// TODO (v2): this whole block is a static placeholder — no live GPS exists anywhere in the
-// app yet. When real vehicle tracking is built, it should cover the app broadly (this
-// dashboard, the company admin fleet view, the driver's own route), not just be bolted onto
-// this one screen. Per Anas's explicit instruction: keep this decorative for now.
-function MapHero() {
-  return (
-    <div className="relative h-40 w-full shrink-0 overflow-hidden rounded-2xl bg-surface-container-high sm:h-56">
-      <div
-        className="absolute inset-0 opacity-40"
-        style={{
-          backgroundImage:
-            'repeating-linear-gradient(0deg, transparent, transparent 23px, var(--color-outline-variant) 23px, var(--color-outline-variant) 24px), repeating-linear-gradient(90deg, transparent, transparent 23px, var(--color-outline-variant) 23px, var(--color-outline-variant) 24px)',
-        }}
-      />
-      <div className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
-        <span className="absolute h-8 w-8 animate-ping rounded-full bg-primary-container opacity-60" />
-        <div className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-surface bg-primary text-on-primary shadow-md">
-          <span className="material-symbols-outlined !text-[18px]">directions_bus</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// TODO (v2): fake countdown, per Anas's explicit instruction to keep it visually complete
-// now and wire it to a real ETA once live GPS exists (app-wide, see MapHero above).
-// Deliberately NOT derived from any real data — a fixed placeholder value.
-function StatusCard({ label }: { label: string }) {
-  return (
-    <div className="relative flex flex-col justify-center overflow-hidden rounded-2xl border border-primary-container bg-primary-fixed p-4 shadow-sm">
-      <span className="material-symbols-outlined absolute -top-4 -right-4 !text-[100px] text-primary opacity-10">radar</span>
-      <div className="relative z-10 flex items-center gap-2">
-        <span className="material-symbols-outlined text-on-primary-fixed-variant">directions_bus</span>
-        <span className="text-label-md tracking-wider text-on-primary-fixed-variant uppercase">{label}</span>
-      </div>
-      {label === 'In Transit' && (
-        <div className="relative z-10 mt-1 flex items-baseline gap-2">
-          <span className="text-display-lg font-bold text-primary">5</span>
-          <span className="text-headline-sm text-on-primary-fixed-variant">mins away</span>
         </div>
       )}
     </div>

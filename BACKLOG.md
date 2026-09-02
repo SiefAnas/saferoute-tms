@@ -7,6 +7,117 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-09-02 — Parent dashboard mobile redesign + school staff/admin pickup-confirmation workflow
+
+Two-part task. Part 2 explicitly warned to check how a new confirmation status would
+interact with existing Assignments/pickup/dropoff data before building anything — worth
+reading in full since almost every real decision here came out of that investigation.
+
+### Part 1 — Parent dashboard mobile fixes
+
+- **Logout button**: already existed (`ParentLayout.tsx`'s top-right header icon) — verified
+  live at a 375px mobile viewport before touching anything, confirmed visible and working.
+  Not missing; no duplicate added.
+- **Compact default view**: student name, grade, company name, van type (brand+model) —
+  replaces the old always-visible map placeholder + fake "5 mins away" countdown + full
+  van-detail grid. The fake MapHero/StatusCard components are gone, not just hidden — they
+  were static placeholders with no real data, exactly the kind of bulk "make it compact"
+  should remove, not relocate.
+- **"More info" expand** reveals: company phone, driver name + phone, and the parent's own
+  full account info (name/email/phone/address) — plus the van detail grid and real trip
+  timeline (legitimate extra detail, not fake, so kept behind the expand rather than deleted).
+  Skip Pickup and Contact Driver stay always-visible (core actions, not "info").
+- **Two real gaps found and filled to make this possible**:
+  - `companies` had no `phone` column at all, and no self-service profile page existed for
+    company_admin (unlike school_admin's `SchoolProfilePage`) — "company phone" would have
+    been permanently blank otherwise. Added the column + `GET/PATCH /companies/me` (mirrors
+    `schools/me` exactly) + a new `CompanyProfilePage.tsx` nav entry.
+  - The parent's own phone/address aren't on the cached `AuthUser` (JWT-derived, client-side)
+    and there was no self-read route a parent could hit (`users.js` is admin-only). New
+    `GET /parent/me`, fetched fresh (not trusted from a possibly-stale cache) only when
+    "More info" is actually opened.
+
+### Part 2 — School staff/admin pickup-confirmation workflow
+
+**The investigation, before writing anything**: this app already has a two-way trip
+confirmation system (`trips` table: driver logs a trip = driver's confirmation; school_staff
+confirms = the other half; a 5-minute in-process sweep, `autoCompleteStaleTrips`, already
+auto-completes anything left half-confirmed) built in an earlier step. The morning/afternoon
+"received at school" / "received by driver" flow asked for here **is that exact mechanism**,
+not a new one — so this task is almost entirely about *extending* existing pieces rather than
+building new ones, and the two real structural conflicts were about who's allowed to touch
+what, not about the confirmation concept itself.
+
+1. **Morning/afternoon confirmation**: `confirmTrip`'s role check was `school_staff` only
+   (`school_admin` had no way to confirm anything). Extended to
+   `['school_staff', 'school_admin']` — same `requireRole('company_admin', 'school_admin')`
+   pairing already used in `users.js`. The 5-minute auto-confirm was already exactly the
+   asked-for behavior; a TODO was added directly on `autoCompleteStaleTrips()` per the
+   explicit ask: V2 should replace the silent auto-confirm with a staff/admin reminder +
+   an admin notification on timeout, not just marking it complete as if someone confirmed it.
+
+2. **Absence visibility** (Skip Pickup / Mark Absent): `GET /dashboard/absent-today` was
+   `company_admin`-only. **Real structural conflict**: `pickup_skips` and `pickup_no_shows`
+   have no `school_id` column at all (company-tenant-only tables) — a school-tenant caller's
+   `req.db` can't reach them at all (`ScopeError`, not just permission-denied). Resolved by
+   branching the service on caller role: company_admin keeps the original `req.db` path
+   unchanged; school_admin/school_staff get a new raw-pool query joining through `students`
+   on `school_id` — same precedent `schedule.js`'s `getTodaySchedule` already established for
+   a query shape the scoped accessor's equality-only `where` can't express. school_staff is
+   further narrowed to their granted students (`staff_student_access`), matching the same
+   least-privilege sub-scope `trips.js` already applies to that role. No schema change to
+   either source table.
+
+3. **"Left early" / "staying later"**: genuinely new — nothing existing fits a same-day,
+   actor-attributed log with its own notification trail (`assignment_schedule_overrides` is
+   a pre-planned, company_admin-only, whole-day override; closer in *spirit* to
+   `pickup_skips`/`pickup_no_shows`, just needing two change types). New dual-tenant
+   `schedule_changes` table (`company_id` + `school_id`, same composite-FK-to-students pattern
+   as `trips`), service, and `POST/GET /schedule-changes`, gated to `school_staff`/
+   `school_admin`.
+   - **"Left early" cancels today's scheduled company pickup** by reusing the *existing*
+     `assignment_schedule_overrides.skip` flag (the same one `company_admin` already sets
+     manually) — not a new parallel "skip" concept. **Real structural conflict**: that table
+     is company-tenant-only too, so a school-tenant actor's `req.db` can't write to it either.
+     Resolved with a raw-pool write, ownership enforced by the JOIN itself (only assignments
+     for a student at *this actor's own school*) — same cross-tenant-write precedent
+     `placeholders.js` already established for company/school actors editing each other's
+     stub records. Safe to apply as a whole-day skip (no separate pickup/dropoff leg
+     tracking exists, and none was added): by the time staff would log "left early," the
+     morning dropoff already happened and is already recorded in `trips` — a forward-looking
+     skip has no retroactive effect on it.
+   - **"Staying later" is notification-only**, exactly as asked — logs the row, sends the
+     same notification, touches no override.
+   - **Notifies company_admin + school_admin + the student's currently-assigned driver +
+     their linked parent(s)** — a recipient set no existing helper fully covered.
+   - **Real bug found and fixed while wiring this up**: the shared `notifyCompanyAndSchoolAdmins`
+     helper looked up company admins via `req.db.findMany('users', {where:{role:'company_admin'}})`
+     — which only ever worked because its two existing callers (driver's no-show, parent's
+     skip-pickup) are themselves company-tenant, so `req.db`'s own scoping happened to match.
+     Called from a school-tenant actor (this feature), that same call silently scoped to
+     `school_id` instead and returned zero company admins — no error, just a missing
+     recipient, caught by the new test asserting the exact recipient list rather than just
+     "notified.length > 0". Fixed by making `companyId` an explicit parameter instead of
+     inferred from the caller's own tenant; all three callers (existing two + this one)
+     updated to pass it explicitly.
+
+**Verification**: new `server/test/13-pickup-confirmation.test.cjs` (27 assertions) covering
+every role-gate, the school-scoped absent-today branch + its least-privilege sub-scope, the
+company profile endpoint, `/parent/me`, and both schedule-change types — including asserting
+the *exact* 4-recipient notification list (not just a count) so the tenant-scoping bug above
+couldn't have slipped through unnoticed. Full backend suite: 13/13 suites (one pre-existing
+test updated: `01-schema.test.cjs`'s hardcoded migration count, 17 -> 18). `tsc -b`, lint, and
+`vite build` clean. Live-verified end-to-end against the real dev server + the same Neon DB
+the whole project uses: logged a real "left early" as school_admin, confirmed the exact 4
+`[mail]` lines fired with the correct recipients, confirmed `assignment_schedule_overrides`
+actually flipped to `skip=true` for today via a direct DB check, confirmed a driver's own
+`/schedule/today` reflects it; confirmed a real pending trip as school_admin (previously
+403); set a real company phone via the new Company Profile page and confirmed it flows
+through to the parent dashboard's "More info" panel; confirmed the mobile compact view and
+expand panel render exactly as specified at a 375px viewport. Migration
+(`1752624000018_schedule-changes-and-company-phone`) applied to the live Neon DB. Test-only
+data (a trial trip, a schedule-change log, its override) cleaned up after verification.
+
 ## 2026-09-01 — Payroll/Assignments modals, Parents table redesign, parent<->student auto-match
 
 Four-item batch, same day as the modal/required-fields/click-to-call batch below.

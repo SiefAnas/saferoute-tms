@@ -29,6 +29,16 @@ async function listMyStudents(req) {
   return req.db.findMany('students', { ...readScope(req), orderBy: 'full_name' });
 }
 
+// The parent's own account info (§ parent dashboard mobile task, "More info" -> full parent
+// info). AuthUser (the JWT-derived object cached client-side) has no phone/address, and
+// there's no other self-read route a parent can hit (users.js is admin-only) — fetched fresh
+// here rather than trusting a possibly-stale cached value.
+async function getMyProfile(req) {
+  const user = await req.db.findById('users', req.auth.userId);
+  if (!user) throw new HttpError(404, 'user not found');
+  return { full_name: user.full_name, email: user.email, phone: user.phone, address: user.address };
+}
+
 async function assertLinkedStudent(req, studentId) {
   const [student] = await req.db.findMany('students', { ...readScope(req), where: { id: studentId } });
   if (!student) throw new HttpError(404, 'student not found, or not linked to your account');
@@ -73,7 +83,7 @@ async function getStudentDetail(req, studentId) {
             COALESCE(o.skip, false) AS schedule_skip,
             v.license_plate, v.brand, v.model, v.year, v.color,
             u.full_name AS driver_name, u.phone AS driver_phone,
-            c.name AS company_name
+            c.name AS company_name, c.phone AS company_phone
        FROM assignments a
        JOIN vans v ON v.id = a.van_id
        JOIN users u ON u.id = a.driver_user_id
@@ -109,9 +119,9 @@ async function getStudentDetail(req, studentId) {
   );
 
   return {
-    student: { id: student.id, full_name: student.full_name },
+    student: { id: student.id, full_name: student.full_name, grade: student.grade },
     school: { name: schoolRows[0]?.name ?? null },
-    company: { name: assignment?.company_name ?? null },
+    company: { name: assignment?.company_name ?? null, phone: assignment?.company_phone ?? null },
     van: assignment
       ? { license_plate: assignment.license_plate, brand: assignment.brand, model: assignment.model, year: assignment.year, color: assignment.color }
       : null,
@@ -175,7 +185,7 @@ async function notifyPickupSkipped(req, student, driverUserId) {
     `${student.full_name}'s parent has skipped morning pickup for today ` +
     `(${company?.name ?? 'the transportation company'}). No pickup is needed for this student today.`;
 
-  return notifyCompanyAndSchoolAdmins(req, student.school_id, { subject, text, extraRecipients: driver ? [driver.email] : [] });
+  return notifyCompanyAndSchoolAdmins(req.auth.tenantId, student.school_id, { subject, text, extraRecipients: driver ? [driver.email] : [] });
 }
 
-module.exports = { listMyStudents, getSkipStatus, skipPickup, getStudentDetail };
+module.exports = { listMyStudents, getMyProfile, getSkipStatus, skipPickup, getStudentDetail };

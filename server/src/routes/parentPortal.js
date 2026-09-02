@@ -4,11 +4,14 @@ const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
-const { listMyStudents, getSkipStatus, skipPickup, getStudentDetail } = require('../services/parentPortal');
+const { listMyStudents, getMyProfile, getSkipStatus, skipPickup, getStudentDetail } = require('../services/parentPortal');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb, requireRole('parent'));
 
+router.get('/me', async (req, res, next) => {
+  try { res.json(await getMyProfile(req)); } catch (e) { next(e); }
+});
 router.get('/students', async (req, res, next) => {
   try { res.json(await listMyStudents(req)); } catch (e) { next(e); }
 });
