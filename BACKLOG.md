@@ -7,6 +7,64 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-09-02 — Session recap (for whoever picks this up next)
+
+Long session, five batches of work, all pushed and confirmed live on Render (both
+`saferoute-tms-api` and `saferoute-tms-client`) by the end. In commit order:
+
+1. **`7ec0b21`** — Parent dashboard mobile redesign (compact default view + "More info"
+   expand for company/driver/parent contact info) + a new school staff/admin pickup
+   confirmation workflow: morning "received at school" / afternoon "received by driver"
+   confirmation (reusing the existing `trips` two-way-confirmation system and its 5-minute
+   auto-complete sweep), absence visibility (existing skip/no-show data surfaced, not a new
+   system), and "left early"/"staying later" schedule-change logging with notifications.
+2. **`b946632`** — School Hub fixes from live testing: the confirm action actually wired up
+   to clicking a student's name (and a pickup/dropoff -> morning/afternoon label mapping bug
+   fixed along the way), "staying later" made to actually cancel the pickup like "left early"
+   does, every em dash in user-facing text replaced app-wide, and static explanation text
+   turned into hover tooltips.
+3. **`7d777ba`** — Driver dashboard section reorder (Today's Schedule moved above This
+   Month's Pay/Worked This Month calendar) — one item from the original batch 1 ask that had
+   been missed; caught and fixed once flagged.
+4. **`1eb198a`** — Fixed mobile logout being completely unreachable for 4 of 5 roles
+   (driver, company_admin, school_admin, school_staff): their shared sidebar was `hidden`
+   below the `md` breakpoint with no mobile fallback at all. Added a mobile top bar with a
+   directly-tappable logout icon plus a nav drawer; verified live at a real 375px viewport
+   for all 5 roles.
+5. **`acc8e1f`** — School Hub student list now shows company name + assigned van in the
+   default row (school_staff/school_admin's shared Students table), plus a per-student "More
+   info" expand for full parent/guardian info, van detail, driver contact, and school contact
+   info.
+6. **`b1eea8f`** — Fixed an unhandled pool `'error'` event that crashed the entire API
+   process on a transient Neon network blip (found live while testing item 4), plus a
+   regression test reproducing the crash.
+
+Each of the entries below (in the same order, newest first) has the full detail, live
+verification steps, and any assumptions flagged along the way. Backend suite is 13/13 green
+as of the end of this session (one Windows embedded-postgres shared-memory flake mid-session,
+confirmed environmental — passes clean in isolation, not a real regression). Working tree is
+clean, nothing uncommitted.
+
+## 2026-09-02 (last) — Fix unhandled pool error crash in background trip sweep
+
+Flagged as a separate background task while testing the mobile logout fix below (a transient
+Neon DNS blip crashed the whole local API process, not just the one background sweep query),
+picked up and finished in a peer session, verified independently here before committing.
+
+Root cause: the shared `pg` `Pool` (`server/src/db/pool.js`) had no `'error'` event listener.
+node-postgres emits `'error'` on the pool when an idle client hits a network-level problem
+(dropped connection, DNS hiccup); with nothing listening, that's an unhandled EventEmitter
+error, which is a fatal, uncaught throw by Node's default behavior — turning a few seconds of
+bad DNS into a full process crash and outage, not a single failed query. Would apply equally
+in production on Render, not just locally.
+
+Fix: `pool.on('error', ...)` logs and lets the pool recover (node-postgres transparently
+replaces the dead client). Added a regression test to `08-boot-safety.test.cjs` that spawns a
+subprocess, requires `pool.js`, synthetically emits a pool `'error'`, and asserts the process
+survives — confirmed to fail against the pre-fix code and pass against the fix.
+`autoCompleteStaleTrips()`'s own `setInterval` sweep already wraps its call in `.catch(...)`,
+so no separate fix was needed there. Full suite re-run clean (13/13) before pushing.
+
 ## 2026-09-02 (still later) — School Hub student list: company/van in the row, More info expand
 
 Task: on the School Hub student list, show company name and assigned van in the default row
@@ -74,7 +132,9 @@ outright (`throw er; // Unhandled 'error' event`, uncaught) on a transient DNS b
 Neon from `server/src/services/trips.js`'s background auto-complete sweep — the pool's `error`
 event has no listener wired up, so a transient network hiccup kills the whole node process,
 not just that one query. Worth checking the same isn't possible in production, but out of
-scope for this fix.
+scope for this fix. (Fixed later the same day — see "Fix unhandled pool error crash" below.)
+
+## 2026-09-02 (even later) — Follow-up audit + driver dashboard section reorder
 
 Anas worried a possible connectivity interruption might have caused work from the pickup-
 confirmation batch (below) to get reported done without actually landing. Checked `git log`
