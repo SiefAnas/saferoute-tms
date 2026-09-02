@@ -72,6 +72,25 @@ async function main() {
       : bad(`mailer test-mode override failed: status=${res.status} stdout=${res.stdout} stderr=${res.stderr}`);
   }
 
+  {
+    // Reproduces the 2026-09-02 incident: a transient network blip (DNS failure, dropped
+    // connection) surfacing as an 'error' event on an idle pg pool client. With no listener
+    // registered, node-postgres's pool re-throws that as an unhandled EventEmitter 'error',
+    // which crashes the whole process instead of just failing the one query/sweep tick.
+    const script = `
+      process.env.NODE_ENV = 'test';
+      process.env.DATABASE_URL = 'postgres://x';
+      process.env.JWT_SECRET = 'x';
+      const pool = require('./src/db/pool.js');
+      pool.emit('error', new Error('getaddrinfo ENOTFOUND simulated'));
+      setTimeout(() => { console.log('SURVIVED'); process.exit(0); }, 50);
+    `;
+    const res = spawnSync(process.execPath, ['-e', script], { cwd: SERVER_DIR, encoding: 'utf8', timeout: 5000 });
+    res.status === 0 && /SURVIVED/.test(res.stdout)
+      ? ok('an idle-client pool error is logged, not an unhandled crash')
+      : bad(`pool error event crashed the process: status=${res.status} stdout=${res.stdout} stderr=${res.stderr}`);
+  }
+
   const { fail } = rec.summarize();
   process.exit(fail === 0 ? 0 : 1);
 }
