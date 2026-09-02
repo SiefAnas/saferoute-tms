@@ -34,9 +34,90 @@ export function AdminLayout({
 }) {
   const { user, logout } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   return (
-    <div className="flex h-screen bg-background text-on-surface">
+    <div className="flex h-screen flex-col bg-background text-on-surface md:flex-row">
+      {/* The sidebar below is `hidden` under the md breakpoint, so on a phone-width screen it's
+          the only way to reach nav or logout at all — found live (2026-09-02) as a "can't log
+          out on iPhone" report across every role that uses this shared layout. */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-outline-variant bg-surface-container-low px-3 md:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          aria-label="Open menu"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high"
+        >
+          <span className="material-symbols-outlined">menu</span>
+        </button>
+        <h1 className="text-title-md font-bold text-primary">{title}</h1>
+        <button
+          type="button"
+          onClick={logout}
+          aria-label="Logout"
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high"
+        >
+          <span className="material-symbols-outlined">logout</span>
+        </button>
+      </header>
+
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileNavOpen(false)} />
+          <aside className="relative flex h-full w-64 flex-col gap-2 overflow-y-auto bg-surface-container-low px-4 py-6 shadow-lg">
+            <div className="mb-6 flex items-center justify-between px-2">
+              <div>
+                <h1 className="text-headline-sm font-bold text-primary">{title}</h1>
+                <p className="text-label-md text-secondary opacity-70">
+                  <ContactLink type="email" value={user?.email} />
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                aria-label="Close menu"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <nav className="flex flex-1 flex-col gap-1">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  onClick={() => setMobileNavOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-4 rounded-lg px-4 py-2 transition-colors ${
+                      isActive
+                        ? 'bg-primary-container font-bold text-on-primary-container'
+                        : 'text-on-surface-variant hover:bg-surface-container-high'
+                    }`
+                  }
+                >
+                  <span className="material-symbols-outlined">{item.icon}</span>
+                  <span className="text-label-md">{item.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+
+            <div className="mt-auto flex flex-col gap-1 border-t border-outline-variant pt-4">
+              <div className="px-4 py-2 text-label-md text-on-surface-variant">{user?.full_name}</div>
+              <button
+                type="button"
+                onClick={logout}
+                className="flex items-center gap-4 rounded-lg px-4 py-2 text-left text-on-surface-variant transition-colors hover:bg-surface-container-high"
+              >
+                <span className="material-symbols-outlined">logout</span>
+                <span className="text-label-md">Logout</span>
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       <aside
         className={`hidden shrink-0 flex-col gap-2 overflow-y-auto border-r border-outline-variant bg-surface-container-low py-6 transition-[width] duration-200 md:flex ${
           collapsed ? 'w-16 px-2' : 'w-64 px-4'
@@ -98,7 +179,7 @@ export function AdminLayout({
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto bg-background p-6">
           <div className="mx-auto max-w-[1440px]">
             <Outlet />

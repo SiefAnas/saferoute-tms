@@ -7,7 +7,35 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
-## 2026-09-02 (even later) — Follow-up audit + driver dashboard section reorder
+## 2026-09-02 (yet later) — Mobile logout was completely broken for 4 of 5 roles
+
+Real bug report from an iPhone (Chrome mobile) user: could not log out at all, on any page.
+Earlier in this same day's work I'd checked the parent dashboard specifically for a mobile
+logout button and found one already in the header, and wrongly treated that as covering the
+whole app. It doesn't: driver, company_admin, school_admin, and school_staff all share
+`AdminLayout` (`client/src/layouts/AdminLayout.tsx`), whose only nav/logout surface was the
+desktop sidebar `<aside>`, which was `hidden` below the `md` (768px) breakpoint with no
+fallback at all. On a real phone width, that entire sidebar (nav AND logout) simply didn't
+exist in the rendered page for those 4 roles. Only `ParentLayout` was fine, since it uses its
+own header + bottom-tab shell that was already built mobile-first.
+
+Fix: `AdminLayout` now has a mobile-only top bar (`md:hidden`) with a hamburger button and a
+directly-tappable logout icon, plus a slide-in nav drawer (backdrop-dismissible) reached via
+the hamburger, so logout doesn't require opening the drawer at all. Desktop sidebar is
+untouched.
+
+Verified live at an actual 375x812 mobile viewport (not just responsive CSS review) for all
+5 roles: driver, company_admin, school_admin, school_staff, parent. For each, confirmed (a)
+the logout control is visible and within the viewport bounds, (b) tapping it fires the real
+logout (`localStorage` token cleared) and redirects to `/login`, not just a UI state change.
+Also spot-checked the new drawer opens/closes and desktop layout (1280px) is unaffected.
+
+Unrelated issue noticed while testing, not fixed here: the local dev API process crashed
+outright (`throw er; // Unhandled 'error' event`, uncaught) on a transient DNS blip talking to
+Neon from `server/src/services/trips.js`'s background auto-complete sweep — the pool's `error`
+event has no listener wired up, so a transient network hiccup kills the whole node process,
+not just that one query. Worth checking the same isn't possible in production, but out of
+scope for this fix.
 
 Anas worried a possible connectivity interruption might have caused work from the pickup-
 confirmation batch (below) to get reported done without actually landing. Checked `git log`
