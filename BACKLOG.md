@@ -7,6 +7,24 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-09-02 (even later) — Follow-up audit + driver dashboard section reorder
+
+Anas worried a possible connectivity interruption might have caused work from the pickup-
+confirmation batch (below) to get reported done without actually landing. Checked `git log`
+and `git status`: both prior commits (`7ec0b21`, `b946632`) are genuinely in history and the
+working tree was clean before this entry, so nothing was lost, everything reported complete in
+those two batches really is committed, pushed, and was already live-verified.
+
+While re-reading the original request, found one item that really had been missed: a small
+driver dashboard layout change bundled into the same original ask ("Today's Schedule near the
+top, right under check-in status; This Month's Pay and Worked This Month calendar below that")
+never got implemented in `client/src/pages/driver/DriverDashboard.tsx` — the page still had
+Pay/Calendar above Today's Schedule. Pure JSX reorder, no logic touched: "Today's Schedule" now
+sits directly after the Current Status/Today's Hours grid, "Today's Trips" stays right after it
+(its own position wasn't part of the ask), and the This Month's Pay / Worked This Month grid
+moved to the bottom. Verified live as a driver login: `tsc -b`, lint, and `vite build` all clean,
+and the rendered order matches the request exactly.
+
 ## 2026-09-02 (later) — School Hub fixes from live testing
 
 Four fixes on the School Hub page (`/school-staff`, `/school-admin/pickup`), same day as the

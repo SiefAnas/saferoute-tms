@@ -177,32 +177,6 @@ export function DriverDashboard() {
         </Card>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card className="flex flex-col gap-2 p-4">
-          <span className="text-label-md text-on-surface-variant uppercase">This Month's Pay</span>
-          {paySummaryQuery.isLoading ? (
-            <p className="text-body-md text-on-surface-variant">Loading…</p>
-          ) : paySummaryQuery.error instanceof ApiError && paySummaryQuery.error.status === 404 ? (
-            <p className="text-body-md text-on-surface-variant">No pay rate configured yet.</p>
-          ) : paySummaryQuery.data ? (
-            <div className="flex flex-col gap-1">
-              {paySummaryQuery.data.rate_type === 'hourly' ? (
-                <span className="text-body-md text-on-surface-variant">
-                  {(paySummaryQuery.data.worked_minutes / 60).toFixed(1)} hours worked
-                </span>
-              ) : (
-                <span className="text-body-md text-on-surface-variant">{paySummaryQuery.data.worked_days} days worked</span>
-              )}
-              <span className="text-headline-md font-bold text-on-surface">{formatMoney(paySummaryQuery.data.total_pay_cents)}</span>
-            </div>
-          ) : null}
-        </Card>
-        <Card className="flex flex-col gap-2 p-4">
-          <span className="text-label-md text-on-surface-variant uppercase">Worked This Month</span>
-          <MonthCalendar year={now.getFullYear()} month={now.getMonth() + 1} markedDates={workedDaysMarked} />
-        </Card>
-      </section>
-
       <section>
         <h2 className="mb-3 text-title-lg text-on-surface">Today's Schedule</h2>
         {scheduleQuery.isLoading ? (
@@ -361,6 +335,32 @@ export function DriverDashboard() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="flex flex-col gap-2 p-4">
+          <span className="text-label-md text-on-surface-variant uppercase">This Month's Pay</span>
+          {paySummaryQuery.isLoading ? (
+            <p className="text-body-md text-on-surface-variant">Loading…</p>
+          ) : paySummaryQuery.error instanceof ApiError && paySummaryQuery.error.status === 404 ? (
+            <p className="text-body-md text-on-surface-variant">No pay rate configured yet.</p>
+          ) : paySummaryQuery.data ? (
+            <div className="flex flex-col gap-1">
+              {paySummaryQuery.data.rate_type === 'hourly' ? (
+                <span className="text-body-md text-on-surface-variant">
+                  {(paySummaryQuery.data.worked_minutes / 60).toFixed(1)} hours worked
+                </span>
+              ) : (
+                <span className="text-body-md text-on-surface-variant">{paySummaryQuery.data.worked_days} days worked</span>
+              )}
+              <span className="text-headline-md font-bold text-on-surface">{formatMoney(paySummaryQuery.data.total_pay_cents)}</span>
+            </div>
+          ) : null}
+        </Card>
+        <Card className="flex flex-col gap-2 p-4">
+          <span className="text-label-md text-on-surface-variant uppercase">Worked This Month</span>
+          <MonthCalendar year={now.getFullYear()} month={now.getMonth() + 1} markedDates={workedDaysMarked} />
+        </Card>
       </section>
 
       {detailStudentId && (
