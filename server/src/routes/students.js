@@ -9,6 +9,7 @@ const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
 const { HttpError, mapMissingRefError } = require('../errors');
 const { assertValidZip, assertValidState } = require('../validate');
+const pool = require('../db/pool');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
@@ -23,6 +24,44 @@ function readScope(req) {
     return { ownerIn: { column: 'id', table: 'staff_student_access', refColumn: 'student_id', match: { staff_user_id: req.auth.userId } } };
   }
   return {};
+}
+
+// School Hub student list task (2026-09-02): school_staff/school_admin's own tenant is the
+// school, not the company, so their req.db can't reach assignments/vans/users/companies
+// directly (all company-tenant-only tables) to show which company/van/driver is actually
+// assigned to each student. Raw pool, batched for the whole list rather than N+1. Manually
+// ANDs st.school_id so this can never surface another school's assignment even though the
+// student ids passed in already came from the caller's own tenant-scoped read above — same
+// belt-and-suspenders precedent as scheduleChanges.js's applyPickupSkip. Skipped entirely
+// for company_admin readers (their own company's data, already visible elsewhere, and
+// req.auth.tenantId is a company id there so the school_id filter wouldn't even apply).
+async function attachTransportInfo(req, students) {
+  if (req.auth.tenantType !== 'school' || students.length === 0) return students;
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (a.student_id) a.student_id,
+            v.license_plate, v.brand, v.model, v.year, v.color,
+            u.full_name AS driver_name, u.phone AS driver_phone,
+            c.name AS company_name
+       FROM assignments a
+       JOIN students st ON st.id = a.student_id
+       JOIN vans v ON v.id = a.van_id
+       JOIN users u ON u.id = a.driver_user_id
+       JOIN companies c ON c.id = a.company_id
+      WHERE a.student_id = ANY($1::uuid[]) AND st.school_id = $2
+        AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+      ORDER BY a.student_id, a.created_at DESC`,
+    [students.map((s) => s.id), req.auth.tenantId]
+  );
+  const byStudent = new Map(rows.map((r) => [r.student_id, r]));
+  return students.map((s) => {
+    const t = byStudent.get(s.id);
+    return {
+      ...s,
+      company_name: t?.company_name ?? null,
+      van: t ? { license_plate: t.license_plate, brand: t.brand, model: t.model, year: t.year, color: t.color } : null,
+      driver: t ? { full_name: t.driver_name, phone: t.driver_phone } : null,
+    };
+  });
 }
 
 // Students page task (2026-08-27): every field required except notes. Enforced here (not a
@@ -69,7 +108,8 @@ router.get('/', async (req, res, next) => {
   try {
     const where = {};
     if (req.query.grade) where.grade = req.query.grade;
-    res.json(await req.db.findMany('students', { ...readScope(req), where, orderBy: 'full_name' }));
+    const rows = await req.db.findMany('students', { ...readScope(req), where, orderBy: 'full_name' });
+    res.json(await attachTransportInfo(req, rows));
   } catch (e) { next(e); }
 });
 

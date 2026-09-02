@@ -141,6 +141,14 @@ export interface Student {
   updated_at: string
   // Only present on GET /students/:id (merged server-side), not on the list endpoint.
   contacts?: StudentContact[]
+  // Only present when read by school_staff/school_admin (School Hub student list task,
+  // 2026-09-02) — the student's currently assigned company/van/driver, resolved server-side
+  // since a school-tenant reader can't reach those company-tenant tables itself. Absent (not
+  // just null) for a company_admin's own reads. null fields mean the lookup ran but no active
+  // assignment exists for this student today.
+  company_name?: string | null
+  van?: { license_plate: string; brand: string; model: string; year: number; color: string | null } | null
+  driver?: { full_name: string; phone: string | null } | null
 }
 
 // Additional contacts beyond the student's primary parent_name/parent_phone.

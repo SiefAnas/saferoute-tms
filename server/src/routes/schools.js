@@ -23,7 +23,10 @@ router.get('/', requireRole('company_admin'), async (req, res, next) => {
 });
 
 // Registered before '/:id' so Express doesn't swallow "me" as an :id value.
-router.get('/me', requireRole('school_admin'), async (req, res, next) => {
+// Broadened 2026-09-02 (School Hub student list task) to also let school_staff read their
+// own school's contact info -- same read-broadened/write-admin-only split already used for
+// dashboard.js's absent-today. PATCH below stays school_admin-only.
+router.get('/me', requireRole('school_admin', 'school_staff'), async (req, res, next) => {
   try {
     const [school] = await req.db.findMany('schools', {});
     if (!school) throw new HttpError(404, 'school not found');

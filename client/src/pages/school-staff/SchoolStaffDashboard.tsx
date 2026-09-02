@@ -8,7 +8,7 @@ import { Modal } from '../../components/Modal'
 import { StatusBadge } from '../../components/StatusBadge'
 import { ContactLink } from '../../components/ContactLink'
 import { InfoTooltip } from '../../components/InfoTooltip'
-import type { AbsentTodayEntry, ScheduleChange, ScheduleChangeType, Student, Trip } from '../../types/api'
+import type { AbsentTodayEntry, School, ScheduleChange, ScheduleChangeType, Student, StudentContact, Trip } from '../../types/api'
 
 // Which trip_type is "relevant" for a student right now, i.e. which confirmation a school
 // staff/admin would plausibly be doing at this moment: mornings, staff confirm the driver
@@ -50,6 +50,11 @@ export function SchoolStaffDashboard() {
   const tripsQuery = useQuery({ queryKey: ['trips'], queryFn: () => api.get<Trip[]>('/trips') })
   const absentQuery = useQuery({ queryKey: ['absent-today'], queryFn: () => api.get<AbsentTodayEntry[]>('/dashboard/absent-today') })
   const changesQuery = useQuery({ queryKey: ['schedule-changes'], queryFn: () => api.get<ScheduleChange[]>('/schedule-changes') })
+  // Same school contact info for every row below (all these students share the caller's own
+  // school) — fetched once here rather than per-row. One request either way: react-query
+  // dedupes by queryKey, so even a per-row useQuery with this same key would only hit the
+  // network once, but fetching it at the top keeps that fact from being implicit.
+  const schoolQuery = useQuery({ queryKey: ['school-me'], queryFn: () => api.get<School>('/schools/me') })
 
   const studentName = useMemo(() => {
     const map = new Map((studentsQuery.data ?? []).map((s) => [s.id, s.full_name]))
@@ -131,61 +136,33 @@ export function SchoolStaffDashboard() {
               {studentsQuery.isLoading ? 'Loading…' : 'No students yet.'}
             </p>
           ) : (
-            <table className="w-full text-left">
-              <thead className="border-b border-outline-variant bg-surface-container-low">
-                <tr>
-                  <th className="px-6 py-2 text-label-md text-secondary uppercase">Student</th>
-                  <th className="px-6 py-2 text-label-md text-secondary uppercase">Grade</th>
-                  <th className="px-6 py-2 text-label-md text-secondary uppercase">Parent/Guardian</th>
-                  <th className="px-6 py-2 text-label-md text-secondary uppercase">Today</th>
-                  <th className="px-6 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-outline-variant">
-                {(studentsQuery.data ?? []).map((s) => {
-                  const absent = absentByStudent.get(s.id)
-                  return (
-                    <tr key={s.id}>
-                      <td className="px-6 py-3 text-body-md font-medium">
-                        <button type="button" onClick={() => setConfirmStudent(s)} className="text-primary hover:underline">
-                          {s.full_name}
-                        </button>
-                      </td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '-'}</td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {s.parent_name ?? '-'}{' '}
-                        {s.parent_phone ? (
-                          <>
-                            · <ContactLink type="phone" value={s.parent_phone} />
-                          </>
-                        ) : (
-                          ''
-                        )}
-                      </td>
-                      <td className="px-6 py-3">
-                        {absent ? (
-                          <StatusBadge
-                            tone={absent.type === 'parent_skipped' ? 'neutral' : 'error'}
-                            label={absent.type === 'parent_skipped' ? 'Skipped' : 'No-show'}
-                          />
-                        ) : (
-                          '-'
-                        )}
-                      </td>
-                      <td className="px-6 py-3 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => setChangeStudent(s)}
-                          className="text-label-md text-primary hover:underline"
-                        >
-                          Log change
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="border-b border-outline-variant bg-surface-container-low">
+                  <tr>
+                    <th className="px-6 py-2 text-label-md text-secondary uppercase">Student</th>
+                    <th className="px-6 py-2 text-label-md text-secondary uppercase">Grade</th>
+                    <th className="px-6 py-2 text-label-md text-secondary uppercase">Parent/Guardian</th>
+                    <th className="px-6 py-2 text-label-md text-secondary uppercase">Company</th>
+                    <th className="px-6 py-2 text-label-md text-secondary uppercase">Van</th>
+                    <th className="px-6 py-2 text-label-md text-secondary uppercase">Today</th>
+                    <th className="px-6 py-2" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-outline-variant">
+                  {(studentsQuery.data ?? []).map((s) => (
+                    <StudentRow
+                      key={s.id}
+                      student={s}
+                      absent={absentByStudent.get(s.id)}
+                      school={schoolQuery.data}
+                      onConfirm={() => setConfirmStudent(s)}
+                      onLogChange={() => setChangeStudent(s)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
 
@@ -263,6 +240,177 @@ function PendingTripRow({ trip, studentName }: { trip: Trip; studentName: string
         {confirm.isPending ? 'Confirming…' : 'Confirm'}
       </Button>
     </div>
+  )
+}
+
+// One row of the Students table, plus its own expandable "More info" panel (§ School Hub
+// student list task, 2026-09-02) — same compact-plus-expand pattern as the parent
+// dashboard's student card (ParentHomePage.tsx), adapted to a table row: an extra <tr>
+// beneath the main one, shown/hidden per-row rather than one page-level toggle.
+// company_name/van/driver come from the student object itself (server already attaches
+// them to every row for school_staff/school_admin reads — see students.js's
+// attachTransportInfo), so showing them here costs no extra request. Only the additional
+// parent/guardian contacts + home address are genuinely lazy: fetched via GET /students/:id
+// on first expand, same as the rest of the app only fetches "more info" once asked for.
+function StudentRow({
+  student,
+  absent,
+  school,
+  onConfirm,
+  onLogChange,
+}: {
+  student: Student
+  absent: AbsentTodayEntry | undefined
+  school: School | undefined
+  onConfirm: () => void
+  onLogChange: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const detailQuery = useQuery({
+    queryKey: ['student-detail', student.id],
+    queryFn: () => api.get<Student>(`/students/${student.id}`),
+    enabled: expanded,
+  })
+  const contacts: StudentContact[] = detailQuery.data?.contacts ?? []
+  const homeAddress = detailQuery.data
+    ? [detailQuery.data.street_address, detailQuery.data.city, detailQuery.data.state, detailQuery.data.zip_code]
+        .filter(Boolean)
+        .join(', ')
+    : ''
+
+  return (
+    <>
+      <tr>
+        <td className="px-6 py-3 text-body-md font-medium whitespace-nowrap">
+          <button type="button" onClick={onConfirm} className="text-primary hover:underline">
+            {student.full_name}
+          </button>
+        </td>
+        <td className="px-6 py-3 text-data-mono text-secondary">{student.grade ?? '-'}</td>
+        <td className="px-6 py-3 text-body-md text-on-surface-variant whitespace-nowrap">
+          {student.parent_name ?? '-'}{' '}
+          {student.parent_phone ? (
+            <>
+              · <ContactLink type="phone" value={student.parent_phone} />
+            </>
+          ) : (
+            ''
+          )}
+        </td>
+        <td className="px-6 py-3 text-body-md text-on-surface-variant whitespace-nowrap">{student.company_name ?? '-'}</td>
+        <td className="px-6 py-3 text-body-md text-on-surface-variant whitespace-nowrap">
+          {student.van ? `${student.van.brand} ${student.van.model}` : '-'}
+        </td>
+        <td className="px-6 py-3">
+          {absent ? (
+            <StatusBadge
+              tone={absent.type === 'parent_skipped' ? 'neutral' : 'error'}
+              label={absent.type === 'parent_skipped' ? 'Skipped' : 'No-show'}
+            />
+          ) : (
+            '-'
+          )}
+        </td>
+        <td className="px-6 py-3 text-right whitespace-nowrap">
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="flex items-center gap-1 text-label-md text-primary hover:underline"
+            >
+              {expanded ? 'Less info' : 'More info'}
+              <span className="material-symbols-outlined !text-[18px]">{expanded ? 'expand_less' : 'expand_more'}</span>
+            </button>
+            <button type="button" onClick={onLogChange} className="text-label-md text-primary hover:underline">
+              Log change
+            </button>
+          </div>
+        </td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={7} className="bg-surface-container-low px-6 py-4">
+            {detailQuery.isLoading ? (
+              <p className="text-body-md text-on-surface-variant">Loading…</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <h4 className="mb-2 text-label-md text-secondary uppercase">Parent/Guardian</h4>
+                  <p className="text-body-md text-on-surface">{student.parent_name ?? '-'}</p>
+                  <p className="text-body-md text-on-surface-variant">
+                    <ContactLink type="phone" value={student.parent_phone} />
+                  </p>
+                  {homeAddress && <p className="mt-1 text-body-md text-on-surface-variant">{homeAddress}</p>}
+                  {contacts.length > 0 && (
+                    <ul className="mt-2 flex flex-col gap-1 border-t border-outline-variant pt-2">
+                      {contacts.map((c) => (
+                        <li key={c.id} className="text-body-md text-on-surface-variant">
+                          {c.name}
+                          {c.relationship ? ` (${c.relationship})` : ''}
+                          {c.phone ? (
+                            <>
+                              {' · '}
+                              <ContactLink type="phone" value={c.phone} />
+                            </>
+                          ) : (
+                            ''
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="mb-2 text-label-md text-secondary uppercase">Van</h4>
+                  {student.van ? (
+                    <div className="flex flex-col gap-0.5 text-body-md text-on-surface-variant">
+                      <p className="text-on-surface">
+                        {student.van.brand} {student.van.model} ({student.van.year})
+                      </p>
+                      <p>Plate: {student.van.license_plate}</p>
+                      <p>Color: {student.van.color ?? '-'}</p>
+                    </div>
+                  ) : (
+                    <p className="text-body-md text-on-surface-variant">No van currently assigned.</p>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="mb-2 text-label-md text-secondary uppercase">Driver</h4>
+                  {student.driver ? (
+                    <div className="flex flex-col gap-0.5 text-body-md text-on-surface-variant">
+                      <p className="text-on-surface">{student.driver.full_name}</p>
+                      <p>
+                        <ContactLink type="phone" value={student.driver.phone} />
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-body-md text-on-surface-variant">No driver currently assigned.</p>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="mb-2 text-label-md text-secondary uppercase">School</h4>
+                  {school ? (
+                    <div className="flex flex-col gap-0.5 text-body-md text-on-surface-variant">
+                      <p className="text-on-surface">{school.name}</p>
+                      <p>
+                        <ContactLink type="phone" value={school.phone} />
+                      </p>
+                      <p>{school.address ?? '-'}</p>
+                      {school.hours && <p>Hours: {school.hours}</p>}
+                    </div>
+                  ) : (
+                    <p className="text-body-md text-on-surface-variant">-</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   )
 }
 

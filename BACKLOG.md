@@ -7,6 +7,45 @@ Deferred items surfaced during implementation. Spec §9 already tracks the broad
 (reporting, notifications system, billing, branding, photos, van maintenance); this file is
 for things noticed while building that aren't in the spec's own backlog.
 
+## 2026-09-02 (still later) — School Hub student list: company/van in the row, More info expand
+
+Task: on the School Hub student list, show company name and assigned van in the default row
+(alongside the existing name/grade/parent-guardian), plus a per-student "More info" expand
+revealing full parent/guardian info, van detail, driver contact, and school contact info --
+same compact-plus-expand pattern as the parent dashboard, adapted to a table.
+
+Assumption resolved, worth flagging: "school_staff / school_admin view" could mean either the
+school_admin-only student directory (`/school-admin`, StudentsPage.tsx) or the Students table
+embedded in the Pickup & Dropoff page (SchoolStaffDashboard.tsx, shared by both roles at
+`/school-staff` and `/school-admin/pickup`). Only the second one is actually reachable by
+school_staff at all (the directory page is role-gated to school_admin), so that's the one this
+task changed. The school_admin-only directory page was left untouched -- flag if you actually
+wanted company/van there too.
+
+Data comes from the student's current active assignment (company/van/driver), which lives in
+company-tenant-only tables a school-tenant reader's own scoped queries can't reach directly.
+Resolved the same way the earlier pickup-confirmation task resolved this same class of
+problem (absent-today, the "left early" pickup-skip write): a raw-pool join, batched for the
+whole list rather than N+1, with the student ids and school_id both explicitly ANDed in so it
+can never cross into another school's data even though the underlying tables have no
+school-scoping of their own. GET /students now attaches `company_name`/`van`/`driver` to each
+row for school_staff/school_admin readers only (company_admin's own reads are unaffected --
+their own company's data, already visible elsewhere, so skipped rather than doing pointless
+extra joins). GET /schools/me (read only; PATCH is still school_admin-only) was broadened to
+school_staff too, for the expand panel's "School" section -- fetched once per page load, not
+per row, since every row is at the caller's own single school. The additional
+parent/guardian contacts (student_contacts) and home address are the one genuinely lazy part
+of "More info": fetched via the existing GET /students/:id on first expand, same "don't fetch
+what nobody asked to see yet" precedent as the parent dashboard's own More info panel.
+
+Verified live at both desktop (1280px) and an actual 375px mobile viewport, as both
+school_staff (granted-student subset) and school_admin (whole school): company/van populate
+correctly in the default row from real assignment data, More info expands per-row with all
+four sections filled in (including a student whose school has no phone/address on file,
+correctly showing blank rather than erroring), the table scrolls horizontally on mobile
+instead of breaking the layout, and the existing click-name-to-confirm and Log change actions
+both still work unchanged. Full backend suite (13 files) still green.
+
 ## 2026-09-02 (yet later) — Mobile logout was completely broken for 4 of 5 roles
 
 Real bug report from an iPhone (Chrome mobile) user: could not log out at all, on any page.
