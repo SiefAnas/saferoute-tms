@@ -37,9 +37,8 @@ async function logTrip(req, body = {}) {
   if (!['morning', 'afternoon'].includes(shift_period)) {
     throw new HttpError(400, "shift_period must be 'morning' or 'afternoon'");
   }
-  // Must be on an open shift for that period. A driver can have both shifts open at once
-  // (e.g. forgot to check out morning before starting afternoon), so shift_period is what
-  // picks the right one rather than "whichever shift happens to be open".
+  // Must be checked into that exact shift. A driver has at most one open shift at a time, so
+  // a trip for the other period is rejected rather than silently attached to the open one.
   const open = (await req.db.findMany('sessions', { owner: { column: 'user_id', value: req.auth.userId } }))
     .find((s) => s.check_out_at === null && s.shift_period === shift_period);
   if (!open) throw new HttpError(409, 'check in for that shift before logging a trip');

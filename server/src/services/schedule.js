@@ -62,9 +62,9 @@ async function getTodaySchedule(req) {
 }
 
 // Driver-reported no-show (task: "when they arrive and no one shows up they can hit the
-// button the student is Absent"). Requires an open shift for the reported shift_period, same
-// invariant logTrip enforces for logging a trip - a driver could have both morning and
-// afternoon open at once, so shift_period picks which one this no-show belongs to. Notifies
+// button the student is Absent"). Requires the driver to be checked into the reported
+// shift_period, same invariant logTrip enforces for logging a trip (a driver has at most one
+// open shift, so a no-show for the other period is rejected). Notifies
 // the school and company admin — same shared helper the parent Skip Pickup feature uses.
 async function markNoShow(req, assignmentId, body = {}) {
   const { shift_period } = body;

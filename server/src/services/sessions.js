@@ -2,6 +2,7 @@
 // auto-calculating hours). company_admin can read all company sessions; a driver only their own.
 const { HttpError } = require('../errors');
 const { ownerScope } = require('../middleware/authorize');
+const { withTx } = require('../db/tx');
 
 // GPS is optional at MVP; when present it must be a sane lat/lng pair.
 function gps(body, prefix) {
@@ -14,24 +15,75 @@ function gps(body, prefix) {
   return { [`${prefix}_lat`]: lat, [`${prefix}_lng`]: lng };
 }
 
+const SHIFT_LABEL = { morning: 'Morning', afternoon: 'Afternoon' };
+const labelOf = (period) => SHIFT_LABEL[period] || 'a shift';
+
+// A driver is checked into at most ONE shift at a time, across both periods. Switching to
+// the other shift is allowed, but only with confirm_switch: true (the client shows a warning
+// first); the old shift is checked out in the same transaction, so there is never a moment
+// with two open sessions. A shift that already has a session today (finished, or closed by
+// a switch) can't be checked into again, so the driver can't go back to it. "Today" is the
+// UTC date of check_in_at, the same day key payroll uses to group sessions.
 async function checkIn(req, body = {}) {
   if (req.auth.role !== 'driver') throw new HttpError(403, 'only drivers check in');
-  const { shift_period } = body;
+  const { shift_period, confirm_switch } = body;
   if (!['morning', 'afternoon'].includes(shift_period)) {
     throw new HttpError(400, "shift_period must be 'morning' or 'afternoon'");
   }
-  // One open shift per shift_period, so morning and afternoon are independent check-in/
-  // check-out pairs. A legacy open shift with no shift_period recorded blocks both, since
-  // we can't tell which one it belongs to.
-  const open = await req.db.findMany('sessions', {
-    owner: { column: 'user_id', value: req.auth.userId },
-    where: {}, // check_out_at IS NULL filtered below
+  const coords = gps(body, 'check_in');
+  const { userId, tenantId } = req.auth;
+
+  return withTx(async (client) => {
+    // Serialize this driver's check-ins so two simultaneous requests can't both see
+    // "nothing open" and each open a session.
+    await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
+
+    const { rows: open } = await client.query(
+      'SELECT id, shift_period FROM sessions WHERE user_id = $1 AND company_id = $2 AND check_out_at IS NULL',
+      [userId, tenantId]
+    );
+    if (open.some((s) => s.shift_period === shift_period)) {
+      throw new HttpError(409, `you are already checked into ${labelOf(shift_period)}`);
+    }
+
+    // Hard block on returning to a finished shift. Kept for now as a deliberate choice under
+    // review: decide based on real driver feedback during beta testing whether this should be
+    // relaxed to a warning-only version instead.
+    const { rows: already } = await client.query(
+      `SELECT 1 FROM sessions
+        WHERE user_id = $1 AND company_id = $2 AND shift_period = $3
+          AND (check_in_at AT TIME ZONE 'UTC')::date = (now() AT TIME ZONE 'UTC')::date
+        LIMIT 1`,
+      [userId, tenantId, shift_period]
+    );
+    if (already.length > 0) {
+      throw new HttpError(409, `you already worked the ${labelOf(shift_period)} shift today and cannot return to it`);
+    }
+
+    if (open.length > 0) {
+      if (confirm_switch !== true) {
+        throw new HttpError(
+          409,
+          `you are currently checked into ${labelOf(open[0].shift_period)}; confirm to switch to ${labelOf(shift_period)}`
+        );
+      }
+      await client.query(
+        `UPDATE sessions
+            SET check_out_at = now(),
+                duration_minutes = round(extract(epoch from (now() - check_in_at)) / 60)::int
+          WHERE user_id = $1 AND company_id = $2 AND check_out_at IS NULL`,
+        [userId, tenantId]
+      );
+    }
+
+    const { rows } = await client.query(
+      `INSERT INTO sessions (user_id, company_id, shift_period, check_in_lat, check_in_lng)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [userId, tenantId, shift_period, coords.check_in_lat ?? null, coords.check_in_lng ?? null]
+    );
+    return rows[0];
   });
-  const blocking = open.filter((s) => s.check_out_at === null);
-  if (blocking.some((s) => s.shift_period === null || s.shift_period === shift_period)) {
-    throw new HttpError(409, 'you already have an open shift for this period; check out first');
-  }
-  return req.db.insert('sessions', { user_id: req.auth.userId, shift_period, ...gps(body, 'check_in') });
 }
 
 async function checkOut(req, id, body = {}) {

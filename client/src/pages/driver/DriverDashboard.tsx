@@ -17,6 +17,8 @@ const SHIFTS: { period: ShiftPeriod; label: string }[] = [
   { period: 'afternoon', label: 'Afternoon Shift' },
 ]
 
+const shiftName = (period: ShiftPeriod) => (period === 'morning' ? 'Morning' : 'Afternoon')
+
 // An item belongs to a shift's schedule section if the assignment covers that shift
 // specifically, or covers 'both' (the driver does the full day for that student).
 function itemsForShift(items: TodayScheduleItem[], shiftPeriod: ShiftPeriod) {
@@ -46,6 +48,9 @@ export function DriverDashboard() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [detailStudentId, setDetailStudentId] = useState<string | null>(null)
   const [detailSchoolId, setDetailSchoolId] = useState<string | null>(null)
+  // The shift the driver asked to switch INTO while another shift is still open; non-null
+  // shows the confirmation dialog. Nothing is sent until they confirm.
+  const [pendingSwitch, setPendingSwitch] = useState<ShiftPeriod | null>(null)
   // Per-row Pickup/Drop-off marker — a status choice, not a live action; Confirm is what
   // actually logs the trip. Defaults to 'pickup' per assignment until touched. Keyed by
   // `assignmentId|shiftPeriod` since a 'both' assignment shows up under both shift sections
@@ -70,21 +75,33 @@ export function DriverDashboard() {
     retry: false, // a 404 (no pay rule configured) is an expected state, not worth retrying
   })
 
-  // Morning and afternoon are two fully independent check-in/check-out pairs — a driver can
-  // have both open at once (e.g. forgot to check out morning before starting afternoon).
+  // A driver is checked into at most one shift at a time. `currentSession` is that open
+  // session, whichever period it is; it can be a legacy one with no shift_period (recorded
+  // before the morning/afternoon split), which still has to be visible so it can be closed.
+  const currentSession = useMemo(
+    () => (sessionsQuery.data ?? []).find((s) => s.check_out_at === null),
+    [sessionsQuery.data],
+  )
   const openSessionByShift = useMemo(() => {
     const map: Partial<Record<ShiftPeriod, DriverSession>> = {}
-    for (const s of sessionsQuery.data ?? []) {
-      if (s.check_out_at === null && s.shift_period) map[s.shift_period] = s
-    }
+    if (currentSession?.shift_period) map[currentSession.shift_period] = currentSession
     return map
+  }, [currentSession])
+  // Shifts already worked and closed today. The server won't let a driver return to one.
+  const endedShiftsToday = useMemo(() => {
+    const done = new Set<ShiftPeriod>()
+    for (const s of sessionsQuery.data ?? []) {
+      if (s.shift_period && s.check_out_at !== null && isToday(s.check_in_at)) done.add(s.shift_period)
+    }
+    return done
   }, [sessionsQuery.data])
 
   const checkIn = useMutation({
-    mutationFn: async (shiftPeriod: ShiftPeriod) => {
+    mutationFn: async (vars: { shiftPeriod: ShiftPeriod; confirmSwitch?: boolean }) => {
       const coords = await getCurrentCoords()
       return api.post<DriverSession>('/sessions/checkin', {
-        shift_period: shiftPeriod,
+        shift_period: vars.shiftPeriod,
+        ...(vars.confirmSwitch ? { confirm_switch: true } : {}),
         ...(coords ? { check_in_lat: coords.lat, check_in_lng: coords.lng } : {}),
       })
     },
@@ -103,6 +120,14 @@ export function DriverDashboard() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sessions'] }),
     onError: (err) => setActionError(err instanceof ApiError ? err.message : 'Check-out failed.'),
   })
+
+  // Checking into a shift while another is open needs a confirmation first; with nothing
+  // open it goes straight through.
+  function requestCheckIn(period: ShiftPeriod) {
+    setActionError(null)
+    if (currentSession) setPendingSwitch(period)
+    else checkIn.mutate({ shiftPeriod: period })
+  }
 
   const logTrip = useMutation({
     mutationFn: (vars: { studentId: string; tripType: TripType; shiftPeriod: ShiftPeriod }) =>
@@ -137,8 +162,8 @@ export function DriverDashboard() {
     const completed = (sessionsQuery.data ?? [])
       .filter((s) => s.check_out_at && isToday(s.check_in_at))
       .reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0)
-    // Both shifts can be open at once, so sum elapsed time across every open session today
-    // rather than assuming there's only one.
+    // At most one session is open at a time, but summing keeps this correct for any legacy
+    // open session too.
     const openElapsed = (sessionsQuery.data ?? [])
       .filter((s) => s.check_out_at === null && isToday(s.check_in_at))
       .reduce((sum, s) => sum + Math.max(0, (Date.now() - new Date(s.check_in_at).getTime()) / 60_000), 0)
@@ -174,15 +199,33 @@ export function DriverDashboard() {
         </p>
       )}
 
+      {currentSession && !currentSession.shift_period && (
+        <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-body-md text-on-surface">
+            You have an open shift from before shifts were split into Morning and Afternoon (checked in{' '}
+            {formatClock(currentSession.check_in_at)}). Check out to end it, or check into a shift below to end it and switch.
+          </p>
+          <Button
+            variant="outline"
+            className="h-10 shrink-0 px-4 text-label-md"
+            disabled={checkOut.isPending}
+            onClick={() => checkOut.mutate(currentSession.id)}
+          >
+            {checkOut.isPending ? 'PLEASE WAIT…' : 'CHECK OUT'}
+          </Button>
+        </Card>
+      )}
+
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {SHIFTS.map(({ period, label }) => (
           <ShiftCard
             key={period}
             label={label}
             session={openSessionByShift[period]}
-            checkingIn={checkIn.isPending && checkIn.variables === period}
+            ended={endedShiftsToday.has(period)}
+            checkingIn={checkIn.isPending && checkIn.variables?.shiftPeriod === period}
             checkingOut={checkOut.isPending && checkOut.variables === openSessionByShift[period]?.id}
-            onCheckIn={() => checkIn.mutate(period)}
+            onCheckIn={() => requestCheckIn(period)}
             onCheckOut={(id) => checkOut.mutate(id)}
           />
         ))}
@@ -220,6 +263,7 @@ export function DriverDashboard() {
                     const loggedToday = todaysTrips.filter((t) => t.student_id === item.student.id && t.shift_period === period)
                     const alreadyLogged = loggedToday.some((t) => t.trip_type === type)
                     const openSession = openSessionByShift[period]
+                    const shiftEnded = endedShiftsToday.has(period)
                     const noShowReported = item.no_show_reported[period]
                     const parentSkipped = item.parent_skipped[period]
 
@@ -299,7 +343,7 @@ export function DriverDashboard() {
                             disabled={!openSession || logTrip.isPending || alreadyLogged}
                             onClick={() => logTrip.mutate({ studentId: item.student.id, tripType: type, shiftPeriod: period })}
                           >
-                            {!openSession ? 'Check in first' : alreadyLogged ? 'Already logged' : 'Confirm'}
+                            {!openSession ? (shiftEnded ? 'Shift ended' : 'Check in first') : alreadyLogged ? 'Already logged' : 'Confirm'}
                           </Button>
                         </div>
 
@@ -395,6 +439,33 @@ export function DriverDashboard() {
         </Card>
       </section>
 
+      {pendingSwitch && (
+        <Modal title="Switch shifts?" onClose={() => setPendingSwitch(null)}>
+          <p className="text-body-md text-on-surface">
+            {currentSession?.shift_period
+              ? `You are currently checked into ${shiftName(currentSession.shift_period)}.`
+              : 'You are currently checked into a shift that started before the update.'}{' '}
+            Checking into {shiftName(pendingSwitch)} will check you out of it, and you won&apos;t be able to return to it.
+            Continue?
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" className="h-10 px-4 text-label-md" onClick={() => setPendingSwitch(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="h-10 px-4 text-label-md"
+              disabled={checkIn.isPending}
+              onClick={() => {
+                checkIn.mutate({ shiftPeriod: pendingSwitch, confirmSwitch: true })
+                setPendingSwitch(null)
+              }}
+            >
+              Continue
+            </Button>
+          </div>
+        </Modal>
+      )}
+
       {detailStudentId && (
         <StudentDetailModal studentId={detailStudentId} trips={tripsQuery.data ?? []} onClose={() => setDetailStudentId(null)} />
       )}
@@ -403,11 +474,12 @@ export function DriverDashboard() {
   )
 }
 
-// One independent check-in/check-out block per shift (morning/afternoon are two separate
-// events in the same day, not one continuous shift with a midday marker).
+// One check-in/check-out block per shift. Only one shift can be open at a time; a shift
+// already worked today shows as ended and can't be checked into again.
 function ShiftCard({
   label,
   session,
+  ended,
   checkingIn,
   checkingOut,
   onCheckIn,
@@ -415,6 +487,7 @@ function ShiftCard({
 }: {
   label: string
   session: DriverSession | undefined
+  ended: boolean
   checkingIn: boolean
   checkingOut: boolean
   onCheckIn: () => void
@@ -427,15 +500,19 @@ function ShiftCard({
     <Card className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-title-lg text-on-surface">{label}</h2>
-        {session ? <StatusBadge tone="success" label="Checked In" pulse /> : <StatusBadge tone="neutral" label="Checked Out" />}
+        {session ? (
+          <StatusBadge tone="success" label="Checked In" pulse />
+        ) : (
+          <StatusBadge tone="neutral" label={ended ? 'Shift Ended' : 'Checked Out'} />
+        )}
       </div>
       <Button
         className="h-16 w-full"
         onClick={() => (session ? onCheckOut(session.id) : onCheckIn())}
-        disabled={pending}
+        disabled={pending || (ended && !session)}
       >
         <span className="material-symbols-outlined text-[24px]">{session ? 'logout' : 'login'}</span>
-        <span className="text-title-lg font-bold">{pending ? 'PLEASE WAIT…' : session ? 'CHECK OUT' : 'CHECK IN'}</span>
+        <span className="text-title-lg font-bold">{pending ? 'PLEASE WAIT…' : session ? 'CHECK OUT' : ended ? 'SHIFT ENDED' : 'CHECK IN'}</span>
       </Button>
       {session && <span className="text-body-md text-on-surface-variant">{formatDuration(elapsedMinutes)} so far</span>}
     </Card>

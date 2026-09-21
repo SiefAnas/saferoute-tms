@@ -1,8 +1,9 @@
-// Shift-period split (task: morning/afternoon as two fully independent check-in/check-out
-// events). Covers: assignments' shift-aware conflict checking, sessions/trips independence
-// per shift, shift-scoped no-show double-submit guard, and the new payroll daily-rate
-// half/full-day math (including the zero-assignment and no-show-counts-as-handled cases,
-// and backward compat for sessions recorded before this feature existed).
+// Shift-period split (task: morning/afternoon shifts, one open at a time). Covers:
+// assignments' shift-aware conflict checking, the one-open-shift check-in rule (switching
+// needs confirm_switch and checks the old shift out in the same step; a shift already worked
+// today can't be re-entered), shift-scoped trips and no-show double-submit guard, and the
+// payroll daily-rate half/full-day math (including the zero-assignment and no-show-counts-as-
+// handled cases, and backward compat for sessions recorded before this feature existed).
 const PG_PORT = 5464;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
 process.env.JWT_SECRET = 'test-secret-14';
@@ -116,7 +117,7 @@ async function main() {
         ? ok("omitting shift_period on create defaults to 'both' (backward compatible)")
         : bad(`default shift: ${defaultAsg.status} ${JSON.stringify(defaultAsg.body)}`);
 
-      console.log('\n--- Sessions: morning and afternoon are independent check-in/check-out pairs ---');
+      console.log('\n--- Sessions: one open shift at a time, switching needs confirmation ---');
       eq('check-in with no shift_period -> 400', (await api('POST', '/sessions/checkin', d1Tok, {})).status, 400);
       const ciMorning = await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'morning' });
       eq('morning check-in -> 201', ciMorning.status, 201);
@@ -125,44 +126,96 @@ async function main() {
         (await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'morning' })).status,
         409
       );
-      const ciAfternoon = await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'afternoon' });
-      (ciAfternoon.status === 201)
-        ? ok('afternoon check-in succeeds while morning is still open (two independent open shifts)')
-        : bad(`afternoon check-in: ${ciAfternoon.status} ${JSON.stringify(ciAfternoon.body)}`);
+      const noConfirm = await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'afternoon' });
+      (noConfirm.status === 409 && /Morning/.test(noConfirm.body.error))
+        ? ok('afternoon check-in while morning is open, without confirm_switch -> 409 naming the open shift')
+        : bad(`afternoon without confirm: ${noConfirm.status} ${JSON.stringify(noConfirm.body)}`);
+      eq(
+        'confirm_switch must be exactly true (a truthy string does not count) -> 409',
+        (await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'afternoon', confirm_switch: 'yes' })).status,
+        409
+      );
+      const openAfterRefusal = (await api('GET', '/sessions', d1Tok)).body.filter((x) => x.check_out_at === null);
+      (openAfterRefusal.length === 1 && openAfterRefusal[0].id === ciMorning.body.id)
+        ? ok('refused switches changed nothing: morning is still the only open session')
+        : bad(`open after refusals: ${JSON.stringify(openAfterRefusal.map((x) => x.shift_period))}`);
 
-      console.log('\n--- Trips: shift_period picks which open session a trip belongs to ---');
+      console.log('\n--- Trips: only the shift the driver is checked into accepts trips ---');
       eq(
         'log trip with no shift_period -> 400',
         (await api('POST', '/trips', d1Tok, { student_id: stuConflict.id, trip_type: 'pickup' })).status,
         400
       );
-      const tripAfternoon = await api('POST', '/trips', d1Tok, { student_id: stuConflict.id, trip_type: 'pickup', shift_period: 'afternoon' });
-      (tripAfternoon.status === 201 && tripAfternoon.body.shift_period === 'afternoon' && tripAfternoon.body.session_id === ciAfternoon.body.id)
-        ? ok('trip logged with shift_period=afternoon attaches to the afternoon session, not the morning one')
-        : bad(`trip: ${tripAfternoon.status} ${JSON.stringify(tripAfternoon.body)}`);
-
-      const coMorning = await api('POST', `/sessions/${ciMorning.body.id}/checkout`, d1Tok, {});
-      eq('morning checkout -> 200', coMorning.status, 200);
-      const coAfternoon = await api('POST', `/sessions/${ciAfternoon.body.id}/checkout`, d1Tok, {});
-      eq('afternoon checkout -> 200', coAfternoon.status, 200);
+      eq(
+        'log a trip for the afternoon while checked into morning -> 409',
+        (await api('POST', '/trips', d1Tok, { student_id: stuConflict.id, trip_type: 'pickup', shift_period: 'afternoon' })).status,
+        409
+      );
+      const tripMorning = await api('POST', '/trips', d1Tok, { student_id: stuConflict.id, trip_type: 'pickup', shift_period: 'morning' });
+      (tripMorning.status === 201 && tripMorning.body.shift_period === 'morning' && tripMorning.body.session_id === ciMorning.body.id)
+        ? ok('trip logged with shift_period=morning attaches to the open morning session')
+        : bad(`trip: ${tripMorning.status} ${JSON.stringify(tripMorning.body)}`);
 
       console.log('\n--- No-show: one report per (student, date, shift), not per (student, date) ---');
-      await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'morning' });
-      await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'afternoon' });
       const nsMorning = await api('POST', `/schedule/${morningAsg.body.id}/no-show`, d1Tok, { shift_period: 'morning' });
       eq('morning no-show for stuConflict -> 200', nsMorning.status, 200);
-      // stuConflict's afternoon shift belongs to d2, not d1, so report against d1's own
-      // 'Default Shift Kid' (both shifts) instead, to prove morning + afternoon no-shows for
-      // the SAME student on the SAME day no longer collide under the old (student,date)-only guard.
+      // stuConflict's afternoon shift belongs to d2, not d1, so use d1's own 'Default Shift Kid'
+      // (a 'both' assignment) to prove morning + afternoon no-shows for the SAME student on the
+      // SAME day don't collide under the old (student,date)-only guard.
       const nsMorning2 = await api('POST', `/schedule/${defaultAsg.body.id}/no-show`, d1Tok, { shift_period: 'morning' });
       eq('morning no-show for Default Shift Kid -> 200', nsMorning2.status, 200);
+      eq(
+        'afternoon no-show while only checked into morning -> 409 (must be checked into that shift)',
+        (await api('POST', `/schedule/${defaultAsg.body.id}/no-show`, d1Tok, { shift_period: 'afternoon' })).status,
+        409
+      );
+      eq(
+        'reporting morning no-show again for Default Shift Kid -> 409 (still guards double-submit within a shift)',
+        (await api('POST', `/schedule/${defaultAsg.body.id}/no-show`, d1Tok, { shift_period: 'morning' })).status,
+        409
+      );
+
+      console.log('\n--- Switching shifts: confirm checks morning out and opens afternoon in one step ---');
+      const ciAfternoon = await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'afternoon', confirm_switch: true });
+      eq('afternoon check-in with confirm_switch -> 201', ciAfternoon.status, 201);
+      const afterSwitch = (await api('GET', '/sessions', d1Tok)).body;
+      const openNow = afterSwitch.filter((x) => x.check_out_at === null);
+      const morningRow = afterSwitch.find((x) => x.id === ciMorning.body.id);
+      (openNow.length === 1 && openNow[0].id === ciAfternoon.body.id)
+        ? ok('exactly one open session after the switch, and it is the afternoon one')
+        : bad(`open after switch: ${JSON.stringify(openNow.map((x) => x.shift_period))}`);
+      (morningRow && morningRow.check_out_at && typeof morningRow.duration_minutes === 'number')
+        ? ok('the switch checked morning out and recorded its duration')
+        : bad(`morning row after switch: ${JSON.stringify(morningRow)}`);
+      eq(
+        'checking back into morning after switching away (even with confirm_switch) -> 409',
+        (await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'morning', confirm_switch: true })).status,
+        409
+      );
+      eq(
+        'a morning trip after switching away -> 409 (no longer checked into morning)',
+        (await api('POST', '/trips', d1Tok, { student_id: stuConflict.id, trip_type: 'dropoff', shift_period: 'morning' })).status,
+        409
+      );
+      const tripAfternoon = await api('POST', '/trips', d1Tok, { student_id: stuConflict.id, trip_type: 'pickup', shift_period: 'afternoon' });
+      (tripAfternoon.status === 201 && tripAfternoon.body.shift_period === 'afternoon' && tripAfternoon.body.session_id === ciAfternoon.body.id)
+        ? ok('trip logged with shift_period=afternoon attaches to the afternoon session')
+        : bad(`trip: ${tripAfternoon.status} ${JSON.stringify(tripAfternoon.body)}`);
       const nsAfternoon2 = await api('POST', `/schedule/${defaultAsg.body.id}/no-show`, d1Tok, { shift_period: 'afternoon' });
       (nsAfternoon2.status === 200)
         ? ok('afternoon no-show for the SAME student on the SAME day -> 200 (independent of the morning report)')
         : bad(`afternoon no-show: ${nsAfternoon2.status} ${JSON.stringify(nsAfternoon2.body)}`);
+
+      const coAfternoon = await api('POST', `/sessions/${ciAfternoon.body.id}/checkout`, d1Tok, {});
+      eq('afternoon checkout -> 200', coAfternoon.status, 200);
       eq(
-        'reporting morning no-show again for Default Shift Kid -> 409 (still guards double-submit within a shift)',
-        (await api('POST', `/schedule/${defaultAsg.body.id}/no-show`, d1Tok, { shift_period: 'morning' })).status,
+        'checking into afternoon again after checking out today -> 409 (already worked it)',
+        (await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'afternoon' })).status,
+        409
+      );
+      eq(
+        'checking into morning after both shifts are done -> 409',
+        (await api('POST', '/sessions/checkin', d1Tok, { shift_period: 'morning' })).status,
         409
       );
 
@@ -234,6 +287,73 @@ async function main() {
       (d4Summary.status === 200 && d4Summary.body.base_pay_cents === 10000)
         ? ok('a legacy NULL-shift_period session still pays the full daily rate for that day (backward compatible)')
         : bad(`d4 summary: ${d4Summary.status} ${JSON.stringify(d4Summary.body)}`);
+
+      console.log('\n--- Sessions: a legacy open shift (no shift_period) blocks until switched ---');
+      const d9 = await makeDriver('d9@co.com', 'Driver Nine (legacy open)');
+      const d9Tok = await login('d9@co.com');
+      const legacyOpen = await ins(
+        "INSERT INTO sessions(user_id,company_id,check_in_at) VALUES($1,$2,now() - interval '3 hours') RETURNING id",
+        [d9.id, A.id]
+      );
+      eq(
+        'morning check-in while a legacy open shift exists, no confirm_switch -> 409',
+        (await api('POST', '/sessions/checkin', d9Tok, { shift_period: 'morning' })).status,
+        409
+      );
+      const d9Switch = await api('POST', '/sessions/checkin', d9Tok, { shift_period: 'morning', confirm_switch: true });
+      eq('morning check-in with confirm_switch closes the legacy shift and opens morning -> 201', d9Switch.status, 201);
+      const legacyAfter = (await pool.query('SELECT check_out_at, duration_minutes FROM sessions WHERE id = $1', [legacyOpen.id])).rows[0];
+      (legacyAfter.check_out_at && legacyAfter.duration_minutes >= 179)
+        ? ok(`the legacy open shift was checked out with its duration recorded (${legacyAfter.duration_minutes} min)`)
+        : bad(`legacy row after switch: ${JSON.stringify(legacyAfter)}`);
+
+      console.log('\n--- Sessions: two simultaneous check-ins can never leave two shifts open ---');
+      const d10 = await makeDriver('d10@co.com', 'Driver Ten (race)');
+      const d10Tok = await login('d10@co.com');
+      const race = await Promise.all([
+        api('POST', '/sessions/checkin', d10Tok, { shift_period: 'morning' }),
+        api('POST', '/sessions/checkin', d10Tok, { shift_period: 'afternoon' }),
+      ]);
+      const raceStatuses = race.map((r) => r.status).sort();
+      const raceOpen = (await api('GET', '/sessions', d10Tok)).body.filter((x) => x.check_out_at === null);
+      (raceStatuses[0] === 201 && raceStatuses[1] === 409 && raceOpen.length === 1)
+        ? ok('simultaneous morning + afternoon check-ins -> one 201, one 409, exactly one open session')
+        : bad(`race: statuses ${JSON.stringify(raceStatuses)}, open ${raceOpen.length}`);
+
+      console.log('\n--- Payroll: a shift closed by a switch still pays, both halves = full day ---');
+      const d11 = await makeDriver('d11@co.com', 'Driver Eleven (switch pay)');
+      const d11Tok = await login('d11@co.com');
+      const van7 = await ins("INSERT INTO vans(company_id,license_plate,brand,model,year) VALUES($1,'GGG-7','Ford','Transit',2022) RETURNING id", [A.id]);
+      const stuSwitch = await makeStudent('Switch Pay Kid');
+      eq('set d11 daily rate $100/day -> 200', (await api('PUT', `/payroll/rules/${d11.id}`, adminTok, { rate_type: 'daily', rate_cents: 10000 })).status, 200);
+      eq(
+        'assignment for switch-pay student -> 201',
+        (await api('POST', '/assignments', adminTok, {
+          student_id: stuSwitch.id, driver_user_id: d11.id, van_id: van7.id, start_date: '2020-01-01', shift_period: 'both',
+        })).status,
+        201
+      );
+      await api('POST', '/sessions/checkin', d11Tok, { shift_period: 'morning' });
+      for (const type of ['pickup', 'dropoff']) {
+        const t = await api('POST', '/trips', d11Tok, { student_id: stuSwitch.id, trip_type: type, shift_period: 'morning' });
+        await api('POST', `/trips/${t.body.id}/confirm`, schoolAdminTok);
+      }
+      // No manual morning checkout: switching to afternoon is what closes it.
+      const d11Afternoon = await api('POST', '/sessions/checkin', d11Tok, { shift_period: 'afternoon', confirm_switch: true });
+      eq('switching to afternoon -> 201', d11Afternoon.status, 201);
+      const d11Half = await api('GET', `/payroll/summary/${d11.id}`, adminTok);
+      (d11Half.status === 200 && d11Half.body.base_pay_cents === 5000)
+        ? ok(`morning closed by the switch pays exactly half the daily rate (base_pay_cents=${d11Half.body.base_pay_cents})`)
+        : bad(`d11 half-day summary: ${d11Half.status} ${JSON.stringify(d11Half.body)}`);
+      for (const type of ['pickup', 'dropoff']) {
+        const t = await api('POST', '/trips', d11Tok, { student_id: stuSwitch.id, trip_type: type, shift_period: 'afternoon' });
+        await api('POST', `/trips/${t.body.id}/confirm`, schoolAdminTok);
+      }
+      await api('POST', `/sessions/${d11Afternoon.body.id}/checkout`, d11Tok, {});
+      const d11Full = await api('GET', `/payroll/summary/${d11.id}`, adminTok);
+      (d11Full.status === 200 && d11Full.body.base_pay_cents === 10000)
+        ? ok(`morning (closed by switch) + afternoon (manual checkout) pays the full daily rate (base_pay_cents=${d11Full.body.base_pay_cents})`)
+        : bad(`d11 full-day summary: ${d11Full.status} ${JSON.stringify(d11Full.body)}`);
 
       console.log("\n--- Parent skip-pickup: split student gets a morning-only vs whole-day choice ---");
       const d7 = await makeDriver('d7@co.com', 'Driver Seven (split morning)');
