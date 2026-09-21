@@ -22,7 +22,7 @@ router.get('/students/:id/skip-status', async (req, res, next) => {
   try { res.json(await getSkipStatus(req, req.params.id)); } catch (e) { next(e); }
 });
 router.post('/students/:id/skip-pickup', async (req, res, next) => {
-  try { res.json(await skipPickup(req, req.params.id)); } catch (e) { next(e); }
+  try { res.json(await skipPickup(req, req.params.id, req.body || {})); } catch (e) { next(e); }
 });
 
 module.exports = router;

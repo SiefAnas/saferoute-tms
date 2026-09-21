@@ -86,20 +86,31 @@ export function CompanyStudentsPage() {
     return (id: string | null) => (id ? (map.get(id) ?? null) : null)
   }, [driversQuery.data])
 
-  // Current active assignment per student — most-recently-created one still active today, if
-  // more than one somehow overlaps (mirrors the server's own tie-break elsewhere: ORDER BY
-  // created_at DESC LIMIT 1).
-  const currentAssignmentFor = useMemo(() => {
-    const byStudent = new Map<string, Assignment>()
+  // ALL of a student's active assignments today, not just one — a student can have a
+  // separate morning and afternoon assignment (shift_period split), each with its own
+  // driver/van, and picking just one for display/editing would silently hide or clobber
+  // the other. currentAssignmentFor stays as a convenience for the single-assignment case
+  // (the common one: a 'both' or lone shift-only assignment).
+  const activeAssignmentsFor = useMemo(() => {
+    const byStudent = new Map<string, Assignment[]>()
     for (const a of assignmentsQuery.data ?? []) {
       if (!isAssignmentActiveToday(a.start_date, a.end_date)) continue
-      const existing = byStudent.get(a.student_id)
-      if (!existing || a.created_at > existing.created_at) byStudent.set(a.student_id, a)
+      if (!byStudent.has(a.student_id)) byStudent.set(a.student_id, [])
+      byStudent.get(a.student_id)!.push(a)
     }
-    return (studentId: string) => byStudent.get(studentId) ?? null
+    return (studentId: string) => byStudent.get(studentId) ?? []
   }, [assignmentsQuery.data])
+  const currentAssignmentFor = (studentId: string): Assignment | null => {
+    const active = activeAssignmentsFor(studentId)
+    return active.length === 1 ? active[0] : null
+  }
 
   const [editingId, setEditingId] = useState<string | null>(null)
+  // True when the student being edited has separate morning + afternoon assignments. This
+  // form only ever manages a single driver+van pair, so it can't safely represent or edit
+  // a split student without silently clobbering one of the two shifts — the driver/van
+  // section is hidden in that case, with a pointer to the Assignments page instead.
+  const [editIsSplit, setEditIsSplit] = useState(false)
   const [fullName, setFullName] = useState('')
   const [grade, setGrade] = useState('')
   const [age, setAge] = useState('')
@@ -146,6 +157,7 @@ export function CompanyStudentsPage() {
 
   function resetForm() {
     setEditingId(null)
+    setEditIsSplit(false)
     setFullName('')
     setGrade('')
     setAge('')
@@ -174,7 +186,10 @@ export function CompanyStudentsPage() {
     setGrade(s.grade ?? '')
     setAge(s.age ? String(s.age) : '')
     setGuardians([{ name: s.parent_name ?? '', phone: s.parent_phone ?? '' }])
-    const current = currentAssignmentFor(s.id)
+    const active = activeAssignmentsFor(s.id)
+    const split = active.length > 1
+    setEditIsSplit(split)
+    const current = split ? null : (active[0] ?? null)
     setDriverUserId(current?.driver_user_id ?? '')
     setVanId(current?.van_id ?? '')
     setStreetAddress(s.street_address ?? '')
@@ -327,7 +342,7 @@ export function CompanyStudentsPage() {
 
   const updateStudent = useMutation({
     mutationFn: async (id: string) => {
-      if (Boolean(driverUserId) !== Boolean(vanId)) {
+      if (!editIsSplit && Boolean(driverUserId) !== Boolean(vanId)) {
         throw new ApiError(400, 'Pick both a driver and a van to create a real assignment, or leave both blank.')
       }
       const student = await api.patch<Student>(`/students/${id}`, {
@@ -342,7 +357,10 @@ export function CompanyStudentsPage() {
         zip_code: zipCode,
         notes: notes || null,
       })
-      await syncAssignment(id, currentAssignmentFor(id))
+      // Split students (separate morning + afternoon assignments) are left alone here —
+      // this form only knows how to manage one driver+van pair, and could clobber one of
+      // the two shifts if it tried. Manage those from the Assignments page instead.
+      if (!editIsSplit) await syncAssignment(id, currentAssignmentFor(id))
       return student
     },
     onSuccess: (student) => {
@@ -413,9 +431,21 @@ export function CompanyStudentsPage() {
                     <tr key={s.id} className="hover:bg-surface-container-low">
                       <td className="px-6 py-3 text-body-md font-medium">{s.full_name}</td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {driversQuery.isLoading || assignmentsQuery.isLoading
-                          ? '…'
-                          : (driverName(currentAssignmentFor(s.id)?.driver_user_id ?? null) ?? '(no driver assigned)')}
+                        {driversQuery.isLoading || assignmentsQuery.isLoading ? (
+                          '…'
+                        ) : (
+                          (() => {
+                            const active = activeAssignmentsFor(s.id)
+                            if (active.length === 0) return '(no driver assigned)'
+                            if (active.length === 1) return driverName(active[0].driver_user_id) ?? '(no driver assigned)'
+                            return active
+                              .map((a) => {
+                                const label = a.shift_period === 'afternoon' ? 'Afternoon' : a.shift_period === 'morning' ? 'Morning' : 'All day'
+                                return `${label}: ${driverName(a.driver_user_id) ?? '(none)'}`
+                              })
+                              .join(' · ')
+                          })()
+                        )}
                       </td>
                       <td className="px-6 py-3 text-body-md text-on-surface-variant">
                         {schoolsQuery.isLoading ? '…' : schoolName(s.school_id)}
@@ -506,37 +536,46 @@ export function CompanyStudentsPage() {
               )}
             </div>
 
-            <div className="flex flex-col gap-1">
-              <p className="text-label-md text-on-surface-variant">
-                Assign a driver + van (optional: creates a real Assignment, both required together). Picking a
-                driver narrows the van to whichever one they're already driving, if any.
+            {editIsSplit ? (
+              <p className="rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2 text-label-md text-on-surface-variant">
+                This student has separate morning and afternoon assignments (different drivers/vans per shift).
+                Manage those from the Assignments page instead — this form only handles one driver+van pair.
               </p>
-              <div className="flex gap-2">
-                <select value={driverUserId} onChange={(e) => handleDriverSelect(e.target.value)} className={selectClass}>
-                  <option value="">Driver…</option>
-                  {(driversQuery.data ?? []).map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.full_name}
-                    </option>
-                  ))}
-                </select>
-                <select value={vanId} onChange={(e) => setVanId(e.target.value)} disabled={!!lockedVanId} className={selectClass}>
-                  <option value="">Van…</option>
-                  {(vansQuery.data ?? [])
-                    .filter((v) => (lockedVanId ? v.id === lockedVanId : !excludedVanIds.has(v.id)))
-                    .map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.license_plate}
+            ) : (
+              <div className="flex flex-col gap-1">
+                <p className="text-label-md text-on-surface-variant">
+                  Assign a driver + van (optional: creates a real Assignment, both required together). Picking a
+                  driver narrows the van to whichever one they're already driving, if any. This always creates a
+                  full-day (both shifts) assignment — for a morning-only or afternoon-only driver, use the
+                  Assignments page.
+                </p>
+                <div className="flex gap-2">
+                  <select value={driverUserId} onChange={(e) => handleDriverSelect(e.target.value)} className={selectClass}>
+                    <option value="">Driver…</option>
+                    {(driversQuery.data ?? []).map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.full_name}
                       </option>
                     ))}
-                </select>
+                  </select>
+                  <select value={vanId} onChange={(e) => setVanId(e.target.value)} disabled={!!lockedVanId} className={selectClass}>
+                    <option value="">Van…</option>
+                    {(vansQuery.data ?? [])
+                      .filter((v) => (lockedVanId ? v.id === lockedVanId : !excludedVanIds.has(v.id)))
+                      .map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.license_plate}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                {lockedVanId && (
+                  <p className="text-label-md text-on-surface-variant">
+                    This driver is currently driving {vansQuery.data?.find((v) => v.id === lockedVanId)?.license_plate ?? 'this van'}, locked to match.
+                  </p>
+                )}
               </div>
-              {lockedVanId && (
-                <p className="text-label-md text-on-surface-variant">
-                  This driver is currently driving {vansQuery.data?.find((v) => v.id === lockedVanId)?.license_plate ?? 'this van'}, locked to match.
-                </p>
-              )}
-            </div>
+            )}
 
             <Input required placeholder="Street address" value={streetAddress} onChange={(e) => setStreetAddress(e.target.value)} />
             <div className="flex gap-2">

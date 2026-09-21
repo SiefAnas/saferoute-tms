@@ -113,6 +113,7 @@ export function PayrollPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payroll-summary', adjDriverId] })
       queryClient.invalidateQueries({ queryKey: ['payroll-unpaid-summary', adjDriverId] })
+      queryClient.invalidateQueries({ queryKey: ['payroll-adjustments', adjDriverId] })
       setAdjMsg('Adjustment recorded.')
       setAdjDollars('')
       setAdjNote('')

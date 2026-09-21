@@ -176,9 +176,9 @@ async function main() {
       eq('admin B GET /schools/:id (no relationship) -> 404', (await api('GET', `/schools/${S.id}`, adminB)).status, 404);
 
       console.log('\n--- Sessions (driver shifts) ---');
-      const ci = await api('POST', '/sessions/checkin', driverA, { check_in_lat: 42.3, check_in_lng: -71.1 });
+      const ci = await api('POST', '/sessions/checkin', driverA, { shift_period: 'morning', check_in_lat: 42.3, check_in_lng: -71.1 });
       ci.status === 201 ? ok('driver check-in -> 201') : bad(`checkin ${ci.status}`);
-      eq('second check-in with open shift -> 409', (await api('POST', '/sessions/checkin', driverA, {})).status, 409);
+      eq('second check-in with open shift -> 409', (await api('POST', '/sessions/checkin', driverA, { shift_period: 'morning' })).status, 409);
       const co = await api('POST', `/sessions/${ci.body.id}/checkout`, driverA, {});
       (co.status === 200 && co.body.check_out_at && typeof co.body.duration_minutes === 'number') ? ok('checkout closes shift + computes duration_minutes') : bad(`checkout ${co.status}`);
       const driverB = await login('drvB@co.com');

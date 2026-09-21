@@ -19,9 +19,12 @@ const mapFkError = (err) => mapMissingRefError(err, 'student, driver, or van not
 
 router.post('/', companyAdmin, async (req, res, next) => {
   try {
-    const { student_id, driver_user_id, van_id, start_date, end_date, pickup_time, dropoff_time } = req.body || {};
+    const { student_id, driver_user_id, van_id, start_date, end_date, pickup_time, dropoff_time, shift_period } = req.body || {};
     if (!student_id || !driver_user_id || !van_id || !start_date) {
       throw new HttpError(400, 'student_id, driver_user_id, van_id and start_date are required');
+    }
+    if (shift_period !== undefined && !['morning', 'afternoon', 'both'].includes(shift_period)) {
+      throw new HttpError(400, "shift_period must be 'morning', 'afternoon' or 'both'");
     }
     if (pickup_time !== undefined && pickup_time !== null) assertValidTime(pickup_time, 'pickup_time');
     if (dropoff_time !== undefined && dropoff_time !== null) assertValidTime(dropoff_time, 'dropoff_time');
@@ -35,11 +38,15 @@ router.post('/', companyAdmin, async (req, res, next) => {
     ]);
     if (belongsToTenant.every(Boolean)) {
       const others = await req.db.findMany('assignments', {});
-      assertNoConflicts(others, { student_id, driver_user_id, van_id, start_date, end_date: end_date ?? null });
+      assertNoConflicts(others, {
+        student_id, driver_user_id, van_id, start_date, end_date: end_date ?? null,
+        shift_period: shift_period ?? 'both',
+      });
     }
     const row = await req.db.insert('assignments', {
       student_id, driver_user_id, van_id, start_date, end_date: end_date ?? null,
       pickup_time: pickup_time ?? null, dropoff_time: dropoff_time ?? null,
+      shift_period: shift_period ?? 'both',
     });
     res.status(201).json(row);
   } catch (e) { next(mapFkError(e)); }
@@ -61,15 +68,21 @@ router.get('/:id', async (req, res, next) => {
 router.patch('/:id', companyAdmin, async (req, res, next) => {
   try {
     const patch = {};
-    for (const k of ['start_date', 'end_date', 'driver_user_id', 'van_id', 'pickup_time', 'dropoff_time']) {
+    for (const k of ['start_date', 'end_date', 'driver_user_id', 'van_id', 'pickup_time', 'dropoff_time', 'shift_period']) {
       if (req.body?.[k] !== undefined) patch[k] = req.body[k];
     }
     if (Object.keys(patch).length === 0) throw new HttpError(400, 'nothing to update');
+    if (patch.shift_period !== undefined && !['morning', 'afternoon', 'both'].includes(patch.shift_period)) {
+      throw new HttpError(400, "shift_period must be 'morning', 'afternoon' or 'both'");
+    }
     if (patch.pickup_time !== null && patch.pickup_time !== undefined) assertValidTime(patch.pickup_time, 'pickup_time');
     if (patch.dropoff_time !== null && patch.dropoff_time !== undefined) assertValidTime(patch.dropoff_time, 'dropoff_time');
     const existing = await req.db.findById('assignments', req.params.id, { owner: ownerScope(req, 'assignments') });
     if (!existing) throw new HttpError(404, 'assignment not found');
-    if (patch.driver_user_id !== undefined || patch.van_id !== undefined || patch.start_date !== undefined || patch.end_date !== undefined) {
+    if (
+      patch.driver_user_id !== undefined || patch.van_id !== undefined ||
+      patch.start_date !== undefined || patch.end_date !== undefined || patch.shift_period !== undefined
+    ) {
       const belongsToTenant = await Promise.all([
         patch.van_id !== undefined ? req.db.findById('vans', patch.van_id) : true,
         patch.driver_user_id !== undefined ? req.db.findById('users', patch.driver_user_id) : true,
@@ -82,6 +95,7 @@ router.patch('/:id', companyAdmin, async (req, res, next) => {
           van_id: patch.van_id ?? existing.van_id,
           start_date: patch.start_date ?? existing.start_date,
           end_date: patch.end_date !== undefined ? patch.end_date : existing.end_date,
+          shift_period: patch.shift_period ?? existing.shift_period,
         });
       }
     }

@@ -68,24 +68,30 @@ export interface ParentStudentLink {
 }
 
 // GET /parent/students/:id/skip-status — server-authoritative eligibility for the real
-// Skip Today's Pickup action (§ Parent Dashboard task).
-export interface SkipStatus {
-  eligible: boolean
-  reason: string | null
-  pickupTime: string | null
-  alreadySkipped: boolean
-}
+// Skip Today's Pickup action (§ Parent Dashboard task). A split student (separate morning +
+// afternoon assignments) gets a morning-only vs whole-day choice instead of one flat
+// eligible/alreadySkipped pair, since the two shifts can be independently skipped.
+export type SkipStatus =
+  | { splitShift: true; morningOnly: { eligible: boolean; alreadySkipped: boolean }; wholeDay: { eligible: boolean; alreadySkipped: boolean }; pickupTime: string | null }
+  | { splitShift: false; eligible: boolean; reason: string | null; pickupTime: string | null; alreadySkipped: boolean }
 
 // GET /parent/students/:id/detail — real vehicle/driver/trip info for the parent
-// dashboard's real (non-mockup) view (added 2026-08-27).
-export interface ParentStudentDetail {
-  student: { id: string; full_name: string; grade: string | null }
-  school: { name: string | null }
-  company: { name: string | null; phone: string | null }
+// dashboard's real (non-mockup) view (added 2026-08-27). `transport` is an array (shift_period
+// split fix) since a split student has a separate morning and afternoon assignment, each with
+// its own driver/van/times.
+export interface ParentTransportEntry {
+  shift_period: AssignmentShiftPeriod
   van: { license_plate: string; brand: string; model: string; year: number; color: string | null } | null
   driver: { full_name: string; phone: string | null } | null
   pickup_time: string | null
   dropoff_time: string | null
+}
+
+export interface ParentStudentDetail {
+  student: { id: string; full_name: string; grade: string | null }
+  school: { name: string | null }
+  company: { name: string | null; phone: string | null }
+  transport: ParentTransportEntry[]
   skip_today: boolean
   trips_today: Array<{
     trip_type: TripType
@@ -142,13 +148,19 @@ export interface Student {
   // Only present on GET /students/:id (merged server-side), not on the list endpoint.
   contacts?: StudentContact[]
   // Only present when read by school_staff/school_admin (School Hub student list task,
-  // 2026-09-02) — the student's currently assigned company/van/driver, resolved server-side
-  // since a school-tenant reader can't reach those company-tenant tables itself. Absent (not
-  // just null) for a company_admin's own reads. null fields mean the lookup ran but no active
-  // assignment exists for this student today.
-  company_name?: string | null
-  van?: { license_plate: string; brand: string; model: string; year: number; color: string | null } | null
-  driver?: { full_name: string; phone: string | null } | null
+  // 2026-09-02) — every one of the student's currently active assignments, resolved
+  // server-side since a school-tenant reader can't reach those company-tenant tables
+  // itself. Absent (not just undefined array) for a company_admin's own reads. An array
+  // since a student can have a separate morning and afternoon assignment, each with its own
+  // driver/van (shift_period split) — an empty array means no active assignment today.
+  transport?: TransportEntry[]
+}
+
+export interface TransportEntry {
+  shift_period: AssignmentShiftPeriod
+  company_name: string | null
+  van: { license_plate: string; brand: string; model: string; year: number; color: string | null } | null
+  driver: { full_name: string; phone: string | null } | null
 }
 
 // Additional contacts beyond the student's primary parent_name/parent_phone.
@@ -163,10 +175,14 @@ export interface StudentContact {
   created_at: string
 }
 
+// null shift_period = a shift worked before the morning/afternoon split shipped.
+export type ShiftPeriod = 'morning' | 'afternoon'
+
 export interface DriverSession {
   id: string
   user_id: string
   company_id: string
+  shift_period: ShiftPeriod | null
   check_in_at: string
   check_out_at: string | null
   check_in_lat: string | null
@@ -189,6 +205,7 @@ export interface Trip {
   school_id: string
   student_id: string
   trip_type: TripType
+  shift_period: ShiftPeriod | null
   driver_confirmed_at: string | null
   staff_confirmed_at: string | null
   status: TripStatus
@@ -202,6 +219,9 @@ export interface Trip {
   driver_phone: string | null
 }
 
+// 'both' = one driver does the full day for this student (default, backward compatible).
+export type AssignmentShiftPeriod = ShiftPeriod | 'both'
+
 export interface Assignment {
   id: string
   company_id: string
@@ -210,6 +230,7 @@ export interface Assignment {
   van_id: string
   start_date: string
   end_date: string | null
+  shift_period: AssignmentShiftPeriod
   pickup_time: string | null // "HH:MM:SS", Postgres time formatting
   dropoff_time: string | null
   created_at: string
@@ -235,6 +256,7 @@ export interface ScheduleOverride {
 // student/school summaries and today's resolved override (if any).
 export interface TodayScheduleItem {
   assignment_id: string
+  shift_period: AssignmentShiftPeriod
   pickup_time: string | null
   dropoff_time: string | null
   student: {
@@ -246,10 +268,11 @@ export interface TodayScheduleItem {
   }
   school: { id: string; name: string }
   override: { pickup_time: string | null; dropoff_time: string | null; skip: boolean; note: string | null } | null
-  // Added alongside the driver no-show feature: lets the driver's schedule view show
-  // "parent already skipped this pickup" and reflect an already-reported no-show.
-  parent_skipped_today: boolean
-  no_show_reported_today: boolean
+  // Per shift_period, since a 'both' assignment can have independent morning/afternoon
+  // outcomes: lets the driver's schedule view show "parent already skipped this pickup" and
+  // reflect an already-reported no-show, for each shift separately.
+  parent_skipped: { morning: boolean; afternoon: boolean }
+  no_show_reported: { morning: boolean; afternoon: boolean }
 }
 
 export type RateType = 'hourly' | 'daily'

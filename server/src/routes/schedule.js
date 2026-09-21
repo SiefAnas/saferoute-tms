@@ -15,7 +15,7 @@ router.get('/today', async (req, res, next) => {
 });
 
 router.post('/:assignmentId/no-show', async (req, res, next) => {
-  try { res.json(await markNoShow(req, req.params.assignmentId)); }
+  try { res.json(await markNoShow(req, req.params.assignmentId, req.body || {})); }
   catch (e) { next(e); }
 });
 

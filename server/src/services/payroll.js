@@ -39,8 +39,81 @@ async function addAdjustment(req, body = {}) {
   }
 }
 
+// Daily-rate pay for one driver over [from, to] (task: shift_period half/full day). A
+// completed shift (all of that shift's assigned students have a completed pickup + dropoff,
+// or were reported no-show / parent-skipped, which counts as handled — not the driver's
+// fault) earns half the flat daily rate; both shifts done = full rate for that day. A shift
+// with zero assigned students doesn't pay out, since there's nothing to verify as done.
+//
+// Legacy sessions (shift_period IS NULL, recorded before this feature existed) keep paying
+// the old way — the full rate once per distinct calendar day worked — so re-running summary()
+// over a date range from before this shipped doesn't retroactively change old pay.
+async function dailyRatePayCents(req, driverId, rule, sessionsClause, sessionsRange) {
+  const { rows: sessions } = await pool.query(
+    `SELECT id, shift_period, (check_in_at AT TIME ZONE 'UTC')::date::text AS work_date
+       FROM sessions WHERE ${sessionsClause}`,
+    sessionsRange
+  );
+  if (sessions.length === 0) return 0;
+
+  const legacyDays = new Set(sessions.filter((s) => s.shift_period === null).map((s) => s.work_date));
+  let pay = legacyDays.size * rule.rate_cents;
+
+  const byDayShift = new Map();
+  for (const s of sessions) {
+    if (s.shift_period === null) continue;
+    const key = `${s.work_date}|${s.shift_period}`;
+    if (!byDayShift.has(key)) byDayShift.set(key, []);
+    byDayShift.get(key).push(s.id);
+  }
+
+  for (const [key, sessionIds] of byDayShift) {
+    const [workDate, shiftPeriod] = key.split('|');
+    if (await isShiftComplete(req, driverId, workDate, shiftPeriod, sessionIds)) {
+      pay += Math.round(rule.rate_cents / 2);
+    }
+  }
+
+  return pay;
+}
+
+// A shift is "complete" for payroll when every student assigned to this driver for that
+// shift (shift_period = the shift itself, or 'both') on that date is accounted for: either a
+// completed pickup + dropoff trip logged in one of that shift's sessions, or a no-show/parent
+// skip recorded for that student on that date+shift.
+async function isShiftComplete(req, driverId, workDate, shiftPeriod, sessionIds) {
+  const { rows: assigned } = await pool.query(
+    `SELECT student_id FROM assignments
+      WHERE driver_user_id = $1 AND company_id = $2 AND shift_period IN ($3, 'both')
+        AND start_date <= $4 AND (end_date IS NULL OR end_date >= $4)`,
+    [driverId, req.auth.tenantId, shiftPeriod, workDate]
+  );
+  if (assigned.length === 0) return false;
+
+  const [{ rows: doneTrips }, { rows: noShows }, { rows: skips }] = await Promise.all([
+    pool.query(
+      `SELECT student_id, trip_type FROM trips WHERE session_id = ANY($1::uuid[]) AND status = 'complete'`,
+      [sessionIds]
+    ),
+    pool.query(
+      `SELECT student_id FROM pickup_no_shows WHERE company_id = $1 AND no_show_date = $2 AND shift_period = $3`,
+      [req.auth.tenantId, workDate, shiftPeriod]
+    ),
+    pool.query(
+      `SELECT student_id FROM pickup_skips WHERE company_id = $1 AND skip_date = $2 AND shift_period = $3`,
+      [req.auth.tenantId, workDate, shiftPeriod]
+    ),
+  ]);
+  const handled = new Set([...noShows.map((r) => r.student_id), ...skips.map((r) => r.student_id)]);
+  const pickedUp = new Set(doneTrips.filter((t) => t.trip_type === 'pickup').map((t) => t.student_id));
+  const droppedOff = new Set(doneTrips.filter((t) => t.trip_type === 'dropoff').map((t) => t.student_id));
+
+  return assigned.every((a) => handled.has(a.student_id) || (pickedUp.has(a.student_id) && droppedOff.has(a.student_id)));
+}
+
 // Pay owed for a driver over [from, to]: rate applied to worked time + summed adjustments.
-// Hourly: minutes/60 * rate. Daily: distinct worked calendar days * rate.
+// Hourly: minutes/60 * rate, summed across all sessions (both shifts count the same as one
+// continuous shift always did). Daily: see dailyRatePayCents above.
 //
 // BUG FIX (2026-08-27, found while building the Payroll "Paid" feature): adjustments were
 // never filtered by `from`/`to` at all — every adjustment ever recorded for a driver bled
@@ -68,7 +141,7 @@ async function summary(req, driverId, { from, to } = {}) {
 
   const base = rule.rate_type === 'hourly'
     ? Math.round((shifts.minutes / 60) * rule.rate_cents)
-    : shifts.days * rule.rate_cents;
+    : await dailyRatePayCents(req, driverId, rule, clause, range);
 
   const adjRange = [driverId, req.auth.tenantId];
   let adjClause = 'driver_id = $1 AND company_id = $2';

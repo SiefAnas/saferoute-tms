@@ -224,9 +224,9 @@ async function main() {
 
       console.log('\n--- Parent student detail (real vehicle/driver/trip info) ---');
       const detail = await api('GET', `/parent/students/${stuEligible.id}/detail`, tParent);
-      (detail.status === 200 && detail.body.van?.license_plate === 'AAA-1' && detail.body.driver?.full_name === 'Driver X'
-        && detail.body.skip_today === true)
-        ? ok('parent detail returns real van/driver info and reflects the skip just recorded')
+      (detail.status === 200 && detail.body.transport?.[0]?.van?.license_plate === 'AAA-1'
+        && detail.body.transport?.[0]?.driver?.full_name === 'Driver X' && detail.body.skip_today === true)
+        ? ok('parent detail returns real van/driver info (transport array) and reflects the skip just recorded')
         : bad(`detail: ${detail.status} ${JSON.stringify(detail.body)}`);
       eq(
         'parent detail for an unlinked student -> 404',
