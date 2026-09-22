@@ -48,7 +48,11 @@ async function main() {
     const app = createApp();
     const server = app.listen(4700);
     try {
-      console.log('--- Input validation ---');
+      console.log('--- Response headers ---');
+      const headerCheck = await fetch(BASE + '/health');
+      eq('X-Powered-By header is not sent (app.disable(\'x-powered-by\'))', headerCheck.headers.has('x-powered-by'), false);
+
+      console.log('\n--- Input validation ---');
       eq(
         'signup with malformed email -> 400',
         (await api('POST', '/signup/company', { orgName: 'X', fullName: 'Y', email: 'not-an-email', password: PW })).status,

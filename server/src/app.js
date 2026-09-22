@@ -23,6 +23,9 @@ const companyRoutes = require('./routes/companies');
 
 function createApp() {
   const app = express();
+  // Don't advertise the framework in every response header — trivial to fix, no reason not
+  // to (minor info-disclosure, found during a general inspection pass, not exploit-driven).
+  app.disable('x-powered-by');
   // NOT 1 hop, despite that being the commonly-cited default for "behind Render." A real
   // production request's raw X-Forwarded-For header was 3 entries deep:
   // "<real client>, <cloudflare edge>, <render internal hop>" — Render fronts every web
