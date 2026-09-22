@@ -248,10 +248,22 @@ export function DriverDashboard() {
           <div className="flex flex-col gap-6">
             {SHIFTS.map(({ period, label }) => {
               const items = itemsForShift(scheduleQuery.data ?? [], period)
-              if (items.length === 0) return null
+              const isOpenShift = Boolean(openSessionByShift[period])
               return (
                 <div key={period} className="flex flex-col gap-3">
-                  <h3 className="text-title-md text-secondary">{label}</h3>
+                  <h3 className="text-title-md text-secondary">
+                    {label} ({items.length} {items.length === 1 ? 'student' : 'students'})
+                  </h3>
+                  {items.length === 0 && (
+                    <p className="text-body-md text-on-surface-variant">No students assigned for this shift.</p>
+                  )}
+                  {items.length > 0 && !isOpenShift && (
+                    <p className="text-label-md text-on-surface-variant">
+                      {endedShiftsToday.has(period)
+                        ? 'This shift has ended. You can still view it, but pickup and drop-off actions are off.'
+                        : `You are not checked into ${shiftName(period)}. You can view these students, but pickup and drop-off actions stay off until you check in.`}
+                    </p>
+                  )}
                   {items.map((item) => {
                     const rowKey = `${item.assignment_id}|${period}`
                     const type = rowType[rowKey] ?? 'pickup'
@@ -327,8 +339,9 @@ export function DriverDashboard() {
                             <button
                               key={t}
                               type="button"
+                              disabled={!openSession}
                               onClick={() => setRowType((prev) => ({ ...prev, [rowKey]: t }))}
-                              className={`flex-1 rounded-lg border px-4 py-2 text-label-md capitalize transition-colors ${
+                              className={`flex-1 rounded-lg border px-4 py-2 text-label-md capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                                 type === t
                                   ? 'border-primary bg-primary-fixed text-on-primary-fixed-variant'
                                   : 'border-outline-variant text-on-surface-variant'
@@ -347,7 +360,7 @@ export function DriverDashboard() {
                           </Button>
                         </div>
 
-                        {type === 'pickup' && (
+                        {(type === 'pickup' || !openSession) && (
                           <Button
                             variant="outline"
                             className="h-10 w-fit px-4 text-label-md"
