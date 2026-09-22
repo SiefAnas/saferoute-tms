@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { formatMoney, formatDuration } from '../../lib/format'
+import { isOnOrAfterCycleStart } from '../../lib/payrollCycle'
 import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
@@ -369,14 +370,18 @@ function DriverCycleDetailModal({ driver, onClose }: { driver: PublicUser; onClo
   const shifts = useMemo(() => {
     const all = (sessionsQuery.data ?? []).filter((s) => s.user_id === driver.id && s.check_out_at)
     return all
-      .filter((s) => !paidThroughAt || new Date(s.check_in_at) >= new Date(paidThroughAt))
+      .filter((s) => isOnOrAfterCycleStart(s.check_in_at, paidThroughAt))
       .sort((a, b) => b.check_in_at.localeCompare(a.check_in_at))
   }, [sessionsQuery.data, driver.id, paidThroughAt])
 
+  // BACKLOG bug fix: this used to compare `a.work_date >= paidThroughAt.slice(0, 10)` (a
+  // date-string-only compare), so a same-day adjustment still showed under the new cycle
+  // even though the server's own timestamp compare had already excluded it from
+  // base_pay_cents/adjustments_cents — see lib/payrollCycle.ts + its test.
   const adjustments = useMemo(() => {
     const all = adjustmentsQuery.data ?? []
     return all
-      .filter((a) => !paidThroughAt || a.work_date >= paidThroughAt.slice(0, 10))
+      .filter((a) => isOnOrAfterCycleStart(a.work_date, paidThroughAt))
       .sort((a, b) => b.work_date.localeCompare(a.work_date))
   }, [adjustmentsQuery.data, paidThroughAt])
 
