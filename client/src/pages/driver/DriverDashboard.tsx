@@ -363,7 +363,10 @@ export function DriverDashboard() {
                         {(type === 'pickup' || !openSession) && (
                           <Button
                             variant="outline"
-                            className="h-10 w-fit px-4 text-label-md"
+                            // Reported state gets the same danger color School Hub's "Driver reported
+                            // no-show" badge uses, instead of just generic disabled-grey, so this reads
+                            // as a real status, not "this button happens to be off right now."
+                            className={`h-10 w-fit px-4 text-label-md ${noShowReported ? '!border-danger !text-danger disabled:!opacity-100' : ''}`}
                             disabled={
                               !openSession ||
                               markAbsent.isPending ||
@@ -382,7 +385,7 @@ export function DriverDashboard() {
                           <div className="flex gap-3 text-label-md text-on-surface-variant">
                             {loggedToday.map((t) => (
                               <span key={t.id} className="flex items-center gap-1">
-                                <span className="material-symbols-outlined !text-[16px] text-green-600">check_circle</span>
+                                <span className="material-symbols-outlined !text-[16px] text-success">check_circle</span>
                                 {t.trip_type} logged at {formatClock(t.created_at)}
                               </span>
                             ))}

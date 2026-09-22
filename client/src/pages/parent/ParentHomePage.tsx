@@ -108,6 +108,19 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
         ? 'In Transit'
         : 'Not Yet Picked Up'
 
+  // This pill used to be the same amber for all four states, no matter what actually
+  // happened today — real status shown with no color meaning at all. Dropped off = done
+  // (success), in transit = in progress (warning, same amber as before), skipped = a
+  // deliberate parent action, not an error (neutral, matches School Hub's "Skipped by
+  // parent" badge), not yet picked up = hasn't started (neutral).
+  const statusPillClass = d?.skip_today
+    ? 'border-outline-variant bg-surface-container-low text-secondary'
+    : dropoffDone
+      ? 'border-success bg-success-container text-on-success-container'
+      : pickupDone
+        ? 'border-primary-container bg-primary-fixed text-on-primary-fixed-variant'
+        : 'border-outline-variant bg-surface-container-low text-secondary'
+
   if (detailQuery.isLoading) {
     return <p className="text-body-md text-on-surface-variant">Loading…</p>
   }
@@ -127,9 +140,7 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
             {transport[0]?.van ? ` · ${transport[0].van.brand} ${transport[0].van.model}` : ''}
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-primary-container bg-primary-fixed px-3 py-1 text-label-md text-on-primary-fixed-variant">
-          {statusLabel}
-        </span>
+        <span className={`shrink-0 rounded-full border px-3 py-1 text-label-md ${statusPillClass}`}>{statusLabel}</span>
       </div>
 
       <div className="flex flex-col gap-2">

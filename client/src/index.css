@@ -60,6 +60,40 @@
   --color-on-background: #191c1e;
   --color-surface-variant: #e0e3e5;
 
+  /*
+   * Semantic status roles (overnight task: a real status-color system, extending this same
+   * @theme rather than a parallel one). Four roles, each with the same container/on-container
+   * pairing the rest of this file already uses:
+   *   success — done/safe/checked-in.  Was missing entirely; StatusBadge previously hardcoded
+   *             raw Tailwind emerald-500/700/50 for this instead of a real token, exactly the
+   *             "default Tailwind color, not a design decision" problem this task exists to fix.
+   *   warning — active/in-progress/caution. Aliases the existing primary (amber) role rather
+   *             than introducing a second amber, since "active" already meant this. Named
+   *             separately so call sites can reach for "this is a caution state" instead of
+   *             "this is the brand primary" — those two meanings currently share one color,
+   *             which is a real hierarchy problem (a "warning" indicator now looks identical
+   *             to the primary call-to-action button); worth a dedicated pass later, not
+   *             tonight's scope.
+   *   danger  — alert/error/deactivated. Aliases the existing error role (already a real red).
+   *   neutral — done-but-unremarkable/inactive. Aliases the existing on-surface-variant/
+   *             surface-container-high pairing (already real greys, not Tailwind defaults).
+   */
+  --color-success: #0f6e3d;
+  --color-on-success: #ffffff;
+  --color-success-container: #d7f2df;
+  --color-on-success-container: #0a4527;
+  --color-warning: var(--color-primary);
+  --color-on-warning: var(--color-on-primary);
+  --color-warning-container: var(--color-primary-container);
+  --color-on-warning-container: var(--color-on-primary-container);
+  --color-danger: var(--color-error);
+  --color-on-danger: var(--color-on-error);
+  --color-danger-container: var(--color-error-container);
+  --color-on-danger-container: var(--color-on-error-container);
+  --color-neutral: var(--color-on-surface-variant);
+  --color-neutral-container: var(--color-surface-container-high);
+  --color-on-neutral-container: var(--color-on-surface-variant);
+
   /* 8px linear rhythm (DESIGN.md "Layout & Spacing") */
   --spacing-xs: 4px;
   --spacing-sm: 8px;

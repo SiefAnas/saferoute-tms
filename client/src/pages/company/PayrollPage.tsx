@@ -335,7 +335,18 @@ function DriverPayRow({
         {rule ? `${formatMoney(rule.rate_cents)} / ${rule.rate_type === 'hourly' ? 'hr' : 'day'}` : 'Not set'}
       </td>
       <td className="px-6 py-3 text-data-mono text-secondary">{rule ? worked : '-'}</td>
-      <td className="px-6 py-3 text-data-mono font-medium">
+      {/* Color the amount, not just the number: $0 owed reads as settled (neutral), anything
+          owed reads as a real "this needs attention" warning — the existing number, no new
+          element, same as every other color-meaning change tonight. */}
+      <td
+        className={`px-6 py-3 text-data-mono font-medium ${
+          rule && unpaidQuery.data
+            ? unpaidQuery.data.total_pay_cents === 0
+              ? 'text-neutral'
+              : 'text-warning'
+            : ''
+        }`}
+      >
         {rule && unpaidQuery.data ? formatMoney(unpaidQuery.data.total_pay_cents) : rule ? '…' : '-'}
       </td>
       <td className="px-6 py-3 text-right">
