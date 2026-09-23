@@ -1631,16 +1631,13 @@ before a future session can act on it.
   everyone remembering to use arbitrary values.
 
 ## Open — awaiting a decision from Anas
-- **No `GET /schools` endpoint for company_admin** — the new Students management page
-  (`/company/students`) lets company_admin create a student against an *existing* school,
-  but can only offer that school by raw `school_id` (labeled by student count), never a
-  name, since no endpoint exposes school names to a company-side caller (schools are a
-  root tenant table with no cross-tenant read exposed outside the placeholder-creation
-  service). Workaround in place: creating a brand-new school via the existing
-  `POST /placeholders/school` flow *does* return a name, since the caller is the creator.
-  Fixing the existing-school case needs a small new endpoint (e.g. `GET /schools?ids=...`
-  scoped to schools the caller's company already has students at) — deliberately not added
-  without a go/no-go, since it's a new cross-tenant read surface.
+- ~~**No `GET /schools` endpoint for company_admin**~~ — **DONE.** Endpoint shipped July 19
+  (item #7 in "Known-broken", commit `ad2d1d0`); this entry was stale. Anas approved the scope
+  on 2026-09-22 (night 2, item 3): company_admin only, `{id, name}` only, schools where the
+  caller's company has at least one student. Night 2 added: school placeholders created by
+  one of the company's own users are included too (visible before any student is added), and
+  tests that company A does not see a school where only company B has students, nor B's
+  placeholder. The company Students page picker already uses this endpoint (since July 19).
 - **Postgres RLS** — optional defense-in-depth on top of the app-layer scoped accessor.
   Large, invasive change (every table + per-request session-variable/role handling in the
   connection pool). Not started pending a go/no-go given its size relative to MVP.

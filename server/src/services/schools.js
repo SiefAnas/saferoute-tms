@@ -8,12 +8,16 @@
 // src/services/placeholders.js uses the raw pool for its own cross-tenant creates).
 const pool = require('../db/pool');
 
+// Also includes school placeholders created by one of this company's own users (POST
+// /placeholders/school), even before any student is added there, so a stub the company just
+// made shows up in its picker. Same invariant: the company already has a relationship with
+// the school (it created it), so this still can't enumerate unrelated schools.
 async function listCompanySchools(companyId) {
   const { rows } = await pool.query(
-    `SELECT DISTINCT s.id, s.name
+    `SELECT s.id, s.name
        FROM schools s
-       JOIN students st ON st.school_id = s.id
-      WHERE st.company_id = $1
+      WHERE EXISTS (SELECT 1 FROM students st WHERE st.school_id = s.id AND st.company_id = $1)
+         OR EXISTS (SELECT 1 FROM users u WHERE u.id = s.created_by_user_id AND u.company_id = $1)
       ORDER BY s.name`,
     [companyId],
   );

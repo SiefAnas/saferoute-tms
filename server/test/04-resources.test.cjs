@@ -150,9 +150,26 @@ async function main() {
 
       console.log('\n--- Schools (cross-tenant read, company_admin only, BACKLOG #7) ---');
       const schoolsA = await api('GET', '/schools', adminA);
-      (schoolsA.status === 200 && schoolsA.body.length === 1 && schoolsA.body[0].id === S.id && schoolsA.body[0].name === 'School S')
+      (schoolsA.status === 200 && schoolsA.body.some((s) => s.id === S.id && s.name === 'School S'))
         ? ok('company_admin sees the name of a school it has a student at') : bad(`schools A: ${schoolsA.status} ${JSON.stringify(schoolsA.body)}`);
+      // Maple Elementary: the placeholder admin A created at the top of this file, no students there.
+      schoolsA.body.some((s) => s.id === ph.body.id && s.name === 'Maple Elementary')
+        ? ok('company_admin also sees a school placeholder its own company created (no students yet)') : bad(`own placeholder missing: ${JSON.stringify(schoolsA.body)}`);
+      (schoolsA.body.length === 2 && schoolsA.body.every((s) => Object.keys(s).sort().join() === 'id,name'))
+        ? ok('GET /schools returns exactly id+name, only related schools') : bad(`schools A shape: ${JSON.stringify(schoolsA.body)}`);
       (await api('GET', '/schools', adminB)).body.length === 0 ? ok('admin B (no students anywhere) sees no schools') : bad('school leaked to Company B with no relationship');
+
+      // A school where ONLY Company B has a student, plus a placeholder Company B created:
+      // Company A must see neither.
+      const onlyB = await ins("INSERT INTO schools(name,claim_status,claimed_at) VALUES('Only-B School','claimed',now()) RETURNING id");
+      eq('company B adds a student at Only-B School -> 201', (await api('POST', '/students', adminB, { full_name: 'Kid B', school_id: onlyB.id, ...studentFields })).status, 201);
+      const phB = await api('POST', '/placeholders/school', adminB, { name: 'B Placeholder Academy', address: '2 Rd' });
+      const schoolsA2 = (await api('GET', '/schools', adminA)).body;
+      schoolsA2.every((s) => s.id !== onlyB.id && s.id !== phB.body.id)
+        ? ok('company A does NOT see a school where only company B has students, nor B\'s placeholder') : bad(`cross-company school leak: ${JSON.stringify(schoolsA2)}`);
+      const schoolsB = (await api('GET', '/schools', adminB)).body;
+      (schoolsB.length === 2 && schoolsB.some((s) => s.id === onlyB.id) && schoolsB.some((s) => s.id === phB.body.id))
+        ? ok('company B sees exactly its own two schools (not School S or A\'s placeholder)') : bad(`schools B: ${JSON.stringify(schoolsB)}`);
       const driverATokenEarly2 = await login('drvA@co.com');
       eq('school_admin GET /schools -> 403 (company_admin only)', (await api('GET', '/schools', schoolAdmin)).status, 403);
       eq('driver GET /schools -> 403 (company_admin only)', (await api('GET', '/schools', driverATokenEarly2)).status, 403);
