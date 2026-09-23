@@ -1,17 +1,11 @@
 # Pending
 
-Current list as of the access-scope pass (2026-09-23, branch `access-scope`, not merged yet).
+Current list as of 2026-09-23: `access-scope`, `v2-week-schedule` and `mobile-app` merged to `main` and live.
 One or two lines each. Access rules: `ACCESS_SCOPE_REPORT.md` and `API_CONTRACT.md` section 0.
 Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately not in the MVP),
 `API_CONTRACT.md` (for the mobile apps), `NEXT_STEPS.md`, `BACKLOG.md`.
 
 ## Needs Anas
-- **Review + merge `access-scope`** (email failures never fail a request; every role sees only
-  its own students, drivers narrowed to their own not-ended assignments). Then deploy and check
-  `/health`. Report: `ACCESS_SCOPE_REPORT.md`.
-- **Review `v2-week-schedule`** (made from `access-scope`): backend `GET /schedule/week?start=`
-  for drivers, suite 19. Merge after `access-scope`. Web + mobile Week tabs still Coming soon.
-  Note: `MOBILE_BACKEND_NEEDS.md` (mobile branch) wrote `?from=`; the endpoint uses `?start=`.
 - **Render SMTP vars (Resend)**: `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/
   `MAIL_FROM` on the API service. Steps in `NEXT_STEPS.md` §1. Still unverified end to end.
 - **`DATABASE_URL` sslmode**: `require` → `verify-full` on Render, on its own deploy, revert if
@@ -24,11 +18,6 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 - **Whose day does the app follow, Boston time or Cairo time?** Neon `SHOW timezone` = `GMT`
   (UTC), so the server's "today" flips to tomorrow at ~8pm Boston. Proposed fix: set the Neon
   database timezone (e.g. `America/New_York`). Not done, waiting on you.
-- **Driver trip history**: `GET /trips` still shows a driver's own past trips even for students
-  whose assignment has ended (only the `student_id`, the student is 404). Hide those too?
-  (`ACCESS_SCOPE_REPORT.md` §6.1)
-- **Schools see every field of their students** (address, notes) from any company. Matches the
-  rule; say if some fields should be hidden from schools.
 - **Driver account flow** (for the mobile app): today a company admin creates each driver and sets
   their password; there's no self-registration, invite link or password reset. Decide the mobile
   flow (see `MVP_FINISH_REPORT.md`, step 6).
@@ -40,6 +29,10 @@ See `V2_ROADMAP.md`. The app shows **Coming soon** for: driver week schedule, li
 live ETA / "stops away", payment history ("Paid in {month}"), On time / Late status.
 
 ## Deliberate decisions (documented in BACKLOG, not bugs)
+- **Access scope decisions (Anas, 2026-09-23):** a driver keeps seeing their own past trips even
+  for students no longer theirs (own work history, needed for pay questions; only the
+  `student_id`). Schools see their students' address and notes (they enrolled the child; staff
+  only see granted children). The mobile Week screen will call `GET /schedule/week?start=`.
 - Student form's multi-row parent/guardian entry is create-only; edit keeps one primary
   parent pair plus the separate Contacts panel.
 - CSV import is add-only for students (no update/merge of existing rows).

@@ -6,7 +6,10 @@ the mobile work.
 
 ## Bugs found while testing against the live API (2026-09-23)
 
-### 1. No-show and skip-pickup answer 500 after saving (HIGH)
+### 1. No-show and skip-pickup answer 500 after saving (FIXED, live 2026-09-23)
+- **Fixed on `main`** (from branch `access-scope`): an email failure never fails a request
+  any more; both endpoints answer 200 and `notified` lists only emails actually sent. Test
+  suite 18. The app's reload-after-any-outcome handling can stay as a safety net.
 - `POST /schedule/:assignmentId/no-show` (driver) and `POST /parent/students/:id/skip-pickup`
   (parent) both returned `500 {"error":"internal server error"}` on the live API.
 - **The action WAS saved:** the second call returns 409 ("already reported" / "already skipped")
@@ -34,7 +37,8 @@ the mobile work.
 - **`GET /auth/me` with the login `user` shape** (`id, email, full_name, role, tenantType,
   tenantId`). Today it returns a different shape, so the app keeps the user from login in secure
   storage.
-- **Driver access scope (branch `access-scope`):** the app only calls `/schedule/today`,
+- **Driver access scope (live on `main`, checked 2026-09-23: every call below answers 200 for
+  the driver's own data):** the app only calls `/schedule/today`,
   `/sessions`, `/trips`, `/assignments` (own), `/students/:id` and `/schools/:id` for students on
   today's schedule, and `/vans/:id` for the driver's own van. Keep those working for the driver's
   own data when the scope is narrowed.
