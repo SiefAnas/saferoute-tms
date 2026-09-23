@@ -3,6 +3,7 @@ import { useAuth } from '../lib/auth'
 import { firstName, formatWeekdayDate, greeting } from '../lib/format'
 import { MobileHeader, MobileShell, type MobileTab } from '../components/mobile'
 import { useMyVan } from '../pages/driver/driverData'
+import { vanName } from '../lib/fleet'
 
 const TABS: MobileTab[] = [
   { to: '/driver', label: 'Today', icon: 'route', end: true },
@@ -13,8 +14,7 @@ const TABS: MobileTab[] = [
 
 // Driver app shell (design 3a), modeled on ParentLayout: no sidebar, a scroll area, a fixed
 // bottom tab bar. The header is on every tab: greeting by name, today's date and the van from
-// the driver's current assignment. (The design says "Van 04"; vans have no fleet number yet,
-// so this shows brand + model and the plate. See DESIGN_REPORT.md.)
+// the driver's current assignment ("Van 04" when the van has a fleet number, else make + model).
 export function DriverLayout() {
   const { user, logout } = useAuth()
   const van = useMyVan()
@@ -31,9 +31,7 @@ export function DriverLayout() {
               {van ? (
                 <>
                   {' · '}
-                  <b className="font-semibold text-ink">
-                    {van.brand} {van.model}
-                  </b>
+                  <b className="font-semibold text-ink">{vanName(van)}</b>
                   {' · '}
                   {van.license_plate}
                 </>

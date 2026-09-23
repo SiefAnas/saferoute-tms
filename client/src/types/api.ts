@@ -81,7 +81,7 @@ export type SkipStatus =
 // its own driver/van/times.
 export interface ParentTransportEntry {
   shift_period: AssignmentShiftPeriod
-  van: { license_plate: string; brand: string; model: string; year: number; color: string | null } | null
+  van: { number: string | null; license_plate: string; brand: string; model: string; year: number; color: string | null } | null
   driver: { full_name: string; phone: string | null } | null
   pickup_time: string | null
   dropoff_time: string | null
@@ -161,7 +161,7 @@ export interface Student {
 export interface TransportEntry {
   shift_period: AssignmentShiftPeriod
   company_name: string | null
-  van: { license_plate: string; brand: string; model: string; year: number; color: string | null } | null
+  van: { number: string | null; license_plate: string; brand: string; model: string; year: number; color: string | null } | null
   driver: { full_name: string; phone: string | null } | null
 }
 
@@ -334,6 +334,9 @@ export interface Company {
   id: string
   name: string
   address: string | null
+  // Added with migration 20; both optional.
+  email: string | null
+  city: string | null
   zip_code: string | null
   state: string | null
   phone: string | null

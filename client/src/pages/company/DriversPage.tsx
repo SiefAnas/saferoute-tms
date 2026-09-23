@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { isToday, formatDuration, formatRate } from '../../lib/format'
-import { currentAssignmentBy, vanLabel } from '../../lib/fleet'
+import { currentAssignmentBy, vanLabel, vanShort } from '../../lib/fleet'
 import { Button } from '../../components/Button'
 import { Field, Input } from '../../components/Input'
 import { PasswordField } from '../../components/PasswordField'
@@ -166,7 +166,7 @@ export function DriversPage() {
   const deactivated = rows.filter((r) => !r.driver.is_active)
   const names = (list: typeof rows) => list.map((r) => r.driver.full_name).join(', ')
 
-  const visible = rows.filter((r) => matches(q, r.driver.full_name, r.driver.email, r.driver.phone, r.van?.license_plate))
+  const visible = rows.filter((r) => matches(q, r.driver.full_name, r.driver.email, r.driver.phone, r.van?.license_plate, r.van?.number))
   const detail = rows.find((r) => r.driver.id === detailId) ?? null
 
   return (
@@ -214,7 +214,7 @@ export function DriversPage() {
             <TableRow key={r.driver.id} template={TEMPLATE} selected={detailId === r.driver.id} onClick={() => setDetailId(r.driver.id)}>
               <NameCell name={r.driver.full_name} sub={r.driver.email} />
               <span className="truncate text-ink-sub tabular">{r.driver.phone ?? '—'}</span>
-              <span className="truncate text-ink-sub">{r.van ? r.van.license_plate : '—'}</span>
+              <span className="truncate text-ink-sub">{r.van ? vanShort(r.van) : '—'}</span>
               <span className="truncate text-ink-sub tabular">{r.rule ? formatRate(r.rule.rate_cents, r.rule.rate_type) : 'Not set'}</span>
               <span>
                 {!r.driver.is_active ? (

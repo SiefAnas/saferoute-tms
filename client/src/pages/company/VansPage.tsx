@@ -11,11 +11,13 @@ import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import { NameCell, NoMatches, PageIntro, SearchField, StatCard, StatRow, TableCard, TableRow, matches } from '../../components/Records'
 import { useToast } from '../../components/Toast'
+import { vanLabel, vanName, vanShort } from '../../lib/fleet'
 import { PageTopBar } from '../../layouts/TopBar'
 import type { CsvColumn } from '../../lib/csv'
 import type { Assignment, DriverSession, PublicUser, Van } from '../../types/api'
 
 const CSV_COLUMNS: CsvColumn<Van>[] = [
+  { key: 'number', header: 'Van Number', value: (v) => v.number ?? '' },
   { key: 'license_plate', header: 'License Plate' },
   { key: 'brand', header: 'Brand' },
   { key: 'model', header: 'Model' },
@@ -76,6 +78,7 @@ export function VansPage() {
 
   // ---- Add / edit ----
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [vanNumber, setVanNumber] = useState('')
   const [licensePlate, setLicensePlate] = useState('')
   const [brand, setBrand] = useState('')
   const [model, setModel] = useState('')
@@ -86,6 +89,7 @@ export function VansPage() {
 
   function resetForm() {
     setEditingId(null)
+    setVanNumber('')
     setLicensePlate('')
     setBrand('')
     setModel('')
@@ -102,6 +106,7 @@ export function VansPage() {
 
   function startEdit(van: Van) {
     setEditingId(van.id)
+    setVanNumber(van.number ?? '')
     setLicensePlate(van.license_plate)
     setBrand(van.brand)
     setModel(van.model)
@@ -113,14 +118,14 @@ export function VansPage() {
 
   const invalidateVans = () => queryClient.invalidateQueries({ queryKey: ['vans'] })
 
-  const vanPayload = () => ({ license_plate: licensePlate, brand, model, year: Number(year), color })
+  const vanPayload = () => ({ number: vanNumber.trim() || null, license_plate: licensePlate, brand, model, year: Number(year), color })
 
   const createVan = useMutation({
     mutationFn: () => api.post<Van>('/vans', vanPayload()),
     onSuccess: (van) => {
       invalidateVans()
       resetForm()
-      toast.show(`${van.brand} ${van.model} (${van.license_plate}) added`)
+      toast.show(`${vanLabel(van)} added`)
     },
     onError: (err) => setFormError(err instanceof ApiError ? err.message : 'Could not create van.'),
   })
@@ -163,6 +168,7 @@ export function VansPage() {
     const model = row['Model']?.trim()
     const yearRaw = row['Year']?.trim()
     const color = row['Color']?.trim()
+    const number = row['Van Number']?.trim()
 
     const existing = (vansQuery.data ?? []).find((v) => v.license_plate.toLowerCase() === plate.toLowerCase())
     try {
@@ -172,6 +178,7 @@ export function VansPage() {
         if (model) patch.model = model
         if (yearRaw) patch.year = Number(yearRaw)
         if (color) patch.color = color
+        if (number) patch.number = number
         if (Object.keys(patch).length === 0) return { ok: true, message: 'No changes' }
         await api.patch(`/vans/${existing.id}`, patch)
         return { ok: true, message: 'Updated' }
@@ -179,7 +186,7 @@ export function VansPage() {
       if (!brand || !model || !yearRaw || !color) {
         return { ok: false, message: 'Brand, Model, Year and Color are all required for a new van' }
       }
-      await api.post('/vans', { license_plate: plate, brand, model, year: Number(yearRaw), color })
+      await api.post('/vans', { license_plate: plate, brand, model, year: Number(yearRaw), color, ...(number ? { number } : {}) })
       return { ok: true, message: 'Created' }
     } catch (err) {
       return { ok: false, message: err instanceof ApiError ? err.message : 'Import failed' }
@@ -191,7 +198,7 @@ export function VansPage() {
   const onRoad = rows.filter((r) => r.status.label === 'On the road')
   const noDriver = rows.filter((r) => r.drivers.length === 0)
   const visible = rows.filter((r) =>
-    matches(q, r.van.license_plate, r.van.brand, r.van.model, r.van.color, String(r.van.year), ...r.drivers.map((d) => d.name)),
+    matches(q, r.van.number, r.van.number ? `van ${r.van.number}` : null, r.van.license_plate, r.van.brand, r.van.model, r.van.color, String(r.van.year), ...r.drivers.map((d) => d.name)),
   )
   const detail = rows.find((r) => r.van.id === detailId) ?? null
   const driverText = (r: (typeof rows)[number]) =>
@@ -217,7 +224,7 @@ export function VansPage() {
           label="No driver assigned"
           value={noDriver.length}
           tone={noDriver.length ? 'caution' : 'default'}
-          sub={noDriver.length ? noDriver.map((r) => r.van.license_plate).join(', ') : 'Every van has a driver today'}
+          sub={noDriver.length ? noDriver.map((r) => vanShort(r.van)).join(', ') : 'Every van has a driver today'}
         />
       </StatRow>
 
@@ -236,7 +243,7 @@ export function VansPage() {
         ) : (
           visible.map((r) => (
             <TableRow key={r.van.id} template={TEMPLATE} selected={detailId === r.van.id} onClick={() => setDetailId(r.van.id)}>
-              <NameCell avatar={false} name={`${r.van.brand} ${r.van.model}`} sub={String(r.van.year)} />
+              <NameCell avatar={false} name={vanName(r.van)} sub={r.van.number ? `${r.van.brand} ${r.van.model} · ${r.van.year}` : String(r.van.year)} />
               <span className="font-medium text-ink-sub tabular">{r.van.license_plate}</span>
               <span className="text-ink-sub">{r.van.color ?? '—'}</span>
               <span className="truncate text-ink-sub">{driversQuery.isLoading || assignmentsQuery.isLoading ? '…' : driverText(r)}</span>
@@ -251,7 +258,7 @@ export function VansPage() {
       {detail && (
         <Drawer
           eyebrow="DETAILS"
-          title={`${detail.van.brand} ${detail.van.model}`}
+          title={vanName(detail.van)}
           subtitle={`${detail.van.license_plate} · ${detail.van.year}`}
           onClose={() => {
             setDetailId(null)
@@ -292,6 +299,7 @@ export function VansPage() {
           <DetailRows
             rows={[
               { k: 'Status', v: <StatusBadge tone={detail.status.tone} label={detail.status.label} /> },
+              { k: 'Van number', v: detail.van.number ?? 'Not set' },
               { k: 'Plate', v: detail.van.license_plate },
               { k: 'Make & model', v: `${detail.van.brand} ${detail.van.model}` },
               { k: 'Year', v: detail.van.year },
@@ -306,9 +314,14 @@ export function VansPage() {
       {showModal && (
         <Modal title={editingId ? 'Edit van' : 'Add van'} onClose={resetForm}>
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-            <Field label="License plate">
-              <Input required placeholder="AAA-1234" value={licensePlate} onChange={(e) => setLicensePlate(e.target.value)} />
-            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Van number (optional)">
+                <Input maxLength={10} placeholder="04" value={vanNumber} onChange={(e) => setVanNumber(e.target.value)} />
+              </Field>
+              <Field label="License plate">
+                <Input required placeholder="AAA-1234" value={licensePlate} onChange={(e) => setLicensePlate(e.target.value)} />
+              </Field>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Make">
                 <Input required placeholder="Ford" value={brand} onChange={(e) => setBrand(e.target.value)} />

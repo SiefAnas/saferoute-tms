@@ -163,7 +163,7 @@ export function SchoolStaffDashboard() {
                     </span>
                   )}
                 </span>
-                <span className="truncate text-ink-sub">{van ? van.license_plate : '—'}</span>
+                <span className="truncate text-ink-sub">{van ? (van.number ? `Van ${van.number}` : van.license_plate) : '—'}</span>
                 <span className="flex justify-end" onClick={stop}>
                   {t.status === 'pending' ? (
                     <Button size="sm" disabled={confirm.isPending && confirm.variables?.id === t.id} onClick={() => confirm.mutate(t)}>
@@ -395,7 +395,7 @@ function StudentDrawer({
                 ) : null}
               </span>
               <span className="text-[13px] text-muted">
-                {t.van ? `${[t.van.color, t.van.brand, t.van.model].filter(Boolean).join(' ')} (${t.van.year}) · ${t.van.license_plate}` : 'No van on this ride'}
+                {t.van ? `${t.van.number ? `Van ${t.van.number} · ` : ''}${[t.van.color, t.van.brand, t.van.model].filter(Boolean).join(' ')} (${t.van.year}) · ${t.van.license_plate}` : 'No van on this ride'}
               </span>
             </div>
           ))

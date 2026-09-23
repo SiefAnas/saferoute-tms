@@ -15,6 +15,7 @@ import { StateAutocomplete } from '../../components/StateAutocomplete'
 import { isAssignmentActiveToday } from '../../lib/format'
 import { localISODate } from '../../lib/localDate'
 import { driverCurrentVanId, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
+import { vanLabel, vanShort } from '../../lib/fleet'
 import { findBestParentMatch } from '../../lib/parentMatch'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import type { CsvColumn } from '../../lib/csv'
@@ -398,7 +399,10 @@ export function CompanyStudentsPage() {
     if (activeAssignmentsFor(s.id).length === 0) return { label: 'Needs assignment', tone: 'caution' }
     return { label: 'Assigned', tone: 'success' }
   }
-  const vanPlate = (id: string) => vansQuery.data?.find((v) => v.id === id)?.license_plate ?? ''
+  const vanPlate = (id: string) => {
+    const v = vansQuery.data?.find((x) => x.id === id)
+    return v ? vanShort(v) : ''
+  }
   const driverCell = (studentId: string) => {
     const active = activeAssignmentsFor(studentId)
     if (active.length === 0) return { main: 'No driver', sub: '', none: true }
@@ -601,14 +605,14 @@ export function CompanyStudentsPage() {
                       .filter((v) => (lockedVanId ? v.id === lockedVanId : !excludedVanIds.has(v.id)))
                       .map((v) => (
                         <option key={v.id} value={v.id}>
-                          {v.license_plate}
+                          {vanLabel(v)}
                         </option>
                       ))}
                   </select>
                 </div>
                 {lockedVanId && (
                   <p className="text-label-md text-on-surface-variant">
-                    This driver is currently driving {vansQuery.data?.find((v) => v.id === lockedVanId)?.license_plate ?? 'this van'}, locked to match.
+                    This driver is currently driving {vanLabel(vansQuery.data?.find((v) => v.id === lockedVanId)) }, locked to match.
                   </p>
                 )}
               </div>

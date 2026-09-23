@@ -13,6 +13,7 @@ import { useToast } from '../../components/Toast'
 import { PageTopBar } from '../../layouts/TopBar'
 import { formatCalendarMonthDay, formatTimeOfDay } from '../../lib/format'
 import { calendarDateOf, localISODate } from '../../lib/localDate'
+import { vanLabel, vanShort } from '../../lib/fleet'
 import { driverCurrentVanId, studentsTakenByOtherDrivers, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
 import type { Assignment, AssignmentShiftPeriod, PublicUser, ScheduleOverride, Student, Van } from '../../types/api'
 
@@ -154,7 +155,7 @@ export function AssignmentsPage() {
 
   const nameOf = (a: Assignment) => (studentsQuery.isLoading ? '…' : (studentsById.get(a.student_id)?.full_name ?? '(deleted student)'))
   const driverOf = (a: Assignment) => (driversQuery.isLoading ? '…' : (driversById.get(a.driver_user_id)?.full_name ?? '(deleted driver)'))
-  const plateOf = (a: Assignment) => (vansQuery.isLoading ? '…' : (vansById.get(a.van_id)?.license_plate ?? '(deleted van)'))
+  const plateOf = (a: Assignment) => (vansQuery.isLoading ? '…' : (vansById.get(a.van_id) ? vanShort(vansById.get(a.van_id)!) : '(deleted van)'))
   const times = (a: Assignment) =>
     [a.shift_period !== 'afternoon' ? formatTimeOfDay(a.pickup_time) : null, a.shift_period !== 'morning' ? formatTimeOfDay(a.dropoff_time) : null]
       .filter(Boolean)
@@ -318,7 +319,7 @@ export function AssignmentsPage() {
                     .filter((v) => (lockedVanId ? v.id === lockedVanId : !excludedVanIds.has(v.id)))
                     .map((v) => (
                       <option key={v.id} value={v.id}>
-                        {v.license_plate} · {v.brand} {v.model}
+                        {vanLabel(v)}
                       </option>
                     ))}
                 </Select>
@@ -326,7 +327,7 @@ export function AssignmentsPage() {
             </div>
             {lockedVanId && (
               <p className="text-[12px] text-muted">
-                This driver is already driving {vansById.get(lockedVanId)?.license_plate ?? 'this van'} for this date range, so the van is locked to match.
+                This driver is already driving {vansById.get(lockedVanId) ? vanLabel(vansById.get(lockedVanId)) : 'this van'} for this date range, so the van is locked to match.
               </p>
             )}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -438,7 +439,7 @@ function AssignmentDrawer({
     <Drawer
       eyebrow="DETAILS"
       title={studentName}
-      subtitle={`${driverName} · ${van ? `${van.brand} ${van.model} · ${van.license_plate}` : 'no van'}`}
+      subtitle={`${driverName} · ${van ? vanLabel(van) : 'no van'}`}
       onClose={onClose}
       footer={
         confirmDelete ? (
@@ -480,7 +481,7 @@ function AssignmentDrawer({
         rows={[
           { k: 'Status', v: <StatusBadge tone={status.tone} label={status.label} /> },
           { k: 'Driver', v: driverName },
-          { k: 'Van', v: van ? `${van.brand} ${van.model} · ${van.license_plate}` : '—' },
+          { k: 'Van', v: van ? `${vanLabel(van)} (${van.brand} ${van.model})` : '—' },
           { k: 'Starts', v: formatCalendarMonthDay(a.start_date) },
           { k: 'Ends', v: a.end_date ? formatCalendarMonthDay(a.end_date) : 'Ongoing' },
         ]}

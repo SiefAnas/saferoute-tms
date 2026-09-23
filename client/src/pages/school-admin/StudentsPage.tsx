@@ -214,7 +214,7 @@ export function StudentsPage() {
                   </span>
                   {t.van && (
                     <span className="text-[13px] text-muted">
-                      {[t.van.color, t.van.brand, t.van.model].filter(Boolean).join(' ')} · {t.van.license_plate}
+                      {[t.van.number ? `Van ${t.van.number}` : null, [t.van.color, t.van.brand, t.van.model].filter(Boolean).join(' '), t.van.license_plate].filter(Boolean).join(' · ')}
                     </span>
                   )}
                 </div>

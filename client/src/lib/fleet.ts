@@ -14,8 +14,20 @@ export function currentAssignmentBy(assignments: Assignment[], key: 'driver_user
   return map
 }
 
-// "Ford Transit · KX-4471". Vans have no fleet number ("Van 04") in the data model yet.
-export function vanLabel(v: Pick<Van, 'brand' | 'model' | 'license_plate'> | null | undefined): string {
+type VanLike = Pick<Van, 'brand' | 'model' | 'license_plate'> & { number?: string | null }
+
+// "Van 04" when the van has a fleet number, otherwise "Ford Transit".
+export function vanName(v: VanLike): string {
+  return v.number ? `Van ${v.number}` : `${v.brand} ${v.model}`
+}
+
+// Short form for tight table cells: "Van 04", or the plate when there's no number.
+export function vanShort(v: VanLike): string {
+  return v.number ? `Van ${v.number}` : v.license_plate
+}
+
+// "Van 04 · KX-4471" or "Ford Transit · KX-4471".
+export function vanLabel(v: VanLike | null | undefined): string {
   if (!v) return 'No van'
-  return `${v.brand} ${v.model} · ${v.license_plate}`
+  return `${vanName(v)} · ${v.license_plate}`
 }
