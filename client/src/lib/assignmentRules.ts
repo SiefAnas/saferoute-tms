@@ -1,11 +1,12 @@
 import type { Assignment } from '../types/api'
+import { calendarDateOf } from './localDate.ts'
 
 // Client-side mirror of server/src/services/assignmentConflicts.js — used to filter picker
 // options live (§7 item 3: "block invalid combinations at the point of picking"). The server
 // re-derives and enforces the same rules on save; this is a UX layer, not the source of truth.
 function dayNumber(dateLike: string): number {
-  const d = new Date(dateLike)
-  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+  // Parse only the "YYYY-MM-DD" part, as UTC, so the local timezone can't move it a day.
+  return Date.parse(calendarDateOf(dateLike))
 }
 
 export function rangesOverlap(aStart: string, aEnd: string | null, bStart: string, bEnd: string | null): boolean {

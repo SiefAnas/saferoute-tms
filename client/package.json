@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node test/payrollCycle.test.ts"
+    "test": "node test/payrollCycle.test.ts && node test/localDate.test.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.2",

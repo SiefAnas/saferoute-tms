@@ -6,6 +6,7 @@ import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { Modal } from '../../components/Modal'
 import { formatTimeOfDay } from '../../lib/format'
+import { localISODate } from '../../lib/localDate'
 import { driverCurrentVanId, studentsTakenByOtherDrivers, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
 import type { Assignment, AssignmentShiftPeriod, PublicUser, ScheduleOverride, Student, Van } from '../../types/api'
 
@@ -43,7 +44,7 @@ export function AssignmentsPage() {
 
   // Live conflict filtering (§7 item 3) — computed against today when no start date is
   // picked yet, so the picker is already narrowed before the user gets to the date field.
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const today = useMemo(() => localISODate(), [])
   const range = useMemo(() => ({ start_date: startDate || today, end_date: null }), [startDate, today])
   const assignments = assignmentsQuery.data ?? []
   const lockedVanId = driverId ? driverCurrentVanId(assignments, driverId, range) : null
@@ -91,7 +92,7 @@ export function AssignmentsPage() {
   })
 
   const endAssignment = useMutation({
-    mutationFn: (id: string) => api.patch<Assignment>(`/assignments/${id}`, { end_date: new Date().toISOString().slice(0, 10) }),
+    mutationFn: (id: string) => api.patch<Assignment>(`/assignments/${id}`, { end_date: localISODate() }),
     onSuccess: invalidate,
   })
 

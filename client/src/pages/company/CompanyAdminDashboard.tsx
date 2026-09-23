@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
+import { localISODate } from '../../lib/localDate'
 import { isToday, isAssignmentActiveToday, formatDuration, formatMoney, formatRelativeTime } from '../../lib/format'
 import { Card, CardHeader } from '../../components/Card'
 import { StatusBadge } from '../../components/StatusBadge'
@@ -30,8 +31,7 @@ function currentWeekRange() {
   const diffToMonday = day === 0 ? -6 : 1 - day
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday)
   const nextMonday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7)
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
-  return { from: iso(monday), to: iso(nextMonday) }
+  return { from: localISODate(monday), to: localISODate(nextMonday) }
 }
 
 const ALERT_STALE_HOURS = 10

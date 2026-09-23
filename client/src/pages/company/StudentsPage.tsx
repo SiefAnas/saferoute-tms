@@ -8,6 +8,7 @@ import { Modal } from '../../components/Modal'
 import { ContactLink } from '../../components/ContactLink'
 import { StateAutocomplete } from '../../components/StateAutocomplete'
 import { isAssignmentActiveToday } from '../../lib/format'
+import { localISODate } from '../../lib/localDate'
 import { driverCurrentVanId, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
 import { findBestParentMatch } from '../../lib/parentMatch'
 import { CsvImportExport } from '../../components/CsvImportExport'
@@ -148,7 +149,7 @@ export function CompanyStudentsPage() {
 
   // Live conflict filtering (§7 item 3) — this form always assigns "as of today" (syncAssignment
   // always opens a new assignment with start_date = today), so the picker narrows against today.
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const today = useMemo(() => localISODate(), [])
   const range = useMemo(() => ({ start_date: today, end_date: null as string | null }), [today])
   const assignments = assignmentsQuery.data ?? []
   const excludeAssignmentId = editingId ? currentAssignmentFor(editingId)?.id : undefined
@@ -272,7 +273,7 @@ export function CompanyStudentsPage() {
   // previous active assignment (end_date = today) if one existed and is being replaced or
   // cleared, then opens a new one if a driver+van are both set. No-ops if nothing changed.
   async function syncAssignment(studentId: string, current: Assignment | null) {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = localISODate()
     const wantsAssignment = Boolean(driverUserId && vanId)
     const unchanged = current && wantsAssignment && current.driver_user_id === driverUserId && current.van_id === vanId
     if (unchanged) return
@@ -325,7 +326,7 @@ export function CompanyStudentsPage() {
       }
       if (driverUserId && vanId) {
         await api.post('/assignments', {
-          student_id: student.id, driver_user_id: driverUserId, van_id: vanId, start_date: new Date().toISOString().slice(0, 10),
+          student_id: student.id, driver_user_id: driverUserId, van_id: vanId, start_date: localISODate(),
         })
       }
       return student

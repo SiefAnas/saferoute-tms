@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { getCurrentCoords } from '../../lib/geo'
+import { localISODate } from '../../lib/localDate'
 import { isToday, formatDuration, formatClock, formatMoney, formatTimeOfDay } from '../../lib/format'
 import { Card } from '../../components/Card'
 import { Button } from '../../components/Button'
@@ -28,8 +29,7 @@ function itemsForShift(items: TodayScheduleItem[], shiftPeriod: ShiftPeriod) {
 function monthRange(d: Date) {
   const from = new Date(d.getFullYear(), d.getMonth(), 1)
   const to = new Date(d.getFullYear(), d.getMonth() + 1, 1)
-  const iso = (x: Date) => x.toISOString().slice(0, 10)
-  return { from: iso(from), to: iso(to) }
+  return { from: localISODate(from), to: localISODate(to) }
 }
 
 function dateKey(d: Date) {
