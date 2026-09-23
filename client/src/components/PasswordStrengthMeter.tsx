@@ -19,8 +19,8 @@ function scorePassword(password: string): number {
 
 const LEVELS = [
   { max: 2, label: 'Weak', color: 'bg-error' },
-  { max: 4, label: 'Fair', color: 'bg-amber-500' },
-  { max: 6, label: 'Good', color: 'bg-green-600' },
+  { max: 4, label: 'Fair', color: 'bg-amber' },
+  { max: 6, label: 'Good', color: 'bg-success-fg' },
 ]
 
 export function PasswordStrengthMeter({ password }: PasswordStrengthMeterProps) {

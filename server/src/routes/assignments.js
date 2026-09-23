@@ -4,14 +4,14 @@
 const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
-const { requireOperable, requireRole, ownerScope } = require('../middleware/authorize');
+const { requireOperable, requireRole, ownerScope, denyRoles } = require('../middleware/authorize');
 const { HttpError, mapMissingRefError } = require('../errors');
 const { assertValidTime } = require('../validate');
 const { upsertOverride, listOverrides, deleteOverride } = require('../services/schedule');
 const { assertNoConflicts } = require('../services/assignmentConflicts');
 
 const router = express.Router();
-router.use(authenticate, requireOperable, attachScopedDb);
+router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent'));
 
 const companyAdmin = requireRole('company_admin');
 

@@ -43,7 +43,7 @@ export function VerifyEmailPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface p-4">
-      <div className="flex w-full max-w-[440px] flex-col items-center gap-4 rounded-xl border border-outline-variant bg-white p-8 text-center">
+      <div className="flex w-full max-w-[440px] flex-col items-center gap-4 rounded-card bg-surface shadow-card p-8 text-center">
         {!token ? (
           <>
             <span className="material-symbols-outlined !text-[40px] text-error">error</span>
@@ -90,7 +90,7 @@ export function VerifyEmailPage() {
                 onChange={(e) => setResendEmail(e.target.value)}
                 placeholder="you@example.com"
               />
-              <Button type="submit" variant="secondary" disabled={resend.isPending}>
+              <Button type="submit" variant="primary" disabled={resend.isPending}>
                 {resend.isPending ? 'Sending…' : 'Send new link'}
               </Button>
               {resend.isSuccess && (

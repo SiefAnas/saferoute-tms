@@ -118,7 +118,7 @@ async function getStudentDetail(req, studentId) {
             COALESCE(o.pickup_time, a.pickup_time) AS pickup_time,
             COALESCE(o.dropoff_time, a.dropoff_time) AS dropoff_time,
             COALESCE(o.skip, false) AS schedule_skip,
-            v.license_plate, v.brand, v.model, v.year, v.color,
+            v.license_plate, v.brand, v.model, v.year, v.color, v.number AS van_number,
             u.full_name AS driver_name, u.phone AS driver_phone,
             c.name AS company_name, c.phone AS company_phone
        FROM assignments a
@@ -168,7 +168,7 @@ async function getStudentDetail(req, studentId) {
     company: { name: first?.company_name ?? null, phone: first?.company_phone ?? null },
     transport: assignmentRows.map((a) => ({
       shift_period: a.shift_period,
-      van: { license_plate: a.license_plate, brand: a.brand, model: a.model, year: a.year, color: a.color },
+      van: { number: a.van_number, license_plate: a.license_plate, brand: a.brand, model: a.model, year: a.year, color: a.color },
       driver: { full_name: a.driver_name, phone: a.driver_phone },
       pickup_time: a.pickup_time,
       dropoff_time: a.dropoff_time,

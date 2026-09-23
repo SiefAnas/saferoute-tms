@@ -1,17 +1,22 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
-import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
-import { Input } from '../../components/Input'
+import { Field, Input } from '../../components/Input'
+import { PasswordField } from '../../components/PasswordField'
 import { EditAccountModal } from '../../components/EditAccountModal'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import { ContactLink } from '../../components/ContactLink'
 import { Modal } from '../../components/Modal'
-import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter'
+import { Drawer, DetailRows, DrawerSection } from '../../components/Drawer'
+import { EmptyState } from '../../components/EmptyState'
+import { StatusBadge } from '../../components/StatusBadge'
+import { NameCell, NoMatches, PageIntro, SearchField, StatCard, StatRow, TableCard, TableRow, matches } from '../../components/Records'
+import { useToast } from '../../components/Toast'
+import { PageTopBar } from '../../layouts/TopBar'
 import { scoreParentMatch, MATCH_THRESHOLD } from '../../lib/parentMatch'
 import type { CsvColumn } from '../../lib/csv'
-import type { PublicUser, Student, ParentStudentLink } from '../../types/api'
+import type { AbsentTodayEntry, PublicUser, Student, ParentStudentLink } from '../../types/api'
 
 const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
   { key: 'full_name', header: 'Full Name' },
@@ -24,39 +29,41 @@ const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
   { key: 'is_active', header: 'Active', value: (p) => (p.is_active ? 'true' : 'false') },
 ]
 
-// Parent management — redesigned 2026-09-01 to match the Drivers/Students table style (was
-// a plain list + a separate selection-driven access panel). The per-parent student-access
-// checklist still exists, just as an expandable row under each parent (same pattern as
-// Students' "Contacts" panel) instead of a separate side panel that needed a parent selected
-// first.
+const TEMPLATE = '1.8fr 1.2fr 1.8fr 1fr'
+
+// Company Admin — Parents (design 5a records template): parent logins and which students each
+// one can see. The per-parent student-access checklist lives in the row's details drawer.
 export function ParentsPage() {
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const parentsQuery = useQuery({ queryKey: ['users', 'parent'], queryFn: () => api.get<PublicUser[]>('/users?role=parent') })
   const studentsQuery = useQuery({ queryKey: ['students'], queryFn: () => api.get<Student[]>('/students') })
   const linksQuery = useQuery({ queryKey: ['parent-access'], queryFn: () => api.get<ParentStudentLink[]>('/parent-access') })
+  const absentQuery = useQuery({ queryKey: ['dashboard-absent-today'], queryFn: () => api.get<AbsentTodayEntry[]>('/dashboard/absent-today') })
 
-  const [expandedParentId, setExpandedParentId] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const [detailId, setDetailId] = useState<string | null>(null)
   const [editUser, setEditUser] = useState<PublicUser | null>(null)
 
-  const linkedStudentNamesFor = useMemo(() => {
-    const studentsById = new Map((studentsQuery.data ?? []).map((s) => [s.id, s.full_name]))
-    const byParent = new Map<string, string[]>()
+  const linkedStudentsFor = useMemo(() => {
+    const studentsById = new Map((studentsQuery.data ?? []).map((s) => [s.id, s]))
+    const byParent = new Map<string, Student[]>()
     for (const l of linksQuery.data ?? []) {
-      const name = studentsById.get(l.student_id)
-      if (!name) continue
+      const st = studentsById.get(l.student_id)
+      if (!st) continue
       if (!byParent.has(l.parent_user_id)) byParent.set(l.parent_user_id, [])
-      byParent.get(l.parent_user_id)!.push(name)
+      byParent.get(l.parent_user_id)!.push(st)
     }
     return (parentId: string) => byParent.get(parentId) ?? []
   }, [studentsQuery.data, linksQuery.data])
 
+  // ---- Add parent ----
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [linkStudentIds, setLinkStudentIds] = useState<Set<string>>(new Set())
   const [studentSearch, setStudentSearch] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
@@ -81,9 +88,10 @@ export function ParentsPage() {
       }
       return parent
     },
-    onSuccess: () => {
+    onSuccess: (parent) => {
       queryClient.invalidateQueries({ queryKey: ['users', 'parent'] })
       if (linkStudentIds.size > 0) queryClient.invalidateQueries({ queryKey: ['parent-access'] })
+      toast.show(`${parent.full_name} can now sign in`)
       resetAddForm()
     },
     onError: (err) => setCreateError(err instanceof ApiError ? err.message : 'Could not create parent account.'),
@@ -105,10 +113,10 @@ export function ParentsPage() {
   }
 
   const filteredStudentsForLinking = useMemo(() => {
-    const q = studentSearch.trim().toLowerCase()
+    const needle = studentSearch.trim().toLowerCase()
     const all = studentsQuery.data ?? []
-    if (!q) return all
-    return all.filter((s) => s.full_name.toLowerCase().includes(q))
+    if (!needle) return all
+    return all.filter((s) => s.full_name.toLowerCase().includes(needle))
   }, [studentsQuery.data, studentSearch])
 
   // CSV import (2026-08-28, extended 2026-09-01 for phone/address): upsert by email, same
@@ -147,197 +155,176 @@ export function ParentsPage() {
     }
   }
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-headline-lg text-primary">Parents</h1>
-        <div className="flex items-center gap-3">
-          <CsvImportExport
-            entityName="Parents"
-            columns={CSV_COLUMNS}
-            rows={parentsQuery.data ?? []}
-            onImportRow={handleImportRow}
-            onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['users', 'parent'] })}
-          />
-          <Button type="button" onClick={() => setShowAddModal(true)} className="flex items-center gap-1">
-            <span className="material-symbols-outlined !text-[18px]">person_add</span>
-            Add a Parent
-          </Button>
-        </div>
-      </div>
+  const parents = parentsQuery.data ?? []
+  const notLinked = parents.filter((p) => p.is_active && linkedStudentsFor(p.id).length === 0)
+  const skippedIds = new Set((absentQuery.data ?? []).filter((a) => a.type === 'parent_skipped').map((a) => a.student_id))
+  const skippedParents = parents.filter((p) => linkedStudentsFor(p.id).some((s) => skippedIds.has(s.id)))
+  const deactivated = parents.filter((p) => !p.is_active).length
+  const visible = parents.filter((p) => matches(q, p.full_name, p.email, p.phone, ...linkedStudentsFor(p.id).map((s) => s.full_name)))
+  const detail = parents.find((p) => p.id === detailId) ?? null
 
-      <Card className="flex flex-col overflow-hidden">
-        <CardHeader>
-          <h2 className="text-title-lg text-primary">All Parents</h2>
-        </CardHeader>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="border-b border-outline-variant bg-surface-container-low">
-              <tr>
-                {['Name', 'Email', 'Phone', 'Address', 'Linked Students', ''].map((h) => (
-                  <th key={h} className="px-6 py-2 text-label-md text-secondary uppercase">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant">
-              {(parentsQuery.data ?? []).length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-4 text-body-md text-on-surface-variant">
-                    {parentsQuery.isLoading ? 'Loading…' : 'No parents yet.'}
-                  </td>
-                </tr>
-              ) : (
-                (parentsQuery.data ?? []).flatMap((p) => {
-                  const linkedNames = linkedStudentNamesFor(p.id)
-                  const rows = [
-                    <tr key={p.id} className="hover:bg-surface-container-low">
-                      <td className="px-6 py-3 text-body-md font-medium">
-                        {p.full_name}
-                        {!p.is_active && <span className="ml-2 text-label-md text-error">deactivated</span>}
-                      </td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        <ContactLink type="email" value={p.email} />
-                      </td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">
-                        <ContactLink type="phone" value={p.phone} />
-                      </td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">{p.address ?? '-'}</td>
-                      <td className="px-6 py-3 text-body-md text-on-surface-variant">
-                        {linkedNames.length > 0 ? linkedNames.join(', ') : '-'}
-                      </td>
-                      <td className="px-6 py-3 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedParentId(expandedParentId === p.id ? null : p.id)}
-                          className="mr-3 text-label-md text-secondary hover:underline"
-                        >
-                          {expandedParentId === p.id ? 'Hide Access' : 'Access'}
-                        </button>
-                        <button type="button" onClick={() => setEditUser(p)} className="text-label-md text-primary hover:underline">
-                          Edit
-                        </button>
-                      </td>
-                    </tr>,
-                  ]
-                  if (expandedParentId === p.id) {
-                    rows.push(
-                      <tr key={`${p.id}-access`}>
-                        <td colSpan={6} className="bg-surface-container-low px-6 py-4">
-                          <StudentAccessPanel parent={p} students={studentsQuery.data ?? []} links={linksQuery.data ?? []} />
-                        </td>
-                      </tr>,
-                    )
-                  }
-                  return rows
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+  const statusOf = (p: PublicUser) =>
+    !p.is_active
+      ? <StatusBadge tone="alert" label="Deactivated" />
+      : linkedStudentsFor(p.id).length === 0
+        ? <StatusBadge tone="caution" label="Not linked" />
+        : <StatusBadge tone="success" label="Active" />
+
+  return (
+    <div className="flex flex-col gap-5">
+      <PageTopBar title="Parents">
+        <SearchField value={q} onChange={setQ} placeholder="Search parents" />
+        <CsvImportExport
+          entityName="Parents"
+          columns={CSV_COLUMNS}
+          rows={parents}
+          onImportRow={handleImportRow}
+          onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['users', 'parent'] })}
+        />
+        <Button onClick={() => setShowAddModal(true)}>
+          <span className="material-symbols-outlined !text-[18px]">person_add</span>
+          Add parent
+        </Button>
+      </PageTopBar>
+
+      <PageIntro>Parent logins and which students each one can see.</PageIntro>
+
+      <StatRow>
+        <StatCard label="Parent accounts" value={parents.length} sub={deactivated ? `${deactivated} deactivated` : 'All active'} />
+        <StatCard
+          label="Not linked to a student"
+          value={notLinked.length}
+          tone={notLinked.length ? 'caution' : 'default'}
+          sub={notLinked.length ? notLinked.map((p) => p.full_name).join(', ') : 'Everyone can see their children'}
+        />
+        <StatCard
+          label="Skipped a pickup today"
+          value={skippedParents.length}
+          sub={skippedParents.length ? 'Drivers and schools were notified' : 'No skips today'}
+        />
+      </StatRow>
+
+      <TableCard template={TEMPLATE} columns={[{ label: 'Parent' }, { label: 'Phone' }, { label: 'Linked students' }, { label: 'Status' }]}>
+        {parentsQuery.isLoading ? (
+          <p className="border-t border-divider px-5 py-4 text-[14px] text-muted">Loading…</p>
+        ) : parents.length === 0 ? (
+          <EmptyState
+            icon="family_restroom"
+            title="No parents yet"
+            body="Give parents a login so they can see their child's ride and skip a pickup."
+            action={<Button onClick={() => setShowAddModal(true)}>Add parent</Button>}
+          />
+        ) : visible.length === 0 ? (
+          <NoMatches q={q} hint="Search looks at parent names, emails, phones and linked students." onClear={() => setQ('')} />
+        ) : (
+          visible.map((p) => {
+            const linked = linkedStudentsFor(p.id)
+            return (
+              <TableRow key={p.id} template={TEMPLATE} selected={detailId === p.id} onClick={() => setDetailId(p.id)}>
+                <NameCell name={p.full_name} sub={p.email} />
+                <span className="truncate text-ink-sub tabular">{p.phone ?? '—'}</span>
+                <span className="truncate text-ink-sub">{linked.length ? linked.map((s) => s.full_name).join(', ') : '—'}</span>
+                <span>{statusOf(p)}</span>
+              </TableRow>
+            )
+          })
+        )}
+      </TableCard>
+
+      {detail && (
+        <Drawer
+          eyebrow="DETAILS"
+          title={detail.full_name}
+          subtitle={detail.email}
+          onClose={() => setDetailId(null)}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditUser(detail)}>
+                <span className="material-symbols-outlined !text-[18px]">edit</span>
+                Edit
+              </Button>
+              <Button onClick={() => setDetailId(null)}>Done</Button>
+            </div>
+          }
+        >
+          <DetailRows
+            rows={[
+              { k: 'Status', v: statusOf(detail) },
+              { k: 'Email', v: <ContactLink type="email" value={detail.email} /> },
+              { k: 'Phone', v: <ContactLink type="phone" value={detail.phone} /> },
+              { k: 'Home address', v: detail.address ?? '—' },
+            ]}
+          />
+          <StudentAccessPanel parent={detail} students={studentsQuery.data ?? []} links={linksQuery.data ?? []} />
+        </Drawer>
+      )}
 
       {showAddModal && (
-        <Modal title="Add a Parent" onClose={resetAddForm}>
+        <Modal title="Add parent" onClose={resetAddForm}>
           <form className="flex flex-col gap-3" onSubmit={handleCreate}>
-            <Input required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            <Input required type="email" placeholder="Email address (used to log in)" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <Input required type="tel" placeholder="Phone number (e.g. 555-123-4567)" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            <Input required placeholder="Home address (street, city, state, zip)" value={address} onChange={(e) => setAddress(e.target.value)} />
-            <div className="flex flex-col gap-2">
-              <div className="relative flex items-center">
-                <Input
-                  required
-                  type={showPassword ? 'text' : 'password'}
-                  minLength={8}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pr-12"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-4 text-outline hover:text-secondary"
-                >
-                  <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
-                </button>
-              </div>
-              <p className="text-label-md text-on-surface-variant">
-                At least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character.
-              </p>
-              <PasswordStrengthMeter password={password} />
+            <Field label="Full name">
+              <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Email (used to log in)">
+                <Input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </Field>
+              <Field label="Phone">
+                <Input required type="tel" placeholder="555-123-4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              </Field>
             </div>
+            <Field label="Home address">
+              <Input required placeholder="Street, city, state, zip" value={address} onChange={(e) => setAddress(e.target.value)} />
+            </Field>
+            <PasswordField label="Password" required value={password} onChange={setPassword} />
 
-            <div className="flex flex-col gap-2">
-              <p className="text-label-md text-on-surface-variant">Link to student(s) (optional, can also be done afterward)</p>
-              <Input
-                placeholder="Search students…"
-                value={studentSearch}
-                onChange={(e) => setStudentSearch(e.target.value)}
-              />
-              <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-outline-variant p-2">
-                {filteredStudentsForLinking.length === 0 ? (
-                  <p className="px-2 py-1 text-body-md text-on-surface-variant">No students match.</p>
-                ) : (
-                  filteredStudentsForLinking.map((s) => (
-                    <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-surface-container">
-                      <input
-                        type="checkbox"
-                        checked={linkStudentIds.has(s.id)}
-                        onChange={() => toggleLinkStudent(s.id)}
-                        className="h-4 w-4 rounded border-outline text-primary focus:ring-primary-container"
-                      />
-                      <span className="text-body-md">{s.full_name}</span>
-                      {s.grade && <span className="text-label-md text-on-surface-variant">Grade {s.grade}</span>}
-                    </label>
-                  ))
-                )}
-              </div>
-              {linkStudentIds.size > 0 && (
-                <p className="text-label-md text-on-surface-variant">{linkStudentIds.size} student(s) selected.</p>
+            <Field label="Link to students (optional, can also be done later)">
+              <Input placeholder="Search students…" value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} />
+            </Field>
+            <div className="flex max-h-40 flex-col gap-0.5 overflow-y-auto rounded-row border border-line p-1.5">
+              {filteredStudentsForLinking.length === 0 ? (
+                <p className="px-2 py-1 text-[13px] text-muted">No students match.</p>
+              ) : (
+                filteredStudentsForLinking.map((s) => (
+                  <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded-row px-2 py-1.5 text-[14px] text-ink hover:bg-surface-2">
+                    <input type="checkbox" checked={linkStudentIds.has(s.id)} onChange={() => toggleLinkStudent(s.id)} className="h-4 w-4 accent-amber" />
+                    {s.full_name}
+                    {s.grade && <span className="text-[12px] text-muted">Grade {s.grade}</span>}
+                  </label>
+                ))
               )}
             </div>
+            {linkStudentIds.size > 0 && <p className="text-[12px] text-muted">{linkStudentIds.size} selected</p>}
 
-            <div className="flex gap-2">
-              <Button type="submit" disabled={createParent.isPending} className="flex-1">
-                {createParent.isPending ? 'Creating…' : 'Add Parent'}
-              </Button>
-              <Button type="button" variant="outline" onClick={resetAddForm}>
-                Cancel
-              </Button>
-            </div>
             {createError && (
-              <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
+              <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">
                 {createError}
               </p>
             )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={resetAddForm}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createParent.isPending}>
+                {createParent.isPending ? 'Creating…' : 'Add parent'}
+              </Button>
+            </div>
           </form>
         </Modal>
       )}
 
-      {editUser && (
-        <EditAccountModal user={editUser} invalidateKey={['users', 'parent']} onClose={() => setEditUser(null)} />
-      )}
+      {editUser && <EditAccountModal user={editUser} invalidateKey={['users', 'parent']} onClose={() => setEditUser(null)} />}
+      {toast.node}
     </div>
   )
 }
 
-// The expandable "Access" row under a parent — same link/unlink checklist as before, plus
-// a passive match highlight (§ auto-match task) on any unlinked student whose guardian info
-// closely matches this parent, so the admin notices a likely-missed link without a popup.
-function StudentAccessPanel({
-  parent,
-  students,
-  links,
-}: {
-  parent: PublicUser
-  students: Student[]
-  links: ParentStudentLink[]
-}) {
+// Which students this parent can see: a link/unlink checklist, plus a passive "Possible match"
+// highlight (§ auto-match task) on any unlinked student whose guardian info closely matches
+// this parent, so the admin notices a likely-missed link without a popup.
+function StudentAccessPanel({ parent, students, links }: { parent: PublicUser; students: Student[]; links: ParentStudentLink[] }) {
   const queryClient = useQueryClient()
+  const [filter, setFilter] = useState('')
 
   const linksForParent = useMemo(
     () => new Map(links.filter((l) => l.parent_user_id === parent.id).map((l) => [l.student_id, l.id])),
@@ -359,60 +346,48 @@ function StudentAccessPanel({
     else link.mutate(studentId)
   }
 
+  // Linked first, then likely matches, then everyone else.
+  const rows = students
+    .filter((s) => matches(filter, s.full_name))
+    .map((s) => {
+      const hasAccess = linksForParent.has(s.id)
+      const { score, signals } = hasAccess ? { score: 0, signals: [] as string[] } : scoreParentMatch(s, parent)
+      return { s, hasAccess, possible: !hasAccess && score >= MATCH_THRESHOLD, signals }
+    })
+    .sort((a, b) => Number(b.hasAccess) - Number(a.hasAccess) || Number(b.possible) - Number(a.possible) || a.s.full_name.localeCompare(b.s.full_name))
+
   return (
-    <div className="overflow-x-auto rounded-lg border border-outline-variant bg-surface-container-lowest">
-      <table className="w-full text-left">
-        <thead className="border-b border-outline-variant bg-surface-container-low">
-          <tr>
-            <th className="px-6 py-2 text-label-md text-secondary uppercase">Student</th>
-            <th className="px-6 py-2 text-label-md text-secondary uppercase">Grade</th>
-            <th className="px-6 py-2 text-label-md text-secondary uppercase">Access</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-outline-variant">
-          {students.map((s) => {
-            const hasAccess = linksForParent.has(s.id)
-            const { score, signals } = hasAccess ? { score: 0, signals: [] as string[] } : scoreParentMatch(s, parent)
-            const isPossibleMatch = !hasAccess && score >= MATCH_THRESHOLD
-            return (
-              <tr key={s.id} className={isPossibleMatch ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-surface-container-low'}>
-                <td className="px-6 py-3 text-body-md font-medium">
-                  {s.full_name}
-                  {isPossibleMatch && (
-                    <span
-                      title={signals.join('; ')}
-                      className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-label-md text-amber-700"
-                    >
-                      <span className="material-symbols-outlined !text-[14px]">person_search</span>
-                      Possible match
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '-'}</td>
-                <td className="px-6 py-3">
-                  <label className="flex cursor-pointer items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={hasAccess}
-                      onChange={() => toggleLink(s.id)}
-                      disabled={link.isPending || unlink.isPending}
-                      className="h-5 w-5 rounded border-outline text-primary focus:ring-primary-container"
-                    />
-                    <span className="text-label-md text-on-surface-variant">{hasAccess ? 'Linked' : 'Not linked'}</span>
-                  </label>
-                </td>
-              </tr>
-            )
-          })}
-          {students.length === 0 && (
-            <tr>
-              <td colSpan={3} className="px-6 py-4 text-body-md text-on-surface-variant">
-                No students yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+    <DrawerSection title="Can see">
+      <Input placeholder="Filter students…" aria-label="Filter students" value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <div className="flex flex-col">
+        {rows.length === 0 ? (
+          <p className="py-2 text-[13px] text-muted">{students.length ? 'No students match.' : 'No students yet.'}</p>
+        ) : (
+          rows.map(({ s, hasAccess, possible, signals }) => (
+            <label
+              key={s.id}
+              className={`flex cursor-pointer items-center gap-2.5 border-b border-divider px-1 py-2 text-[14px] ${possible ? 'bg-row-selected' : ''}`}
+            >
+              <input
+                type="checkbox"
+                checked={hasAccess}
+                onChange={() => toggleLink(s.id)}
+                disabled={link.isPending || unlink.isPending}
+                className="h-4 w-4 accent-amber"
+              />
+              <span className="flex-1 text-ink">
+                {s.full_name}
+                {s.grade && <span className="text-[12px] text-muted"> · Grade {s.grade}</span>}
+              </span>
+              {possible && (
+                <span title={signals.join('; ')}>
+                  <StatusBadge tone="caution" label="Possible match" />
+                </span>
+              )}
+            </label>
+          ))
+        )}
+      </div>
+    </DrawerSection>
   )
 }

@@ -1,28 +1,57 @@
-import { useAuth } from '../../lib/auth'
-import { Card } from '../../components/Card'
-import { ContactLink } from '../../components/ContactLink'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../lib/api'
+import { SectionHeader } from '../../components/mobile'
+import type { ParentProfile, ParentStudentDetail, Student } from '../../types/api'
 
-// Read-only, username only — no password/email edit here. Self-service edit for
-// driver/parent/school_staff is intentionally admin-only for now (§ permission-changes
-// task) — only the admin who created this account can change its password/email.
-// TODO (v2): self-service password/email change.
-// TODO (v2): 2FA / signup verification.
+// Parent app, Profile tab (design 5b): read-only. Self-service edit for parents is
+// intentionally admin-only for now (§ permission-changes task): only the admin who created the
+// account can change it, so the page says who to ask.
+// TODO (v2): self-service password/email change; 2FA / signup verification.
 export function ParentProfilePage() {
-  const { user } = useAuth()
+  const profileQuery = useQuery({ queryKey: ['parent-me'], queryFn: () => api.get<ParentProfile>('/parent/me') })
+  const studentsQuery = useQuery({ queryKey: ['parent-students'], queryFn: () => api.get<Student[]>('/parent/students') })
+  const firstId = studentsQuery.data?.[0]?.id
+  // The transport company's name comes with a linked student's detail (same cached query the
+  // Students tab uses).
+  const detailQuery = useQuery({
+    queryKey: ['parent-student-detail', firstId],
+    queryFn: () => api.get<ParentStudentDetail>(`/parent/students/${firstId}/detail`),
+    enabled: Boolean(firstId),
+  })
+  const p = profileQuery.data
+  const company = detailQuery.data?.company
+
+  const rows = [
+    { label: 'Name', value: p?.full_name },
+    { label: 'Email', value: p?.email },
+    { label: 'Phone', value: p?.phone },
+    { label: 'Home address', value: p?.address },
+    { label: 'Transport company', value: company?.name },
+  ]
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-headline-lg text-primary">Profile</h1>
-      <Card className="flex flex-col gap-2 p-5">
-        <p className="text-label-md text-on-surface-variant uppercase">Username</p>
-        <p className="text-body-lg text-on-surface">
-          <ContactLink type="email" value={user?.email} />
-        </p>
-        <p className="mt-3 text-body-sm text-on-surface-variant">
-          Password and email can only be changed by the admin who created your account. Contact your transportation
-          company if you need this updated.
-        </p>
-      </Card>
-    </div>
+    <>
+      <SectionHeader title="Profile" />
+      <div className="mx-4 rounded-m border border-line bg-surface shadow-card">
+        {rows.map((r, i) => (
+          <div key={r.label} className={`flex items-center justify-between gap-3 px-4 py-3 text-[14px] ${i ? 'border-t border-divider' : ''}`}>
+            <span className="text-muted">{r.label}</span>
+            <span className="min-w-0 truncate text-right font-medium text-ink">{profileQuery.isLoading ? '…' : (r.value ?? '—')}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mx-5 mt-3 text-[13px] text-muted">
+        To change your details, contact {company?.name ?? 'your transportation company'}
+        {company?.phone ? (
+          <>
+            {' at '}
+            <a className="font-medium text-ink underline-offset-2 hover:underline" href={`tel:${company.phone.replace(/[^0-9+]/g, '')}`}>
+              {company.phone}
+            </a>
+          </>
+        ) : null}
+        .
+      </p>
+    </>
   )
 }

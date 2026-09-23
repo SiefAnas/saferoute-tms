@@ -16,6 +16,19 @@ function requireRole(...roles) {
   };
 }
 
+// The opposite gate: roles that must never reach a router. Used to keep `parent` (a
+// company-tenant role) off the company-wide resource routers (/students, /trips, /sessions,
+// /assignments, /vans). Those routers only narrow reads for drivers and school staff, so
+// without this a parent's token listed every student in the company (names, home addresses,
+// guardian phones, notes), every trip, and drivers' check-in GPS. Parents use /parent/* only.
+function denyRoles(...roles) {
+  return (req, res, next) => {
+    if (!req.auth) return res.status(401).json({ error: 'unauthenticated' });
+    if (roles.includes(req.auth.role)) return res.status(403).json({ error: 'forbidden' });
+    next();
+  };
+}
+
 // Operate-rights gate (§5.3). A user may operate only if BOTH hold:
 //   1. their org's claim is finalized ('claimed'), and
 //   2. their own account is confirmed (email_verified_at is set).
@@ -62,4 +75,4 @@ function ownerScope(req, table) {
   return null;
 }
 
-module.exports = { requireRole, requireOperable, ownerScope, DRIVER_OWNER_COLUMN };
+module.exports = { requireRole, denyRoles, requireOperable, ownerScope, DRIVER_OWNER_COLUMN };

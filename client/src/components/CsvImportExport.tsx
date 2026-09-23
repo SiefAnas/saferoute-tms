@@ -31,6 +31,7 @@ export function CsvImportExport<T>({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
   const [results, setResults] = useState<CsvRowResult[] | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   function handleExport() {
     downloadCsv(`${entityName.toLowerCase().replace(/\s+/g, '-')}.csv`, rows, columns)
@@ -63,39 +64,59 @@ export function CsvImportExport<T>({
   const succeeded = results?.filter((r) => r.ok).length ?? 0
   const failed = results?.filter((r) => !r.ok).length ?? 0
 
+  // Refresh (3b top bar): one ghost "CSV" button; export/import live in its menu, and the
+  // import results float under it instead of pushing the top bar around.
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-2">
-        <Button type="button" variant="outline" className="h-9 gap-2 px-4 text-label-md" onClick={handleExport}>
-          <span className="material-symbols-outlined !text-[18px]">download</span>
-          Export CSV
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-9 gap-2 px-4 text-label-md"
-          disabled={importing}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <span className="material-symbols-outlined !text-[18px]">upload</span>
-          {importing ? 'Importing…' : 'Import CSV'}
-        </Button>
-        <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
-      </div>
+    <div className="relative">
+      <Button variant="ghost" disabled={importing} onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen}>
+        <span className="material-symbols-outlined !text-[18px]">upload_file</span>
+        {importing ? 'Importing…' : 'CSV'}
+      </Button>
+      <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
+
+      {menuOpen && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
+          <div className="absolute top-full right-0 z-40 mt-1 flex w-48 flex-col rounded-btn bg-surface p-1 shadow-drawer">
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                handleExport()
+              }}
+              className="flex h-9 cursor-pointer items-center gap-2 rounded-row px-2.5 text-left text-[13px] text-ink hover:bg-surface-2"
+            >
+              <span className="material-symbols-outlined !text-[18px] text-muted">download</span>
+              Export {entityName.toLowerCase()} CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                fileInputRef.current?.click()
+              }}
+              className="flex h-9 cursor-pointer items-center gap-2 rounded-row px-2.5 text-left text-[13px] text-ink hover:bg-surface-2"
+            >
+              <span className="material-symbols-outlined !text-[18px] text-muted">upload</span>
+              Import from CSV
+            </button>
+          </div>
+        </>
+      )}
 
       {results && (
-        <div className="rounded-lg border border-outline-variant bg-surface-container-low p-3 text-body-md">
-          <div className="mb-1 flex items-center justify-between">
-            <p className="font-medium">
+        <div className="absolute top-full right-0 z-40 mt-1 w-80 rounded-btn bg-surface p-3 text-[13px] text-ink shadow-drawer">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="font-semibold">
               {succeeded} of {results.length} row{results.length === 1 ? '' : 's'} imported
               {failed > 0 ? `, ${failed} failed` : ''}
             </p>
-            <button type="button" onClick={() => setResults(null)} className="text-label-md text-secondary hover:underline">
+            <Button variant="ghost" size="sm" onClick={() => setResults(null)}>
               Dismiss
-            </button>
+            </Button>
           </div>
           {failed > 0 && (
-            <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto text-label-md text-error">
+            <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto text-[12px] text-alert-fg">
               {results
                 .filter((r) => !r.ok)
                 .map((r) => (

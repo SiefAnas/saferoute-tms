@@ -1,18 +1,23 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
-import { isToday, formatDuration } from '../../lib/format'
-import { Card, CardHeader } from '../../components/Card'
+import { isToday, formatDuration, formatRate } from '../../lib/format'
+import { currentAssignmentBy, vanLabel, vanShort } from '../../lib/fleet'
 import { Button } from '../../components/Button'
-import { Input } from '../../components/Input'
+import { Field, Input } from '../../components/Input'
+import { PasswordField } from '../../components/PasswordField'
 import { StatusBadge } from '../../components/StatusBadge'
 import { EditAccountModal } from '../../components/EditAccountModal'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import { ContactLink } from '../../components/ContactLink'
 import { Modal } from '../../components/Modal'
-import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter'
+import { Drawer, DetailRows } from '../../components/Drawer'
+import { EmptyState } from '../../components/EmptyState'
+import { NameCell, NoMatches, PageIntro, SearchField, StatCard, StatRow, TableCard, TableRow, matches } from '../../components/Records'
+import { useToast } from '../../components/Toast'
+import { PageTopBar } from '../../layouts/TopBar'
 import type { CsvColumn } from '../../lib/csv'
-import type { DriverSession, PublicUser } from '../../types/api'
+import type { Assignment, DriverSession, PayRule, PublicUser, Van } from '../../types/api'
 
 const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
   { key: 'full_name', header: 'Full Name' },
@@ -27,12 +32,14 @@ const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
   { key: 'is_active', header: 'Active', value: (d) => (d.is_active ? 'true' : 'false') },
 ]
 
-// Driver management — split out from the Company Admin Dashboard so drivers get their own
-// page (nav restructuring per Anas's request). Carries over the "Live Driver Status" table
-// and "Add Driver" form that used to live on the dashboard, plus new edit capability (the
-// creator-only edit permission now has a real UI here).
+const TEMPLATE = '2fr 1.2fr 1fr 1.1fr 1fr'
+
+// Company Admin — Drivers (design 5a records template): who drives for the company, their van
+// today, pay rate and live shift status. Add/edit keep the existing forms (creator-only edit is
+// enforced server-side, see EditAccountModal).
 export function DriversPage() {
   const queryClient = useQueryClient()
+  const toast = useToast()
   const [, setTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 30_000)
@@ -41,18 +48,23 @@ export function DriversPage() {
 
   const driversQuery = useQuery({ queryKey: ['users', 'driver'], queryFn: () => api.get<PublicUser[]>('/users?role=driver') })
   const sessionsQuery = useQuery({ queryKey: ['sessions', 'all'], queryFn: () => api.get<DriverSession[]>('/sessions') })
+  const assignmentsQuery = useQuery({ queryKey: ['assignments'], queryFn: () => api.get<Assignment[]>('/assignments') })
+  const vansQuery = useQuery({ queryKey: ['vans'], queryFn: () => api.get<Van[]>('/vans') })
+  const rulesQuery = useQuery({ queryKey: ['payroll-rules'], queryFn: () => api.get<PayRule[]>('/payroll/rules') })
 
+  const [q, setQ] = useState('')
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [editUser, setEditUser] = useState<PublicUser | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+
+  // ---- Add driver ----
   const [driverName, setDriverName] = useState('')
   const [driverEmail, setDriverEmail] = useState('')
   const [driverPhone, setDriverPhone] = useState('')
   const [driverAddress, setDriverAddress] = useState('')
   const [driverLicense, setDriverLicense] = useState('')
   const [driverPassword, setDriverPassword] = useState('')
-  const [showDriverPassword, setShowDriverPassword] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
-  const [addMsg, setAddMsg] = useState<string | null>(null)
-  const [editUser, setEditUser] = useState<PublicUser | null>(null)
-  const [showAddModal, setShowAddModal] = useState(false)
 
   const addDriver = useMutation({
     mutationFn: () =>
@@ -69,7 +81,7 @@ export function DriversPage() {
       }),
     onSuccess: (driver) => {
       queryClient.invalidateQueries({ queryKey: ['users', 'driver'] })
-      setAddMsg(`${driver.full_name} can now sign in with the password you set.`)
+      toast.show(`${driver.full_name} can now sign in with the password you set`)
       setDriverName('')
       setDriverEmail('')
       setDriverPhone('')
@@ -84,7 +96,6 @@ export function DriversPage() {
   function handleAdd(e: FormEvent) {
     e.preventDefault()
     setAddError(null)
-    setAddMsg(null)
     addDriver.mutate()
   }
 
@@ -128,180 +139,177 @@ export function DriversPage() {
     }
   }
 
-  const driverRows = useMemo(() => {
+  const rows = useMemo(() => {
     const sessions = sessionsQuery.data ?? []
+    const vans = new Map((vansQuery.data ?? []).map((v) => [v.id, v]))
+    const current = currentAssignmentBy(assignmentsQuery.data ?? [], 'driver_user_id')
+    const rules = new Map((rulesQuery.data ?? []).map((r) => [r.driver_id, r]))
     return (driversQuery.data ?? []).map((driver) => {
       const mine = sessions.filter((s) => s.user_id === driver.id)
       const open = mine.find((s) => s.check_out_at === null)
-      const completedToday = mine
-        .filter((s) => s.check_out_at && isToday(s.check_in_at))
-        .reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0)
+      const completedToday = mine.filter((s) => s.check_out_at && isToday(s.check_in_at)).reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0)
       const liveElapsed = open && isToday(open.check_in_at) ? (Date.now() - new Date(open.check_in_at).getTime()) / 60_000 : 0
-      return { driver, open, minutesToday: completedToday + Math.max(0, liveElapsed) }
+      const a = current.get(driver.id)
+      return {
+        driver,
+        open,
+        minutesToday: completedToday + Math.max(0, liveElapsed),
+        van: a ? (vans.get(a.van_id) ?? null) : null,
+        rule: rules.get(driver.id) ?? null,
+      }
     })
-  }, [driversQuery.data, sessionsQuery.data])
+  }, [driversQuery.data, sessionsQuery.data, vansQuery.data, assignmentsQuery.data, rulesQuery.data])
+
+  const active = rows.filter((r) => r.driver.is_active)
+  const onShift = active.filter((r) => r.open)
+  const notIn = active.filter((r) => !r.open)
+  const deactivated = rows.filter((r) => !r.driver.is_active)
+  const names = (list: typeof rows) => list.map((r) => r.driver.full_name).join(', ')
+
+  const visible = rows.filter((r) => matches(q, r.driver.full_name, r.driver.email, r.driver.phone, r.van?.license_plate, r.van?.number))
+  const detail = rows.find((r) => r.driver.id === detailId) ?? null
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-headline-lg text-primary">Drivers</h1>
-        <div className="flex items-center gap-3">
-          <CsvImportExport
-            entityName="Drivers"
-            columns={CSV_COLUMNS}
-            rows={driversQuery.data ?? []}
-            onImportRow={handleImportRow}
-            onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['users', 'driver'] })}
+    <div className="flex flex-col gap-5">
+      <PageTopBar title="Drivers">
+        <SearchField value={q} onChange={setQ} placeholder="Search drivers" />
+        <CsvImportExport
+          entityName="Drivers"
+          columns={CSV_COLUMNS}
+          rows={driversQuery.data ?? []}
+          onImportRow={handleImportRow}
+          onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['users', 'driver'] })}
+        />
+        <Button onClick={() => setShowAddModal(true)}>
+          <span className="material-symbols-outlined !text-[18px]">person_add</span>
+          Add driver
+        </Button>
+      </PageTopBar>
+
+      <PageIntro>Driver accounts, their vans and live shift status.</PageIntro>
+
+      <StatRow>
+        <StatCard label="On shift now" value={onShift.length} tone={onShift.length ? 'success' : 'default'} sub={`of ${active.length} active drivers`} />
+        <StatCard label="Not checked in" value={notIn.length} tone={notIn.length ? 'caution' : 'default'} sub={notIn.length ? names(notIn) : 'Everyone is on shift'} />
+        <StatCard label="Deactivated" value={deactivated.length} sub={deactivated.length ? names(deactivated) : 'None'} />
+      </StatRow>
+
+      <TableCard
+        template={TEMPLATE}
+        columns={[{ label: 'Driver' }, { label: 'Phone' }, { label: 'Van' }, { label: 'Pay rate' }, { label: 'Status' }]}
+      >
+        {driversQuery.isLoading ? (
+          <p className="border-t border-divider px-5 py-4 text-[14px] text-muted">Loading…</p>
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon="person_add"
+            title="No drivers yet"
+            body="Add a driver so you can assign students and track their shifts."
+            action={<Button onClick={() => setShowAddModal(true)}>Add driver</Button>}
           />
-          <Button type="button" onClick={() => setShowAddModal(true)} className="flex items-center gap-1">
-            <span className="material-symbols-outlined !text-[18px]">person_add</span>
-            Add a Driver
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 flex flex-col overflow-hidden">
-          <CardHeader>
-            <h2 className="text-title-lg text-primary">Live Driver Status</h2>
-          </CardHeader>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="border-b border-outline-variant bg-surface-container-low">
-                <tr>
-                  {['Driver Name', 'Status', 'Hours Today', 'Active', ''].map((h) => (
-                    <th key={h} className="px-6 py-2 text-label-md text-secondary uppercase">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-outline-variant">
-                {driverRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-4 text-body-md text-on-surface-variant">
-                      {driversQuery.isLoading ? 'Loading…' : 'No drivers yet.'}
-                    </td>
-                  </tr>
+        ) : visible.length === 0 ? (
+          <NoMatches q={q} hint="Search looks at names, emails, phone numbers and plates." onClear={() => setQ('')} />
+        ) : (
+          visible.map((r) => (
+            <TableRow key={r.driver.id} template={TEMPLATE} selected={detailId === r.driver.id} onClick={() => setDetailId(r.driver.id)}>
+              <NameCell name={r.driver.full_name} sub={r.driver.email} />
+              <span className="truncate text-ink-sub tabular">{r.driver.phone ?? '—'}</span>
+              <span className="truncate text-ink-sub">{r.van ? vanShort(r.van) : '—'}</span>
+              <span className="truncate text-ink-sub tabular">{r.rule ? formatRate(r.rule.rate_cents, r.rule.rate_type) : 'Not set'}</span>
+              <span>
+                {!r.driver.is_active ? (
+                  <StatusBadge tone="alert" label="Deactivated" />
+                ) : r.open ? (
+                  <StatusBadge tone="success" label="Checked in" />
                 ) : (
-                  driverRows.map(({ driver, open, minutesToday }) => (
-                    <tr key={driver.id} className="hover:bg-surface-container-low">
-                      <td className="px-6 py-3 text-body-md font-medium">
-                        {driver.full_name}
-                        <div className="text-label-md text-on-surface-variant">
-                          <ContactLink type="phone" value={driver.phone} />
-                        </div>
-                      </td>
-                      <td className="px-6 py-3">
-                        {open ? (
-                          <StatusBadge tone="success" label="Checked In" pulse />
-                        ) : (
-                          <StatusBadge tone="neutral" label="Checked Out" />
-                        )}
-                      </td>
-                      <td className="px-6 py-3 text-data-mono text-secondary">{formatDuration(minutesToday)}</td>
-                      <td className="px-6 py-3">
-                        {driver.is_active ? (
-                          <StatusBadge tone="success" label="Active" />
-                        ) : (
-                          <StatusBadge tone="error" label="Deactivated" />
-                        )}
-                      </td>
-                      <td className="px-6 py-3">
-                        <button
-                          type="button"
-                          onClick={() => setEditUser(driver)}
-                          className="text-label-md text-primary hover:underline"
-                        >
-                          Edit
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  <StatusBadge tone="neutral" label="Not checked in" />
                 )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+              </span>
+            </TableRow>
+          ))
+        )}
+      </TableCard>
 
-      </div>
+      {detail && (
+        <Drawer
+          eyebrow="DETAILS"
+          title={detail.driver.full_name}
+          subtitle={detail.driver.email}
+          onClose={() => setDetailId(null)}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditUser(detail.driver)}>
+                <span className="material-symbols-outlined !text-[18px]">edit</span>
+                Edit
+              </Button>
+              <Button onClick={() => setDetailId(null)}>Done</Button>
+            </div>
+          }
+        >
+          <DetailRows
+            rows={[
+              {
+                k: 'Status',
+                v: !detail.driver.is_active ? (
+                  <StatusBadge tone="alert" label="Deactivated" />
+                ) : detail.open ? (
+                  <StatusBadge tone="success" label="Checked in" />
+                ) : (
+                  <StatusBadge tone="neutral" label="Not checked in" />
+                ),
+              },
+              { k: 'Phone', v: <ContactLink type="phone" value={detail.driver.phone} /> },
+              { k: 'Email', v: <ContactLink type="email" value={detail.driver.email} /> },
+              { k: 'Home address', v: detail.driver.address ?? '—' },
+              { k: 'License', v: detail.driver.license_number ?? '—' },
+              { k: 'Van today', v: detail.van ? vanLabel(detail.van) : 'No active assignment' },
+              { k: 'Pay rate', v: detail.rule ? formatRate(detail.rule.rate_cents, detail.rule.rate_type) : 'Not set' },
+              { k: 'Hours today', v: formatDuration(detail.minutesToday) },
+            ]}
+          />
+        </Drawer>
+      )}
 
       {showAddModal && (
-        <Modal title="Add a Driver" onClose={() => setShowAddModal(false)}>
+        <Modal title="Add driver" onClose={() => setShowAddModal(false)}>
           <form className="flex flex-col gap-3" onSubmit={handleAdd}>
-            <Input required placeholder="Full name (e.g. Jordan Ellis)" value={driverName} onChange={(e) => setDriverName(e.target.value)} />
-            <Input
-              required
-              type="email"
-              placeholder="Email address (used to log in)"
-              value={driverEmail}
-              onChange={(e) => setDriverEmail(e.target.value)}
-            />
-            <Input
-              required
-              type="tel"
-              placeholder="Phone number (e.g. 555-123-4567)"
-              value={driverPhone}
-              onChange={(e) => setDriverPhone(e.target.value)}
-            />
-            <Input
-              required
-              placeholder="Home address (street, city, state, zip)"
-              value={driverAddress}
-              onChange={(e) => setDriverAddress(e.target.value)}
-            />
-            <Input
-              required
-              placeholder="Driver license number"
-              value={driverLicense}
-              onChange={(e) => setDriverLicense(e.target.value)}
-            />
-            <div className="flex flex-col gap-2">
-              <div className="relative flex items-center">
-                <Input
-                  required
-                  type={showDriverPassword ? 'text' : 'password'}
-                  minLength={8}
-                  placeholder="Password"
-                  value={driverPassword}
-                  onChange={(e) => setDriverPassword(e.target.value)}
-                  className="pr-12"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowDriverPassword((v) => !v)}
-                  aria-label={showDriverPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-4 text-outline hover:text-secondary"
-                >
-                  <span className="material-symbols-outlined">{showDriverPassword ? 'visibility_off' : 'visibility'}</span>
-                </button>
-              </div>
-              <p className="text-label-md text-on-surface-variant">
-                At least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character.
-              </p>
-              <PasswordStrengthMeter password={driverPassword} />
+            <Field label="Full name">
+              <Input required placeholder="Jordan Ellis" value={driverName} onChange={(e) => setDriverName(e.target.value)} />
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Email (used to log in)">
+                <Input required type="email" value={driverEmail} onChange={(e) => setDriverEmail(e.target.value)} />
+              </Field>
+              <Field label="Phone">
+                <Input required type="tel" placeholder="555-123-4567" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
+              </Field>
             </div>
-            <div className="flex gap-2">
-              <Button type="submit" variant="secondary" disabled={addDriver.isPending} className="flex-1">
-                {addDriver.isPending ? 'Creating…' : 'Add Driver'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>
-                Cancel
-              </Button>
-            </div>
-            {addMsg && <p className="text-body-md text-on-surface-variant">{addMsg}</p>}
+            <Field label="Home address">
+              <Input required placeholder="Street, city, state, zip" value={driverAddress} onChange={(e) => setDriverAddress(e.target.value)} />
+            </Field>
+            <Field label="Driver license number">
+              <Input required value={driverLicense} onChange={(e) => setDriverLicense(e.target.value)} />
+            </Field>
+            <PasswordField label="Password" required value={driverPassword} onChange={setDriverPassword} />
             {addError && (
-              <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
+              <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">
                 {addError}
               </p>
             )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={addDriver.isPending}>
+                {addDriver.isPending ? 'Creating…' : 'Add driver'}
+              </Button>
+            </div>
           </form>
         </Modal>
       )}
 
-      {editUser && (
-        <EditAccountModal user={editUser} invalidateKey={['users', 'driver']} onClose={() => setEditUser(null)} />
-      )}
+      {editUser && <EditAccountModal user={editUser} invalidateKey={['users', 'driver']} onClose={() => setEditUser(null)} />}
+      {toast.node}
     </div>
   )
 }
