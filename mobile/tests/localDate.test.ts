@@ -1,4 +1,4 @@
-import { calendarDateOf, localISODate } from '@/lib/localDate'
+import { addDaysISO, calendarDateOf, localDateOf, localISODate, mondayOf } from '@/lib/localDate'
 import { isAssignmentActiveToday } from '@/lib/format'
 
 // Every check runs under three timezones, the same way client/test/localDate.test.ts does,
@@ -49,5 +49,20 @@ describe.each(ZONES)('local calendar dates (TZ=%s)', (tz) => {
   it('treats an assignment that ended yesterday as over', () => {
     const yesterday = localISODate(new Date(Date.now() - 86_400_000))
     expect(isAssignmentActiveToday('2026-01-01T00:00:00.000Z', `${yesterday}T00:00:00.000Z`)).toBe(false)
+  })
+
+  it('moves a week at a time across months, years and DST changes (Week tab)', () => {
+    expect(addDaysISO('2026-09-21', 7)).toBe('2026-09-28')
+    expect(addDaysISO('2026-10-02', -7)).toBe('2026-09-25')
+    expect(addDaysISO('2026-12-28', 7)).toBe('2027-01-04')
+    expect(addDaysISO('2026-10-26', 7)).toBe('2026-11-02') // US DST ends Nov 1
+    expect(addDaysISO('2026-03-02', 7)).toBe('2026-03-09') // US DST starts Mar 8
+  })
+
+  it('finds the Monday of the week', () => {
+    expect(mondayOf(new Date(2026, 8, 23, 22, 0))).toBe('2026-09-21') // Wednesday night
+    expect(mondayOf(new Date(2026, 8, 27, 9, 0))).toBe('2026-09-21') // Sunday
+    expect(mondayOf(new Date(2026, 8, 21, 0, 0))).toBe('2026-09-21') // Monday midnight
+    expect(localDateOf('2026-09-21').getDate()).toBe(21)
   })
 })

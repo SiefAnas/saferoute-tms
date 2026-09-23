@@ -27,7 +27,7 @@ the mobile work.
 ## Features the app shows as "Coming soon" (V2, see `V2_ROADMAP.md`)
 | App place | Backend needed |
 |---|---|
-| Driver: Week tab | `GET /schedule/week?from=YYYY-MM-DD`: same shape as `/schedule/today`, one entry per weekday, with overrides, skips and no-shows applied |
+| ~~Driver: Week tab~~ | **Done** (branch `v2-week-ui`): the tab calls `GET /schedule/week?start=YYYY-MM-DD` (Monday) and shows the real week. |
 | Driver: Pay → "Paid in {month}" | Payment history ledger + `GET /payroll/payments?from&to` (own driver) |
 | Parent: live location and ETA / "van is X stops away" | Route order per driver + current stop; live location pings + ETA service |
 | Login: forgot password | `POST /auth/forgot-password` + `/auth/reset-password` (needs working email) |

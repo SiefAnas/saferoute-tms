@@ -6,6 +6,9 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 `API_CONTRACT.md` (for the mobile apps), `NEXT_STEPS.md`, `BACKLOG.md`.
 
 ## Needs Anas
+- **Review `v2-week-ui`** (made from `web-desktop-layout`, so merge that first): web and mobile
+  driver Week tabs show the real week (Coming soon removed). Weekends appear when an assignment
+  covers them, because assignments have no weekday pattern yet (V2 "Recurring weekly schedule").
 - **Review `web-desktop-layout`**: driver and parent pages get a website layout from 768px (side
   by side from 1024px); phone layout unchanged. Report: `DESKTOP_LAYOUT_REPORT.md`.
 - **Render SMTP vars (Resend)**: `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/

@@ -9,6 +9,7 @@ import type {
   TodayScheduleItem,
   Trip,
   Van,
+  WeekSchedule,
 } from '@/api/types'
 import { isToday } from '@/lib/format'
 import { currentAssignmentBy } from '@/lib/fleet'
@@ -49,6 +50,11 @@ export function useDriverSessions() {
 
 export function useTodaySchedule(): UseQueryResult<TodayScheduleItem[]> {
   return useQuery({ queryKey: ['schedule-today'], queryFn: () => api.get<TodayScheduleItem[]>('/schedule/today') })
+}
+
+// The driver's 7 days from `start` (a Monday, "YYYY-MM-DD"). Same key as the web Week tab.
+export function useWeekSchedule(start: string): UseQueryResult<WeekSchedule> {
+  return useQuery({ queryKey: ['schedule-week', start], queryFn: () => api.get<WeekSchedule>(`/schedule/week?start=${start}`) })
 }
 
 export function useTodaysTrips() {

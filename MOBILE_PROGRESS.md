@@ -113,6 +113,15 @@ See `mobile/README.md`. Short version: install Expo Go on the phone; on the PC `
 `npm install`, `npx expo start`; scan the QR code (iPhone: Camera app, Android: Expo Go).
 Same Wi-Fi, or `npx expo start --tunnel`.
 
+## Week tab (branch `v2-week-ui`, 2026-09-23)
+- The Week tab now shows the real week from `GET /schedule/week?start=` (Monday): a card per day
+  with morning pickups and afternoon drop-offs, time changes, notes, parent skips, no-shows and
+  no-ride days; previous / next / This week buttons (44px). Pull to refresh.
+- Dates: new `addDaysISO` / `mondayOf` / `localDateOf` in `src/lib/localDate.ts` (same as the web
+  app), tested in three timezones and across DST / year end.
+- `npm run typecheck`, `npm run lint`, jest (59) and `expo export --platform android` pass. Not
+  tried on a phone.
+
 ## Known issues
 - Server: no-show / skip-pickup can answer 500 after saving (see above). The app copes.
 - Placeholder icon and the working name "SafeRoute" / bundle id `com.saferoute.app`: change

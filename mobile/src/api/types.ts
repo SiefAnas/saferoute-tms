@@ -93,6 +93,19 @@ export interface Assignment {
 }
 
 // GET /schedule/today
+// GET /schedule/week?start=YYYY-MM-DD: 7 calendar days, each with the driver's morning and
+// afternoon runs (items shaped like /schedule/today; a 'both' assignment is on both runs).
+export interface WeekScheduleDay {
+  date: string // "YYYY-MM-DD", a calendar string: never through new Date(string)
+  morning: TodayScheduleItem[]
+  afternoon: TodayScheduleItem[]
+}
+export interface WeekSchedule {
+  start: string
+  end: string
+  days: WeekScheduleDay[]
+}
+
 export interface TodayScheduleItem {
   assignment_id: string
   shift_period: AssignmentShiftPeriod
