@@ -3,7 +3,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { api, ApiError } from '../../lib/api'
 import { formatMoney, formatDuration, formatMonthDay, formatCalendarMonthDay, formatRate } from '../../lib/format'
 import { isOnOrAfterCycleStart } from '../../lib/payrollCycle'
-import { currentAssignmentBy } from '../../lib/fleet'
+import { currentAssignmentBy, vanLabel } from '../../lib/fleet'
 import { Button } from '../../components/Button'
 import { Field, Input, Select } from '../../components/Input'
 import { Modal } from '../../components/Modal'
@@ -12,6 +12,7 @@ import { InlineEmpty, EmptyState } from '../../components/EmptyState'
 import { StatusBadge } from '../../components/StatusBadge'
 import { HeroStat, NameCell, StatCard, StatRow, TableCard, TableRow, stop } from '../../components/Records'
 import { useToast } from '../../components/Toast'
+import { useComingSoon } from '../../components/ComingSoon'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import { PageTopBar } from '../../layouts/TopBar'
 import type { CsvColumn } from '../../lib/csv'
@@ -42,6 +43,7 @@ function workedLabel(s: UnpaidPaySummary) {
 export function PayrollPage() {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const openComingSoon = useComingSoon()
   const driversQuery = useQuery({ queryKey: ['users', 'driver'], queryFn: () => api.get<PublicUser[]>('/users?role=driver') })
   const rulesQuery = useQuery({ queryKey: ['payroll-rules'], queryFn: () => api.get<PayRule[]>('/payroll/rules') })
   const vansQuery = useQuery({ queryKey: ['vans'], queryFn: () => api.get<Van[]>('/vans') })
@@ -71,7 +73,7 @@ export function PayrollPage() {
     return (driverId: string) => {
       const a = current.get(driverId)
       const v = a ? vans.get(a.van_id) : undefined
-      return v ? `${v.brand} ${v.model} · ${v.license_plate}` : 'No van today'
+      return v ? vanLabel(v) : 'No van today'
     }
   }, [vansQuery.data, assignmentsQuery.data])
 
@@ -222,14 +224,20 @@ export function PayrollPage() {
           value={formatMoney(owedTotal)}
           sub={owedCount === 0 ? 'Everyone is paid up' : `${owedCount} ${owedCount === 1 ? 'driver' : 'drivers'} unpaid`}
         />
-        {/* No payment history is stored (only each driver's last paid_through_at), so a monthly
-            "paid" total can't be computed honestly. Shown disabled; see DESIGN_REPORT.md. */}
-        <StatCard
-          label={`Paid in ${new Date().toLocaleDateString(undefined, { month: 'long' })}`}
-          value="—"
-          sub="Needs payment history (not stored yet)"
-          disabled
-        />
+        {/* V2 (V2_ROADMAP.md): only each driver's last paid_through_at is stored, so a monthly
+            "paid" total can't be computed honestly. Coming Soon instead of a number. */}
+        <button type="button" className="cursor-pointer text-left" onClick={() => openComingSoon('Payment history')}>
+          <StatCard
+            label={`Paid in ${new Date().toLocaleDateString(undefined, { month: 'long' })}`}
+            value={
+              <span className="inline-flex items-center gap-1.5 text-[20px] text-info-fg">
+                <span className="material-symbols-outlined !text-[22px]">rocket_launch</span>
+                Coming soon
+              </span>
+            }
+            sub="Monthly totals need payment history"
+          />
+        </button>
         <StatCard
           label="Missing a pay rate"
           value={missingRate.length}

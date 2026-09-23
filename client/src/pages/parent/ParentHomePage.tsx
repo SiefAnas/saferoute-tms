@@ -7,6 +7,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { Avatar } from '../../components/Records'
 import { CallButton, ConfirmCard, ThumbBar } from '../../components/mobile'
 import type { BadgeTone } from '../../components/StatusBadge'
+import { useComingSoon } from '../../components/ComingSoon'
 import type { ParentStudentDetail, ParentTransportEntry, SkipStatus, Student } from '../../types/api'
 
 const BANNER: Record<BadgeTone, string> = {
@@ -21,9 +22,9 @@ const BANNER: Record<BadgeTone, string> = {
 // Parent app, Students tab (design 5b). All real data: GET /parent/students,
 // /parent/students/:id/detail (van, driver, times, today's trips) and /skip-status.
 //
-// Not built (see DESIGN_REPORT.md): the design's "Van 04 is 3 stops away" banner and live map
-// need live stop progress / GPS, which the backend doesn't have. The banner shows what IS known
-// instead (skipped, on the way, arrived, dropped off, next pickup time).
+// V2 (V2_ROADMAP.md): the design's "Van 04 is 3 stops away" banner and live map need live stop
+// progress / GPS. The banner shows what IS known (skipped, arrived, dropped off, next pickup
+// time) and a "Live location and ETA" row opens Coming Soon.
 export function ParentHomePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const studentsQuery = useQuery({ queryKey: ['parent-students'], queryFn: () => api.get<Student[]>('/parent/students') })
@@ -74,6 +75,7 @@ export function ParentHomePage() {
 }
 
 function ChildView({ student }: { student: Student }) {
+  const openComingSoon = useComingSoon()
   const detailQuery = useQuery({
     queryKey: ['parent-student-detail', student.id],
     queryFn: () => api.get<ParentStudentDetail>(`/parent/students/${student.id}/detail`),
@@ -126,6 +128,20 @@ function ChildView({ student }: { student: Student }) {
             {banner.text}
           </div>
         )}
+        {/* V2: "Van is X stops away" + live map need live stop progress / GPS. */}
+        {transport.length > 0 && (
+          <button
+            type="button"
+            onClick={() => openComingSoon('Live van tracking')}
+            className="flex cursor-pointer items-center justify-between gap-2 rounded-row border border-line px-3 py-2.5 text-left text-[13px] text-ink hover:bg-surface-2"
+          >
+            <span className="flex items-center gap-2">
+              <span className="material-symbols-outlined !text-[18px] text-muted">near_me</span>
+              Live location and ETA
+            </span>
+            <span className="rounded-pill bg-info-bg px-2 py-0.5 text-[11px] font-semibold text-info-fg">Coming soon</span>
+          </button>
+        )}
       </div>
 
       <div className="mx-4 rounded-m border border-line bg-surface shadow-card">
@@ -162,7 +178,7 @@ function DriverCard({ entry, labelShift }: { entry: ParentTransportEntry; labelS
           {labelShift && <span className="text-[12px] font-normal text-muted"> · {entry.shift_period === 'afternoon' ? 'Afternoon' : 'Morning'}</span>}
         </span>
         <span className="truncate text-[12px] text-muted">
-          {v ? `${[v.color, v.brand, v.model].filter(Boolean).join(' ')} · ${v.license_plate}` : 'No van on file'}
+          {v ? [v.number ? `Van ${v.number}` : null, [v.color, v.brand, v.model].filter(Boolean).join(' '), v.license_plate].filter(Boolean).join(' · ') : 'No van on file'}
         </span>
       </div>
       {entry.driver!.phone && <CallButton phone={entry.driver!.phone} primary label={`Call ${entry.driver!.full_name}`} />}

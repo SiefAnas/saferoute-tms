@@ -12,6 +12,8 @@ import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
 import { Avatar, FilterChip, Segmented, StatCard } from '../../components/Records'
 import { PageTopBar } from '../../layouts/TopBar'
 import { DashboardSearch } from './DashboardSearch'
+import { ComingSoonCard, useComingSoon } from '../../components/ComingSoon'
+import { vanShort } from '../../lib/fleet'
 import type {
   AbsentTodayEntry,
   Assignment,
@@ -68,6 +70,7 @@ const clock = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hou
 export function CompanyAdminDashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const openComingSoon = useComingSoon()
   const [run, setRun] = useState<ShiftPeriod>(() => (new Date().getHours() < 12 ? 'morning' : 'afternoon'))
   const [filter, setFilter] = useState<DriverFilter>('all')
   const [dismissed, setDismissed] = useState<Set<string>>(readDismissed)
@@ -251,16 +254,10 @@ export function CompanyAdminDashboard() {
                 {withGps} of {openSessions.length} on shift shared a check-in location
               </span>
             </CardHeader>
-            {/* Placeholder: a real map needs a map provider (not set up). Check-in GPS is already
-                stored on sessions, so pins can come from there once one is chosen. */}
-            <div className="flex flex-1 items-center justify-center bg-[repeating-linear-gradient(135deg,var(--color-table-head)_0_12px,var(--color-bg)_12px_24px)] p-6">
-              <div className="flex w-full max-w-[24rem] flex-col items-center gap-2 rounded-m bg-surface px-5 py-4 text-center shadow-card">
-                <IconTile icon="map" tone="neutral" />
-                <span className="text-[14px] font-semibold text-ink">Map coming later</span>
-                <span className="text-[12px] text-muted">
-                  Van pins will use each driver&apos;s check-in location. This needs a map provider, which isn&apos;t set up yet.
-                </span>
-              </div>
+            {/* V2 (V2_ROADMAP.md): a real map needs a map provider. No placeholder map or made-up
+                positions; Coming Soon until then. */}
+            <div className="flex flex-1 items-center justify-center p-5">
+              <ComingSoonCard title="Live map" body="Van pins from each driver's location will show here." />
             </div>
           </Card>
 
@@ -317,6 +314,13 @@ export function CompanyAdminDashboard() {
                 <FilterChip active={filter === 'off'} onClick={() => setFilter('off')}>
                   Not in
                 </FilterChip>
+                {/* Late / On time needs route order + planned stop times (V2). */}
+                <FilterChip active={false} onClick={() => openComingSoon('On time / Late status')}>
+                  On time
+                </FilterChip>
+                <FilterChip active={false} onClick={() => openComingSoon('On time / Late status')}>
+                  Late
+                </FilterChip>
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -329,7 +333,7 @@ export function CompanyAdminDashboard() {
                     <div className="flex min-w-0 flex-col">
                       <span className="truncate text-[14px] font-semibold text-ink">{r.driver.full_name}</span>
                       <span className="truncate text-[12px] text-muted">
-                        {r.van ? r.van.license_plate : 'No van'}
+                        {r.van ? vanShort(r.van) : 'No van'}
                         {r.stops > 0 ? ` · ${r.handled} of ${r.stops} ${run === 'morning' ? 'pickups' : 'drop-offs'}` : ''}
                       </span>
                     </div>
