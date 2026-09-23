@@ -18,7 +18,7 @@ export function PageTopBar({ title, subtitle, children }: { title: ReactNode; su
     <>
       {slots.title &&
         createPortal(
-          <div data-page-title className="flex min-w-0 flex-col">
+          <div data-page-title className="flex min-w-0 flex-wrap items-baseline gap-x-3">
             <h1 className="truncate text-page-title text-ink">{title}</h1>
             {subtitle && <span className="truncate text-[13px] text-muted">{subtitle}</span>}
           </div>,

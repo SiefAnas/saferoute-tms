@@ -209,3 +209,52 @@ export function StatRow({ template = '1fr 1fr 1fr', children }: { template?: str
     </div>
   )
 }
+
+// Web segmented control (dashboard Morning / Afternoon): tinted track, the active option
+// raised on a surface chip.
+export function Segmented<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+}: {
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (v: T) => void
+  label: string
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex gap-[3px] rounded-m border border-line bg-table-head p-[3px]">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={`h-8 cursor-pointer rounded-row px-3.5 text-[13px] font-semibold transition-colors ${
+            value === o.value ? 'bg-surface text-ink shadow-card' : 'text-muted hover:text-ink'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Rounded filter chip ("All / On shift / Not in").
+export function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`h-7 cursor-pointer rounded-[14px] border border-line px-2.5 text-[12px] font-semibold ${
+        active ? 'bg-ink text-surface' : 'bg-surface text-muted hover:text-ink'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
