@@ -1,25 +1,31 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
-import { formatTimeOfDay, formatClock } from '../../lib/format'
+import { firstName, formatClock, formatTimeOfDay } from '../../lib/format'
 import { Button } from '../../components/Button'
-import { ContactLink } from '../../components/ContactLink'
-import type { Student, SkipStatus, ParentStudentDetail, ParentProfile } from '../../types/api'
+import { EmptyState } from '../../components/EmptyState'
+import { Avatar } from '../../components/Records'
+import { CallButton, ConfirmCard, ThumbBar } from '../../components/mobile'
+import type { BadgeTone } from '../../components/StatusBadge'
+import type { ParentStudentDetail, ParentTransportEntry, SkipStatus, Student } from '../../types/api'
 
-// Real Parent dashboard (2026-08-27), restyled to adapt (not clone) a Stitch reference
-// Anas provided — map hero, status highlight card, vertical trip-progress timeline, and
-// the "report absence" / "contact driver" action pair. Per his explicit direction on what
-// to fake vs. build for real:
-//   - Vehicle info, driver, and the trip timeline are REAL data (GET /parent/students/:id/detail).
-//   - The map and the "X mins away" countdown are placeholders, deliberately, until live
-//     GPS exists — noted as a V2 item for the WHOLE APP (not just this page), per Anas's
-//     own framing, not just this screen. See MapHero/EtaBadge below.
-//   - Multiple linked students get a tab switcher (Anas's choice) rather than stacking every
-//     student's full section on one long page.
+const BANNER: Record<BadgeTone, string> = {
+  success: 'bg-success-bg text-success-fg',
+  caution: 'bg-caution-bg text-caution-fg',
+  alert: 'bg-alert-bg text-alert-fg',
+  info: 'bg-info-bg text-info-fg',
+  neutral: 'bg-neutral-bg text-neutral-fg',
+  next: 'bg-next-bg text-next-fg',
+}
+
+// Parent app, Students tab (design 5b). All real data: GET /parent/students,
+// /parent/students/:id/detail (van, driver, times, today's trips) and /skip-status.
+//
+// Not built (see DESIGN_REPORT.md): the design's "Van 04 is 3 stops away" banner and live map
+// need live stop progress / GPS, which the backend doesn't have. The banner shows what IS known
+// instead (skipped, on the way, arrived, dropped off, next pickup time).
 export function ParentHomePage() {
-  const [message, setMessage] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-
   const studentsQuery = useQuery({ queryKey: ['parent-students'], queryFn: () => api.get<Student[]>('/parent/students') })
   const students = studentsQuery.data ?? []
   const firstId = studentsQuery.data?.[0]?.id
@@ -30,376 +36,246 @@ export function ParentHomePage() {
 
   const selected = students.find((s) => s.id === selectedId) ?? null
 
-  if (studentsQuery.isLoading) {
-    return <p className="text-body-md text-on-surface-variant">Loading…</p>
-  }
+  if (studentsQuery.isLoading) return <p className="px-5 pt-6 text-[14px] text-muted">Loading…</p>
   if (students.length === 0) {
     return (
-      <p className="text-body-md text-on-surface-variant">
-        No students are linked to your account yet. Ask your transportation company's admin to link one.
-      </p>
+      <EmptyState
+        className="mt-4"
+        icon="family_restroom"
+        title="No students linked yet"
+        body="Ask your transportation company to link your child to your account. They'll show up here."
+      />
     )
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 pt-4">
       {students.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto px-4 pb-1" role="tablist" aria-label="Your children">
           {students.map((s) => (
             <button
               key={s.id}
               type="button"
+              role="tab"
+              aria-selected={selectedId === s.id}
               onClick={() => setSelectedId(s.id)}
-              className={`shrink-0 rounded-full border px-4 py-2 text-label-md transition-colors ${
-                selectedId === s.id
-                  ? 'border-primary bg-primary-fixed text-on-primary-fixed-variant'
-                  : 'border-outline-variant text-on-surface-variant hover:bg-surface-container'
+              className={`h-9 shrink-0 cursor-pointer rounded-full px-4 text-[14px] font-medium transition-colors ${
+                selectedId === s.id ? 'bg-action text-on-action' : 'border border-line bg-surface text-ink'
               }`}
             >
-              {s.full_name}
+              {firstName(s.full_name)}
             </button>
           ))}
         </div>
       )}
-
-      {message && (
-        <p className="rounded-lg bg-secondary-container px-4 py-2 text-body-md text-on-secondary-container">{message}</p>
-      )}
-
-      {selected && <StudentDetailView key={selected.id} student={selected} onMessage={setMessage} />}
+      {selected && <ChildView key={selected.id} student={selected} />}
     </div>
   )
 }
 
-// TODO (v2, § pickup-confirmation task): this student view has no live map/GPS or live
-// pickup status — both explicitly deferred. The MapHero/StatusCard placeholders that used to
-// sit here (fake "5 mins away" countdown, a static decorative map) were removed as part of
-// the mobile compact-view redesign rather than kept as visual filler; when live GPS/pickup
-// status is actually built, it should cover the app broadly (this dashboard, the company
-// admin fleet view, the driver's own route), not be bolted onto just this one screen.
-function StudentDetailView({ student, onMessage }: { student: Student; onMessage: (msg: string) => void }) {
-  const [showMore, setShowMore] = useState(false)
+function ChildView({ student }: { student: Student }) {
   const detailQuery = useQuery({
     queryKey: ['parent-student-detail', student.id],
     queryFn: () => api.get<ParentStudentDetail>(`/parent/students/${student.id}/detail`),
   })
-  const profileQuery = useQuery({
-    queryKey: ['parent-me'],
-    queryFn: () => api.get<ParentProfile>('/parent/me'),
-    enabled: showMore,
-  })
   const d = detailQuery.data
-  const transport = d?.transport ?? []
-  // Morning entry drives the "picked up at school" scheduled time, afternoon entry drives
-  // "dropped off at home" - falls back to the single entry when the student isn't split.
-  const morningEntry = transport.find((t) => t.shift_period !== 'afternoon') ?? transport[0]
-  const afternoonEntry = transport.find((t) => t.shift_period === 'afternoon') ?? transport[0]
 
-  const pickupTrip = d?.trips_today.find((t) => t.trip_type === 'pickup')
-  const dropoffTrip = d?.trips_today.find((t) => t.trip_type === 'dropoff')
-  const pickupDone = pickupTrip?.status === 'complete'
-  const dropoffDone = dropoffTrip?.status === 'complete'
+  if (detailQuery.isLoading || !d) return <p className="px-5 text-[14px] text-muted">Loading…</p>
 
-  const statusLabel = d?.skip_today
-    ? 'Pickup Skipped Today'
-    : dropoffDone
-      ? 'Dropped Off'
-      : pickupDone
-        ? 'In Transit'
-        : 'Not Yet Picked Up'
+  const transport = d.transport
+  const morning = transport.find((t) => t.shift_period !== 'afternoon')
+  const afternoon = transport.find((t) => t.shift_period !== 'morning')
+  const pickupTrip = d.trips_today.find((t) => t.trip_type === 'pickup')
+  const dropoffTrip = d.trips_today.find((t) => t.trip_type === 'dropoff')
 
-  // This pill used to be the same amber for all four states, no matter what actually
-  // happened today — real status shown with no color meaning at all. Dropped off = done
-  // (success), in transit = in progress (warning, same amber as before), skipped = a
-  // deliberate parent action, not an error (neutral, matches School Hub's "Skipped by
-  // parent" badge), not yet picked up = hasn't started (neutral).
-  const statusPillClass = d?.skip_today
-    ? 'border-outline-variant bg-surface-container-low text-secondary'
-    : dropoffDone
-      ? 'border-success bg-success-container text-on-success-container'
-      : pickupDone
-        ? 'border-primary-container bg-primary-fixed text-on-primary-fixed-variant'
-        : 'border-outline-variant bg-surface-container-low text-secondary'
+  // What we honestly know about today, most recent first.
+  let banner: { tone: BadgeTone; icon: string; text: string } | null
+  if (d.skip_today) banner = { tone: 'info', icon: 'event_busy', text: 'Morning pickup skipped today' }
+  else if (dropoffTrip) banner = { tone: 'success', icon: 'home', text: `Dropped off at ${formatClock(dropoffTrip.created_at)}` }
+  else if (pickupTrip?.status === 'complete') banner = { tone: 'success', icon: 'school', text: `Arrived at school ${formatClock(pickupTrip.completed_at ?? pickupTrip.created_at)}` }
+  else if (pickupTrip) banner = { tone: 'caution', icon: 'directions_bus', text: `Dropped at school ${formatClock(pickupTrip.created_at)}, waiting for the school to confirm` }
+  else if (transport.length === 0) banner = { tone: 'neutral', icon: 'no_transfer', text: 'No ride set up yet' }
+  else if (!morning) banner = { tone: 'neutral', icon: 'wb_sunny', text: 'Afternoon ride only' }
+  else banner = morning.pickup_time ? { tone: 'neutral', icon: 'schedule', text: `Pickup at ${formatTimeOfDay(morning.pickup_time)}` } : null
 
-  if (detailQuery.isLoading) {
-    return <p className="text-body-md text-on-surface-variant">Loading…</p>
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Compact default view (mobile): kid name, grade, company name, van type — everything
-          else lives behind "More info" so the default screen stays short on a phone. */}
-      <div className="flex items-center gap-3 rounded-2xl border border-outline-variant bg-surface-container-low p-4 shadow-sm">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-secondary-container">
-          <span className="material-symbols-outlined text-on-secondary-container">person</span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-headline-sm text-primary">{student.full_name}</h2>
-          <p className="text-body-sm text-on-surface-variant">
-            {student.grade ? `Grade ${student.grade}` : 'Grade -'} · {d?.company.name ?? 'No company assigned'}
-            {transport[0]?.van ? ` · ${transport[0].van.brand} ${transport[0].van.model}` : ''}
-          </p>
-        </div>
-        <span className={`shrink-0 rounded-full border px-3 py-1 text-label-md ${statusPillClass}`}>{statusLabel}</span>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <SkipPickupButton student={student} skipToday={d?.skip_today ?? false} onSkipped={onMessage} />
-        {transport
-          .filter((t) => t.driver?.phone)
-          .map((t, i) => {
-            const label = transport.length > 1 ? (t.shift_period === 'afternoon' ? 'Afternoon' : t.shift_period === 'morning' ? 'Morning' : null) : null
-            return (
-              <a
-                key={i}
-                href={`tel:${t.driver!.phone}`}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-error-container bg-surface-container-low text-body-md font-semibold text-error transition-colors hover:bg-error-container"
-              >
-                <span className="material-symbols-outlined !text-[20px]">call</span>
-                Contact {t.driver!.full_name.split(' ')[0]}
-                {label ? ` (${label})` : ''}
-              </a>
-            )
-          })}
-        <p className="text-center text-body-sm text-on-surface-variant">For urgent or emergency inquiries only.</p>
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setShowMore((v) => !v)}
-        className="flex items-center justify-center gap-1 rounded-lg border border-outline-variant py-2 text-label-md text-primary hover:bg-surface-container"
-      >
-        {showMore ? 'Less info' : 'More info'}
-        <span className="material-symbols-outlined !text-[18px]">{showMore ? 'expand_less' : 'expand_more'}</span>
-      </button>
-
-      {showMore && (
-        <div className="flex flex-col gap-5">
-          {transport.length === 0 ? (
-            <p className="text-body-md text-on-surface-variant">No driver/van currently assigned to this student.</p>
-          ) : (
-            <TripTimeline
-              pickupTrip={pickupTrip}
-              dropoffTrip={dropoffTrip}
-              pickupScheduled={morningEntry?.pickup_time ?? null}
-              dropoffScheduled={afternoonEntry?.dropoff_time ?? null}
-              schoolName={d?.school.name ?? null}
-            />
-          )}
-
-          <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
-            <h3 className="mb-2 text-label-md text-secondary uppercase">Company</h3>
-            <p className="text-body-md text-on-surface">{d?.company.name ?? '-'}</p>
-            <p className="text-body-md text-on-surface-variant">
-              <ContactLink type="phone" value={d?.company.phone} />
-            </p>
-          </div>
-
-          {transport.map((t, i) => {
-            const label = transport.length > 1 ? (t.shift_period === 'afternoon' ? 'Afternoon' : t.shift_period === 'morning' ? 'Morning' : 'All day') : null
-            return (
-              <div key={i} className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
-                <h3 className="mb-2 text-label-md text-secondary uppercase">{label ? `Van & Driver — ${label}` : 'Van & Driver'}</h3>
-                {t.van && (
-                  <div className="mb-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
-                    {[
-                      ['Plate', t.van.license_plate],
-                      ['Brand', t.van.brand],
-                      ['Model', t.van.model],
-                      ['Color', t.van.color ?? '-'],
-                    ].map(([l, value]) => (
-                      <div key={l}>
-                        <p className="text-label-md text-on-surface-variant uppercase">{l}</p>
-                        <p className="text-body-md font-medium text-on-surface">{value}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {t.driver && (
-                  <>
-                    <p className="text-body-md text-on-surface">{t.driver.full_name}</p>
-                    <p className="text-body-md text-on-surface-variant">
-                      <ContactLink type="phone" value={t.driver.phone} />
-                    </p>
-                  </>
-                )}
-              </div>
-            )
-          })}
-
-          <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
-            <h3 className="mb-2 text-label-md text-secondary uppercase">Your Info</h3>
-            {profileQuery.isLoading ? (
-              <p className="text-body-md text-on-surface-variant">Loading…</p>
-            ) : (
-              <div className="flex flex-col gap-1 text-body-md text-on-surface-variant">
-                <p className="text-on-surface">{profileQuery.data?.full_name}</p>
-                <p>
-                  <ContactLink type="email" value={profileQuery.data?.email} />
-                </p>
-                <p>
-                  <ContactLink type="phone" value={profileQuery.data?.phone} />
-                </p>
-                <p>{profileQuery.data?.address ?? '-'}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function TripTimeline({
-  pickupTrip,
-  dropoffTrip,
-  pickupScheduled,
-  dropoffScheduled,
-  schoolName,
-}: {
-  pickupTrip: ParentStudentDetail['trips_today'][number] | undefined
-  dropoffTrip: ParentStudentDetail['trips_today'][number] | undefined
-  pickupScheduled: string | null
-  dropoffScheduled: string | null
-  schoolName: string | null
-}) {
-  const pickupDone = pickupTrip?.status === 'complete'
-  const dropoffDone = dropoffTrip?.status === 'complete'
-
-  const steps = [
+  const rows = [
     {
-      label: 'Picked Up at School',
-      detail: schoolName ?? '-',
-      time: pickupDone && pickupTrip?.completed_at ? formatClock(pickupTrip.completed_at) : formatTimeOfDay(pickupScheduled),
-      state: pickupDone ? ('done' as const) : ('upcoming' as const),
+      label: 'Morning pickup',
+      value: d.skip_today ? 'Skipped today' : morning ? `${formatTimeOfDay(morning.pickup_time)} · Home` : 'No ride',
     },
     {
-      label: 'In Transit',
-      detail: null,
-      time: null,
-      state: pickupDone && !dropoffDone ? ('current' as const) : pickupDone ? ('done' as const) : ('upcoming' as const),
+      label: 'Arrives at school',
+      value: pickupTrip?.status === 'complete' ? `${formatClock(pickupTrip.completed_at ?? pickupTrip.created_at)} · ${d.school.name ?? 'School'}` : (d.school.name ?? '—'),
     },
-    {
-      label: dropoffDone ? 'Dropped Off at Home' : 'Drop-off (est.)',
-      detail: null,
-      time: dropoffDone && dropoffTrip?.completed_at ? formatClock(dropoffTrip.completed_at) : formatTimeOfDay(dropoffScheduled),
-      state: dropoffDone ? ('done' as const) : ('upcoming' as const),
-    },
+    { label: 'Afternoon drop-off', value: afternoon ? `${formatTimeOfDay(afternoon.dropoff_time)} · Home` : 'No ride' },
   ]
 
+  // One driver card per distinct driver (split students can have two).
+  const drivers = transport.filter((t, i) => t.driver && transport.findIndex((x) => x.driver?.full_name === t.driver?.full_name) === i)
+
   return (
-    <div>
-      <h3 className="mb-3 text-headline-sm text-primary">Trip Progress</h3>
-      <div className="relative flex flex-col pl-1">
-        {steps.map((step, i) => (
-          <div key={step.label} className="flex gap-3">
-            <div className="flex flex-col items-center">
-              {step.state === 'done' ? (
-                <span className="material-symbols-outlined flex h-6 w-6 items-center justify-center rounded-full bg-primary !text-[16px] text-on-primary">
-                  check
-                </span>
-              ) : step.state === 'current' ? (
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-fixed-dim shadow-[0_0_0_4px_rgba(245,158,11,0.2)]">
-                  <span className="h-2 w-2 rounded-full bg-primary" />
-                </span>
-              ) : (
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-container-highest">
-                  <span className="h-2 w-2 rounded-full bg-outline" />
-                </span>
-              )}
-              {i < steps.length - 1 && <span className="h-10 w-px bg-outline-variant" />}
-            </div>
-            <div className={`pb-3 ${step.state === 'upcoming' ? 'text-on-surface-variant opacity-60' : 'text-on-surface'}`}>
-              <p className="text-body-sm text-on-surface-variant">{step.time}</p>
-              <p className="text-body-md font-semibold">{step.label}</p>
-              {step.detail && <p className="mt-0.5 text-body-sm text-on-surface-variant">{step.detail}</p>}
-            </div>
+    <>
+      <div className="mx-4 flex flex-col gap-3 rounded-m border border-line bg-surface p-4 shadow-card">
+        <div className="flex flex-col">
+          <span className="text-[18px] font-semibold text-ink">{student.full_name}</span>
+          <span className="text-[13px] text-muted">{[student.grade ? `Grade ${student.grade}` : null, d.school.name].filter(Boolean).join(' · ')}</span>
+        </div>
+        {banner && (
+          <div className={`flex items-center gap-2 rounded-row px-3 py-2.5 text-[13px] font-medium ${BANNER[banner.tone]}`}>
+            <span className="material-symbols-outlined !text-[18px]">{banner.icon}</span>
+            {banner.text}
+          </div>
+        )}
+      </div>
+
+      <div className="mx-4 rounded-m border border-line bg-surface shadow-card">
+        <div className="px-4 pt-3 pb-1 text-[13px] font-semibold text-ink">Today</div>
+        {rows.map((r, i) => (
+          <div key={r.label} className={`flex items-center justify-between gap-3 px-4 py-2.5 text-[14px] ${i ? 'border-t border-divider' : ''}`}>
+            <span className="text-muted">{r.label}</span>
+            <span className="text-right font-medium text-ink tabular">{r.value}</span>
           </div>
         ))}
       </div>
+
+      {drivers.length === 0 ? (
+        <div className="mx-4 rounded-m border border-line bg-surface px-4 py-3 text-[13px] text-muted">
+          No driver assigned yet. {d.company.name ? `${d.company.name} sets this up.` : ''}
+        </div>
+      ) : (
+        drivers.map((t, i) => <DriverCard key={i} entry={t} labelShift={drivers.length > 1} />)
+      )}
+
+      <SkipBar student={student} detail={d} />
+    </>
+  )
+}
+
+function DriverCard({ entry, labelShift }: { entry: ParentTransportEntry; labelShift: boolean }) {
+  const v = entry.van
+  return (
+    <div className="mx-4 flex items-center gap-3 rounded-m border border-line bg-surface px-4 py-3 shadow-card">
+      <Avatar name={entry.driver!.full_name} size={44} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[15px] font-semibold text-ink">
+          {entry.driver!.full_name}
+          {labelShift && <span className="text-[12px] font-normal text-muted"> · {entry.shift_period === 'afternoon' ? 'Afternoon' : 'Morning'}</span>}
+        </span>
+        <span className="truncate text-[12px] text-muted">
+          {v ? `${[v.color, v.brand, v.model].filter(Boolean).join(' ')} · ${v.license_plate}` : 'No van on file'}
+        </span>
+      </div>
+      {entry.driver!.phone && <CallButton phone={entry.driver!.phone} primary label={`Call ${entry.driver!.full_name}`} />}
     </div>
   )
 }
 
-function SkipPickupButton({
-  student,
-  skipToday,
-  onSkipped,
-}: {
-  student: Student
-  skipToday: boolean
-  onSkipped: (msg: string) => void
-}) {
+// Thumb bar: "Skip today's pickup" (outline, 52px) with a confirm card. Eligibility is the
+// server's call (GET /skip-status). Split students (separate morning and afternoon rides) choose
+// morning only or the whole day.
+function SkipBar({ student, detail }: { student: Student; detail: ParentStudentDetail }) {
   const queryClient = useQueryClient()
+  const [pending, setPending] = useState<'single' | 'morning' | 'whole_day' | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const statusQuery = useQuery({
     queryKey: ['skip-status', student.id],
     queryFn: () => api.get<SkipStatus>(`/parent/students/${student.id}/skip-status`),
   })
-  // Explicit annotation matters here: useQuery's inferred `data` type doesn't narrow
-  // cleanly on its own through the splitShift discriminant without it.
   const data: SkipStatus | undefined = statusQuery.data
 
   const skip = useMutation({
     mutationFn: (shiftChoice?: 'morning' | 'whole_day') =>
-      api.post<{ skipped: boolean; notified: string[] }>(
-        `/parent/students/${student.id}/skip-pickup`,
-        shiftChoice ? { shift_choice: shiftChoice } : undefined,
-      ),
-    onSuccess: (res) => {
+      api.post<{ skipped: boolean; notified: string[] }>(`/parent/students/${student.id}/skip-pickup`, shiftChoice ? { shift_choice: shiftChoice } : undefined),
+    onSuccess: () => {
+      setError(null)
       queryClient.invalidateQueries({ queryKey: ['skip-status', student.id] })
       queryClient.invalidateQueries({ queryKey: ['parent-student-detail', student.id] })
-      onSkipped(`Reported absence for ${student.full_name}. Notified ${res.notified.length} people.`)
     },
-    onError: (err) => onSkipped(err instanceof ApiError ? err.message : 'Could not report absence.'),
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not skip the pickup.'),
   })
 
-  // Split students (separate morning + afternoon assignments, possibly different drivers)
-  // get a choice: skip just the morning pickup, or the whole day (both shifts). A student
-  // with a single assignment (the common case) has nothing to choose between, so it keeps
-  // the old one-click button below.
-  if (data?.splitShift) {
+  const name = firstName(student.full_name)
+  const hasAfternoon = detail.transport.some((t) => t.shift_period !== 'morning')
+  const hasMorning = detail.transport.some((t) => t.shift_period !== 'afternoon')
+  const caption = 'Available until the van leaves for your stop'
+
+  let content
+  if (statusQuery.isLoading) {
+    content = <span className="py-2 text-center text-[13px] text-muted">Loading…</span>
+  } else if (!hasMorning) {
+    content = <span className="py-2 text-center text-[13px] text-muted">{name} has no morning ride, so there&apos;s no pickup to skip.</span>
+  } else if (data?.splitShift) {
     const { morningOnly, wholeDay } = data
-    return (
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          disabled={skipToday || !morningOnly.eligible || skip.isPending}
-          className="h-11 flex-1 gap-2 text-body-md"
-          onClick={() => skip.mutate('morning')}
-        >
-          <span className="material-symbols-outlined !text-[20px]">event_busy</span>
-          {morningOnly.alreadySkipped ? 'Morning Skipped' : 'Skip Morning Only'}
-        </Button>
-        <Button
-          variant="outline"
-          disabled={skipToday || !wholeDay.eligible || skip.isPending}
-          className="h-11 flex-1 gap-2 text-body-md"
-          onClick={() => skip.mutate('whole_day')}
-        >
-          <span className="material-symbols-outlined !text-[20px]">event_busy</span>
-          {wholeDay.alreadySkipped ? 'Whole Day Skipped' : 'Skip Whole Day'}
-        </Button>
-      </div>
-    )
+    if (morningOnly.alreadySkipped || wholeDay.alreadySkipped) {
+      content = (
+        <span className="py-2 text-center text-[13px] text-muted">
+          {wholeDay.alreadySkipped ? `Skipped for the whole day.` : 'Morning skipped. Afternoon drop-off is unchanged.'}
+        </span>
+      )
+    } else {
+      content = (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Button size="lg" variant="outline" disabled={!morningOnly.eligible || skip.isPending} onClick={() => setPending('morning')}>
+              Skip morning
+            </Button>
+            <Button size="lg" variant="outline" disabled={!wholeDay.eligible || skip.isPending} onClick={() => setPending('whole_day')}>
+              Skip whole day
+            </Button>
+          </div>
+          <span className="text-center text-[12px] text-muted">{caption}</span>
+        </>
+      )
+    }
+  } else {
+    const status = data && data.splitShift === false ? data : null
+    if (detail.skip_today || status?.alreadySkipped) {
+      content = (
+        <span className="py-2 text-center text-[13px] text-muted">
+          Skipped.{hasAfternoon ? ' Afternoon drop-off is unchanged.' : ''}
+        </span>
+      )
+    } else {
+      content = (
+        <>
+          <Button size="lg" variant="outline" disabled={!status?.eligible || skip.isPending} onClick={() => setPending('single')}>
+            <span className="material-symbols-outlined !text-[20px]">event_busy</span>
+            {skip.isPending ? 'Skipping…' : "Skip today's pickup"}
+          </Button>
+          <span className="text-center text-[12px] text-muted">{status?.eligible ? caption : (status?.reason ?? caption)}</span>
+        </>
+      )
+    }
   }
 
-  const status = data !== undefined && data.splitShift === false ? data : null
-  const eligible = !skipToday && (status?.eligible ?? false)
   return (
-    <Button
-      variant="outline"
-      disabled={!eligible || skip.isPending || statusQuery.isLoading}
-      className="h-11 gap-2 text-body-md"
-      onClick={() => skip.mutate(undefined)}
-    >
-      <span className="material-symbols-outlined !text-[20px]">event_busy</span>
-      {skip.isPending
-        ? 'Reporting…'
-        : skipToday || status?.alreadySkipped
-          ? 'Absence Reported for Today'
-          : eligible
-            ? 'Report Absence'
-            : (status?.reason ?? 'Report Absence Unavailable')}
-    </Button>
+    <>
+      <ThumbBar>
+        {error && (
+          <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">
+            {error}
+          </p>
+        )}
+        {content}
+      </ThumbBar>
+      {pending && (
+        <ConfirmCard
+          title={pending === 'whole_day' ? `Skip ${name}'s rides today?` : `Skip ${name}'s pickup today?`}
+          body={
+            pending === 'whole_day'
+              ? 'Both the morning pickup and the afternoon drop-off are cancelled for today. The driver and school are told.'
+              : `The driver won't stop for ${name} this morning. The driver and school are told.${hasAfternoon ? ' Afternoon drop-off stays as usual.' : ''}`
+          }
+          cancelLabel="Keep pickup"
+          confirmLabel={pending === 'whole_day' ? 'Skip whole day' : 'Skip pickup'}
+          busy={skip.isPending}
+          onCancel={() => setPending(null)}
+          onConfirm={() => {
+            skip.mutate(pending === 'single' ? undefined : pending)
+            setPending(null)
+          }}
+        />
+      )}
+    </>
   )
 }
