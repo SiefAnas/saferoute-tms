@@ -44,6 +44,7 @@ today's run for that shift (starts later, or the other shift) → `409`.
 | `GET /schools`, `GET /schools/me` | list / 403 | 403 / own | 403 / own | 403 | 403 |
 | `GET /assignments`, `GET /assignments/:id` | company | 403 | 403 | own, not ended | 403 |
 | `GET /schedule/today`, `POST /schedule/:id/no-show` | 403 | 403 | 403 | own, today | 403 |
+| `GET /schedule/week?start=` | 403 | 403 | 403 | own, not-ended assignments | 403 |
 | `GET /sessions`, `POST /sessions/checkin…` | read company | 403 | 403 | own | 403 |
 | `GET /trips`, `GET /trips/:id` | company | school | granted | trips on own shifts | 403 |
 | `POST /trips` | 403 | 403 | 403 | own students on today's run | 403 |
@@ -240,6 +241,31 @@ All of the driver's trips (not only today; filter by local date of `created_at`)
 ```
 `status`: `pending | complete`. `GET /trips/:id` for one.
 
+### `GET /schedule/week?start=YYYY-MM-DD` (driver only, V2 backend)
+Seven calendar days starting at `start` (any day, not only Mondays). Each day has the driver's
+morning and afternoon runs; every item has **the same shape as `/schedule/today`**, with that
+day's override, parent skips and no-shows. A `both` assignment is on both runs.
+```json
+{ "start": "2026-09-21", "end": "2026-09-27",
+  "days": [
+    { "date": "2026-09-21",
+      "morning":   [ { "assignment_id": "…", "shift_period": "both", "pickup_time": "07:10:00", "dropoff_time": "15:20:00",
+                       "student": { "id": "…", "name": "Maya Robinson", "grade": "3", "parent_name": "…", "parent_phone": "…" },
+                       "school": { "id": "…", "name": "Lincoln Elementary" },
+                       "override": null,
+                       "parent_skipped": { "morning": false, "afternoon": false },
+                       "no_show_reported": { "morning": false, "afternoon": false } } ],
+      "afternoon": [ … ] },
+    … 7 days, every day present (empty lists when nothing is scheduled) ]
+}
+```
+- An assignment is on a day when `start_date <= day <= end_date` (end day included). There is no
+  weekday pattern yet, so weekends appear if the assignment covers them (same as `/schedule/today`).
+- Same driver scope as everything else: only the driver's own assignments that have **not ended
+  as of today**. A past week doesn't show ended assignments.
+- `date`, `start`, `end` are calendar strings: use them as they are, never through `new Date()`.
+- Errors: `400` missing or invalid `start` (must be a real `YYYY-MM-DD` date), `403` not a driver.
+
 ### `POST /schedule/:assignmentId/no-show` (driver only)
 "Arrived, nobody came out." Body `{ "shift_period": "morning" }`. `200 {"reported": true}`.
 Notifies the school and company admins. Errors: `409 "check in for that shift before reporting a no-show"`,
@@ -409,8 +435,7 @@ All scoped to the caller's own company or school; another tenant's ids return 40
   spins services down. Show a loading state rather than failing fast.
 
 ## 7. What the mobile app must NOT do
-- Don't call endpoints that don't exist yet (all V2, see `V2_ROADMAP.md`): no `/schedule/week`,
-  no live location / ETA / map endpoints, no payment history, no password reset, no push
+- Don't call endpoints that don't exist yet (all V2, see `V2_ROADMAP.md`): no live location / ETA / map endpoints, no payment history, no password reset, no push
   registration, no `PATCH /me` self-edit. Show "Coming soon" for those, like the web app.
 - Don't compute "today" from UTC, and don't decide skip eligibility, "already worked this shift"
   or no-show rules client-side: call the endpoint and show its answer/error.

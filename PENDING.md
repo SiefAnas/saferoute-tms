@@ -9,6 +9,9 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 - **Review + merge `access-scope`** (email failures never fail a request; every role sees only
   its own students, drivers narrowed to their own not-ended assignments). Then deploy and check
   `/health`. Report: `ACCESS_SCOPE_REPORT.md`.
+- **Review `v2-week-schedule`** (made from `access-scope`): backend `GET /schedule/week?start=`
+  for drivers, suite 19. Merge after `access-scope`. Web + mobile Week tabs still Coming soon.
+  Note: `MOBILE_BACKEND_NEEDS.md` (mobile branch) wrote `?from=`; the endpoint uses `?start=`.
 - **Render SMTP vars (Resend)**: `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/
   `MAIL_FROM` on the API service. Steps in `NEXT_STEPS.md` §1. Still unverified end to end.
 - **`DATABASE_URL` sslmode**: `require` → `verify-full` on Render, on its own deploy, revert if
