@@ -20,22 +20,29 @@ const { driverScope } = require('../middleware/authorize');
 // without a second round-trip. Each flag is a per-shift object rather than one flat boolean
 // now, since an assignment covering shift_period='both' can have independent morning and
 // afternoon outcomes.
-async function getTodaySchedule(req) {
-  const { rows } = await pool.query(
-    `SELECT a.id AS assignment_id, a.shift_period, a.pickup_time, a.dropoff_time,
+//
+// The item columns are shared with getWeekSchedule: `day` is the SQL date expression the item
+// is for (CURRENT_DATE here, each generated day of the week there).
+function scheduleItemColumns(day) {
+  return `a.id AS assignment_id, a.shift_period, a.pickup_time, a.dropoff_time,
             st.id AS student_id, st.full_name AS student_name, st.grade,
             st.parent_name, st.parent_phone,
             sc.id AS school_id, sc.name AS school_name,
             o.id AS override_id, o.pickup_time AS override_pickup_time,
             o.dropoff_time AS override_dropoff_time, o.skip AS override_skip, o.note AS override_note,
             EXISTS(SELECT 1 FROM pickup_skips ps WHERE ps.student_id = a.student_id
-                     AND ps.skip_date = CURRENT_DATE AND ps.shift_period = 'morning') AS parent_skipped_morning,
+                     AND ps.skip_date = ${day} AND ps.shift_period = 'morning') AS parent_skipped_morning,
             EXISTS(SELECT 1 FROM pickup_skips ps WHERE ps.student_id = a.student_id
-                     AND ps.skip_date = CURRENT_DATE AND ps.shift_period = 'afternoon') AS parent_skipped_afternoon,
+                     AND ps.skip_date = ${day} AND ps.shift_period = 'afternoon') AS parent_skipped_afternoon,
             EXISTS(SELECT 1 FROM pickup_no_shows pns WHERE pns.student_id = a.student_id
-                     AND pns.no_show_date = CURRENT_DATE AND pns.shift_period = 'morning') AS no_show_morning,
+                     AND pns.no_show_date = ${day} AND pns.shift_period = 'morning') AS no_show_morning,
             EXISTS(SELECT 1 FROM pickup_no_shows pns WHERE pns.student_id = a.student_id
-                     AND pns.no_show_date = CURRENT_DATE AND pns.shift_period = 'afternoon') AS no_show_afternoon
+                     AND pns.no_show_date = ${day} AND pns.shift_period = 'afternoon') AS no_show_afternoon`;
+}
+
+async function getTodaySchedule(req) {
+  const { rows } = await pool.query(
+    `SELECT ${scheduleItemColumns('CURRENT_DATE')}
        FROM assignments a
        JOIN students st ON st.id = a.student_id
        JOIN schools sc ON sc.id = st.school_id
@@ -48,7 +55,11 @@ async function getTodaySchedule(req) {
       ORDER BY st.full_name`,
     [req.auth.userId, req.auth.tenantId]
   );
-  return rows.map((r) => ({
+  return rows.map(toScheduleItem);
+}
+
+function toScheduleItem(r) {
+  return {
     assignment_id: r.assignment_id,
     shift_period: r.shift_period,
     pickup_time: r.pickup_time,
@@ -60,7 +71,62 @@ async function getTodaySchedule(req) {
       : null,
     parent_skipped: { morning: r.parent_skipped_morning, afternoon: r.parent_skipped_afternoon },
     no_show_reported: { morning: r.no_show_morning, afternoon: r.no_show_afternoon },
-  }));
+  };
+}
+
+// A strict calendar date string, checked with plain arithmetic (no Date object, so no
+// timezone can shift it): YYYY-MM-DD with a real month and day, leap years included.
+function assertCalendarDate(value, field) {
+  const m = typeof value === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
+  const [y, mo, d] = m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [0, 0, 0];
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const daysIn = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1];
+  if (!m || y < 1900 || !daysIn || d < 1 || d > daysIn) {
+    throw new HttpError(400, `${field} must be a date in YYYY-MM-DD format`);
+  }
+}
+
+// A driver's week (V2, GET /schedule/week?start=YYYY-MM-DD): 7 calendar days from `start`.
+// Each day lists the driver's morning and afternoon runs, built exactly like /schedule/today
+// (same item shape, that day's override, parent skips and no-shows). An assignment is on a day
+// when start_date <= day <= end_date (there is no weekday pattern yet, see V2_ROADMAP
+// "Recurring weekly schedule"); a 'both' assignment is on both runs. Same driver scope as
+// everything else: only the driver's own assignments that have not ended as of today, so a past
+// week never brings back an ended assignment's students. Days are generated in SQL and returned
+// as ::text, never through a JS Date.
+async function getWeekSchedule(req, start) {
+  assertCalendarDate(start, 'start');
+  const { rows: dayRows } = await pool.query(
+    `SELECT g::date::text AS date FROM generate_series($1::date, $1::date + 6, interval '1 day') AS g ORDER BY g`,
+    [start]
+  );
+  const { rows } = await pool.query(
+    `SELECT d.day::text AS date, ${scheduleItemColumns('d.day')}
+       FROM (SELECT g::date AS day FROM generate_series($3::date, $3::date + 6, interval '1 day') AS g) d
+       JOIN assignments a
+         ON a.driver_user_id = $1
+        AND a.company_id = $2
+        AND a.start_date <= d.day
+        AND (a.end_date IS NULL OR a.end_date >= d.day)
+        AND ${assignmentNotEndedSql('a')}
+       JOIN students st ON st.id = a.student_id
+       JOIN schools sc ON sc.id = st.school_id
+       LEFT JOIN assignment_schedule_overrides o
+              ON o.assignment_id = a.id AND o.override_date = d.day
+      ORDER BY d.day, st.full_name`,
+    [req.auth.userId, req.auth.tenantId, start]
+  );
+
+  // Every day appears, with empty runs when the driver has nothing that day.
+  const days = dayRows.map((r) => ({ date: r.date, morning: [], afternoon: [] }));
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  for (const r of rows) {
+    const item = toScheduleItem(r);
+    const day = byDate.get(r.date);
+    if (r.shift_period !== 'afternoon') day.morning.push(item);
+    if (r.shift_period !== 'morning') day.afternoon.push(item);
+  }
+  return { start: days[0].date, end: days[6].date, days };
 }
 
 // Driver-reported no-show (task: "when they arrive and no one shows up they can hit the
@@ -175,4 +241,4 @@ async function deleteOverride(req, assignmentId, overrideId) {
   return row;
 }
 
-module.exports = { getTodaySchedule, upsertOverride, listOverrides, deleteOverride, markNoShow, findTodaysAssignment };
+module.exports = { getTodaySchedule, getWeekSchedule, upsertOverride, listOverrides, deleteOverride, markNoShow, findTodaysAssignment };
