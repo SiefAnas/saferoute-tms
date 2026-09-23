@@ -5,6 +5,12 @@ Single source of truth for scope/architecture: `TMS_PROJECT_SPEC_1.md` (v2).
 
 > Fresh rewrite of an earlier native-Android prototype, rebuilt as a multi-tenant web SaaS.
 
+## Key docs
+- `PENDING.md`: what's left to do right now.
+- `V2_ROADMAP.md`: features that are **not** in the MVP (shown as "Coming soon" in the app) and what each needs.
+- `API_CONTRACT.md`: the REST API as the code implements it, for the mobile app.
+- `BACKLOG.md`: detailed history of decisions and deferred items.
+
 ## Repo layout
 
 ```
