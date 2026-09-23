@@ -44,7 +44,7 @@ async function attachTransportInfo(req, students) {
   if (req.auth.tenantType !== 'school' || students.length === 0) return students;
   const { rows } = await pool.query(
     `SELECT a.student_id, a.shift_period,
-            v.license_plate, v.brand, v.model, v.year, v.color,
+            v.license_plate, v.brand, v.model, v.year, v.color, v.number AS van_number,
             u.full_name AS driver_name, u.phone AS driver_phone,
             c.name AS company_name
        FROM assignments a
@@ -63,7 +63,7 @@ async function attachTransportInfo(req, students) {
     byStudent.get(r.student_id).push({
       shift_period: r.shift_period,
       company_name: r.company_name,
-      van: { license_plate: r.license_plate, brand: r.brand, model: r.model, year: r.year, color: r.color },
+      van: { number: r.van_number, license_plate: r.license_plate, brand: r.brand, model: r.model, year: r.year, color: r.color },
       driver: { full_name: r.driver_name, phone: r.driver_phone },
     });
   }

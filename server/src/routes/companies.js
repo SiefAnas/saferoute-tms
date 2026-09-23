@@ -6,7 +6,7 @@ const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
-const { assertValidZip, assertValidState, assertMaxLength } = require('../validate');
+const { assertValidZip, assertValidState, assertMaxLength, assertValidEmail } = require('../validate');
 const { HttpError } = require('../errors');
 
 const router = express.Router();
@@ -25,15 +25,22 @@ router.get('/me', async (req, res, next) => {
 router.patch('/me', async (req, res, next) => {
   try {
     const patch = {};
-    for (const k of ['name', 'address', 'zip_code', 'state', 'phone']) {
+    for (const k of ['name', 'address', 'zip_code', 'state', 'phone', 'email', 'city']) {
       if (req.body?.[k] !== undefined) patch[k] = req.body[k];
     }
+    // email / city are optional: blank clears them.
+    for (const k of ['email', 'city']) {
+      if (typeof patch[k] === 'string') patch[k] = patch[k].trim() || null;
+    }
+    if (patch.email) assertValidEmail(patch.email, 'email');
     if (!Object.keys(patch).length) throw new HttpError(400, 'nothing to update');
     if (patch.zip_code) assertValidZip(patch.zip_code, 'zip_code');
     if (patch.state) patch.state = assertValidState(patch.state, 'state');
     assertMaxLength(patch.name, 200, 'name');
     assertMaxLength(patch.address, 500, 'address');
     assertMaxLength(patch.phone, 30, 'phone');
+    assertMaxLength(patch.email, 254, 'email');
+    assertMaxLength(patch.city, 100, 'city');
     const row = await req.db.update('companies', req.auth.tenantId, patch);
     if (!row) throw new HttpError(404, 'company not found');
     res.json(row);

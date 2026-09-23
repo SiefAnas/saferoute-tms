@@ -28,6 +28,25 @@ function assertValidYear(year) {
   }
 }
 
+// Optional fleet number ("04" -> shown as "Van 04"). Blank means "no number". Unique per company
+// (DB constraint vans_company_number_unique), mapped to a readable 409 below.
+function normalizeNumber(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string' && typeof value !== 'number') throw new HttpError(400, 'number must be text');
+  const v = String(value).trim();
+  if (!v) return null;
+  if (v.length > 10) throw new HttpError(400, 'number must be 10 characters or fewer');
+  return v;
+}
+
+function mapVanError(e) {
+  if (e.code === '23505' && String(e.constraint || '').includes('vans_company_number_unique')) {
+    return new HttpError(409, 'another van in your company already has this number');
+  }
+  return e;
+}
+
 router.post('/', companyAdmin, async (req, res, next) => {
   try {
     const { license_plate, brand, model, year, color } = req.body || {};
@@ -35,9 +54,10 @@ router.post('/', companyAdmin, async (req, res, next) => {
       throw new HttpError(400, 'license_plate, brand, model, year and color are all required');
     }
     assertValidYear(year);
-    const row = await req.db.insert('vans', { license_plate, brand, model, year, color });
+    const number = normalizeNumber(req.body?.number);
+    const row = await req.db.insert('vans', { license_plate, brand, model, year, color, ...(number ? { number } : {}) });
     res.status(201).json(row);
-  } catch (e) { next(e); }
+  } catch (e) { next(mapVanError(e)); }
 });
 
 router.get('/', async (req, res, next) => {
@@ -58,12 +78,13 @@ router.patch('/:id', companyAdmin, async (req, res, next) => {
     for (const k of ['license_plate', 'brand', 'model', 'year', 'color']) {
       if (req.body?.[k] !== undefined) patch[k] = req.body[k];
     }
+    if (req.body?.number !== undefined) patch.number = normalizeNumber(req.body.number);
     if (!Object.keys(patch).length) throw new HttpError(400, 'nothing to update');
     if (patch.year !== undefined) assertValidYear(patch.year);
     const row = await req.db.update('vans', req.params.id, patch);
     if (!row) throw new HttpError(404, 'van not found');
     res.json(row);
-  } catch (e) { next(e); }
+  } catch (e) { next(mapVanError(e)); }
 });
 
 router.delete('/:id', companyAdmin, async (req, res, next) => {
