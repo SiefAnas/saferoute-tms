@@ -44,6 +44,12 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     // No JSON body (e.g. 204 No Content) — leave body as null.
   }
 
+  // The account is on a temporary password (e.g. an admin just reset it): AuthProvider flags the
+  // session so ProtectedRoute sends the user to /set-password.
+  if (res.status === 403 && (body as { code?: string } | null)?.code === 'PASSWORD_CHANGE_REQUIRED') {
+    window.dispatchEvent(new Event('saferoute:password-change-required'))
+  }
+
   if (!res.ok) {
     const message = (body as { error?: string } | null)?.error ?? res.statusText
     throw new ApiError(res.status, message)

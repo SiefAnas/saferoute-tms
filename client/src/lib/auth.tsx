@@ -9,6 +9,9 @@ interface AuthContextValue {
   user: AuthUser | null
   token: string | null
   login: (email: string, password: string) => Promise<AuthUser>
+  // Replace the session with a fresh token + user (after changing the password, the server
+  // signs out older tokens and returns a new one).
+  setSession: (res: LoginResponse) => void
   logout: () => void
 }
 
@@ -58,16 +61,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorage)
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await api.post<LoginResponse>('/auth/login', { email, password })
+  const setSession = useCallback((res: LoginResponse) => {
     localStorage.setItem(TOKEN_KEY, res.token)
     localStorage.setItem(USER_KEY, JSON.stringify(res.user))
     setToken(res.token)
     setUser(res.user)
-    return res.user
   }, [])
 
-  return <AuthContext.Provider value={{ user, token, login, logout }}>{children}</AuthContext.Provider>
+  const login = useCallback(async (email: string, password: string) => {
+    const res = await api.post<LoginResponse>('/auth/login', { email, password })
+    setSession(res)
+    return res.user
+  }, [setSession])
+
+  // The server says this session must set a new password first (lib/api.ts).
+  useEffect(() => {
+    function flag() {
+      setUser((u) => {
+        if (!u || u.must_change_password) return u
+        const next = { ...u, must_change_password: true }
+        localStorage.setItem(USER_KEY, JSON.stringify(next))
+        return next
+      })
+    }
+    window.addEventListener('saferoute:password-change-required', flag)
+    return () => window.removeEventListener('saferoute:password-change-required', flag)
+  }, [])
+
+  return <AuthContext.Provider value={{ user, token, login, setSession, logout }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

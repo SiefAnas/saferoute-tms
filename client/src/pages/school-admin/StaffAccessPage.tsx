@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { Button } from '../../components/Button'
 import { Field, Input } from '../../components/Input'
-import { PasswordField } from '../../components/PasswordField'
+import { TemporaryPasswordDialog } from '../../components/TemporaryPasswordDialog'
 import { Modal } from '../../components/Modal'
 import { ContactLink } from '../../components/ContactLink'
 import { EditAccountModal } from '../../components/EditAccountModal'
@@ -13,7 +13,7 @@ import { StatusBadge } from '../../components/StatusBadge'
 import { NameCell, NoMatches, PageIntro, SearchField, StatCard, StatRow, TableCard, TableRow, matches } from '../../components/Records'
 import { useToast } from '../../components/Toast'
 import { PageTopBar } from '../../layouts/TopBar'
-import type { PublicUser, School, Student, StaffAccessGrant } from '../../types/api'
+import type { CreatedUser, PublicUser, School, Student, StaffAccessGrant } from '../../types/api'
 
 const TEMPLATE = '1.8fr 1.2fr 1.8fr 1fr'
 
@@ -36,18 +36,18 @@ export function StaffAccessPage() {
   // ---- Add staff ----
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [created, setCreated] = useState<CreatedUser | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const createStaff = useMutation({
-    mutationFn: () => api.post<PublicUser>('/users', { role: 'school_staff', fullName, email, password }),
+    // No password: the server makes a temporary one (shown once) that the staff member replaces.
+    mutationFn: () => api.post<CreatedUser>('/users', { role: 'school_staff', fullName, email }),
     onSuccess: (staff) => {
       queryClient.invalidateQueries({ queryKey: ['users', 'school_staff'] })
       setFullName('')
       setEmail('')
-      setPassword('')
       setShowAddModal(false)
-      toast.show(`${staff.full_name} added. Choose which students they can see.`)
+      setCreated(staff)
       setDetailId(staff.id) // straight into their access checklist
     },
     onError: (err) => setCreateError(err instanceof ApiError ? err.message : 'Could not create staff account.'),
@@ -177,7 +177,9 @@ export function StaffAccessPage() {
             <Field label="Email (used to log in)">
               <Input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
-            <PasswordField label="Password" required value={password} onChange={setPassword} />
+            <p className="text-[13px] text-muted">
+              SafeRoute makes a temporary password for you to give them. They choose their own the first time they sign in.
+            </p>
             {createError && (
               <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">
                 {createError}
@@ -196,6 +198,9 @@ export function StaffAccessPage() {
       )}
 
       {editUser && <EditAccountModal user={editUser} invalidateKey={['users', 'school_staff']} onClose={() => setEditUser(null)} />}
+      {created && (
+        <TemporaryPasswordDialog name={created.full_name} email={created.email} password={created.temporary_password} onClose={() => setCreated(null)} />
+      )}
       {toast.node}
     </div>
   )

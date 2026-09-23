@@ -5,53 +5,7 @@ import { ROLE_HOME } from '../../lib/roleHome'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
 import { ApiError } from '../../lib/api'
-
-// "I forgot my password" self-report, shown only for the 3 roles that can't self-serve a
-// reset (task: driver/parent/school_staff — company_admin/school_admin aren't offered this).
-// No real reset flow exists — this is deliberately just a static contact message.
-const FORGOT_PASSWORD_ROLES = [
-  { key: 'driver', label: 'Driver', message: 'Please contact your company administrator to reset your password.' },
-  { key: 'parent', label: 'Parent', message: 'Please contact your company administrator to reset your password.' },
-  { key: 'school_staff', label: 'School staff', message: 'Please contact your school administrator to reset your password.' },
-] as const
-
-// ASSUMPTION (flagged for confirmation): this is one shared login page for all 4 roles
-// (§5.1) — the app deliberately does not know which role a visitor is until AFTER they
-// authenticate, so "forgot password, shown only for driver/parent/staff" can't be
-// conditioned on the visitor's real role pre-login. Resolved by asking them to self-report
-// which of those 3 they are, then showing that role's static message — no real identity
-// check needed since no real reset action happens either way.
-function ForgotPasswordPanel({ onClose }: { onClose: () => void }) {
-  const [picked, setPicked] = useState<(typeof FORGOT_PASSWORD_ROLES)[number] | null>(null)
-  return (
-    <div className="flex w-full flex-col gap-3 rounded-lg border border-outline-variant bg-surface-container-low p-4">
-      {!picked ? (
-        <>
-          <p className="text-body-md text-on-surface-variant">I am a…</p>
-          <div className="flex flex-wrap gap-2">
-            {FORGOT_PASSWORD_ROLES.map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                onClick={() => setPicked(r)}
-                className="rounded-full border border-outline px-4 py-1.5 text-label-md text-on-surface hover:bg-surface-container"
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </>
-      ) : (
-        <p role="status" className="text-body-md text-on-surface">
-          {picked.message}
-        </p>
-      )}
-      <button type="button" onClick={onClose} className="self-start text-label-md text-secondary hover:underline">
-        Close
-      </button>
-    </div>
-  )
-}
+import { AuthScreen } from './AuthScreen'
 
 // One shared login page for all 4 roles (§5.1) — role determines the post-login
 // destination, not which page/URL the user starts at. Visual design ported from the
@@ -64,7 +18,6 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [showForgot, setShowForgot] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -72,7 +25,8 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       const user = await login(email, password)
-      navigate(ROLE_HOME[user.role], { replace: true })
+      // On a temporary password (new or reset account): choose their own first.
+      navigate(user.must_change_password ? '/set-password' : ROLE_HOME[user.role], { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
     } finally {
@@ -81,99 +35,79 @@ export function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-sidebar p-4">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-20">
-        <div className="absolute top-[-10%] left-[-10%] h-[40%] w-[40%] rounded-full bg-primary-container blur-[120px]" />
-        <div className="absolute right-[-10%] bottom-[-10%] h-[30%] w-[30%] rounded-full bg-secondary-container blur-[100px]" />
-      </div>
-
-      <div className="relative z-10 flex w-full max-w-[440px] flex-col items-center gap-8 rounded-xl bg-surface p-8 shadow-drawer">
-        <div className="flex flex-col items-center gap-2">
-          <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-lg bg-primary-container">
-            <span className="material-symbols-outlined !text-[40px] text-on-primary-container">route</span>
-          </div>
-          <h1 className="text-headline-md tracking-tight text-primary">SafeRoute Logistics</h1>
-          <p className="text-label-md text-muted">Sign in to your account</p>
+    <AuthScreen title="SafeRoute Logistics" subtitle="Sign in to your account">
+      <form className="flex w-full flex-col gap-6" onSubmit={handleSubmit}>
+        <div className="flex flex-col gap-2">
+          <label className="px-1 text-[12px] font-semibold text-muted" htmlFor="email">
+            Email address
+          </label>
+          <Input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@saferoute.com"
+          />
         </div>
 
-        <form className="flex w-full flex-col gap-6" onSubmit={handleSubmit}>
-          <div className="flex flex-col gap-2">
-            <label className="px-1 text-[12px] font-semibold text-muted" htmlFor="email">
-              Email address
-            </label>
+        <div className="flex flex-col gap-2">
+          <label className="px-1 text-[12px] font-semibold text-muted" htmlFor="password">
+            Password
+          </label>
+          <div className="relative flex items-center">
             <Input
-              id="email"
-              type="email"
+              id="password"
+              type={showPassword ? 'text' : 'password'}
               required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@saferoute.com"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="pr-12"
             />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="px-1 text-[12px] font-semibold text-muted" htmlFor="password">
-              Password
-            </label>
-            <div className="relative flex items-center">
-              <Input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="pr-12"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute right-4 text-outline hover:text-secondary"
-              >
-                <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
-              </button>
-            </div>
-          </div>
-
-          {error && (
-            <p role="alert" className="rounded-lg bg-error-container px-4 py-2 text-body-md text-on-error-container">
-              {error}
-            </p>
-          )}
-
-          <div className="flex justify-end">
             <button
               type="button"
-              onClick={() => setShowForgot((v) => !v)}
-              className="text-label-md text-secondary hover:underline"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              className="absolute right-4 text-outline hover:text-secondary"
             >
-              Forgot password?
+              <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
             </button>
           </div>
-          {showForgot && <ForgotPasswordPanel onClose={() => setShowForgot(false)} />}
+        </div>
 
-          <Button type="submit" size="lg" disabled={submitting} className="w-full">
-            {submitting ? (
-              <>
-                <span className="material-symbols-outlined animate-spin">progress_activity</span>
-                Signing in...
-              </>
-            ) : (
-              <>
-                Sign in
-                <span className="material-symbols-outlined">arrow_forward</span>
-              </>
-            )}
-          </Button>
-        </form>
+        {error && (
+          <p role="alert" className="rounded-lg bg-error-container px-4 py-2 text-body-md text-on-error-container">
+            {error}
+          </p>
+        )}
 
-        <Link to="/register" className="text-label-md text-primary hover:underline">
-          New here? Register your company or school
-        </Link>
-      </div>
-    </main>
+        <div className="flex justify-end">
+          <Link to="/forgot-password" className="text-label-md text-secondary hover:underline">
+            Forgot password?
+          </Link>
+        </div>
+
+        <Button type="submit" size="lg" disabled={submitting} className="w-full">
+          {submitting ? (
+            <>
+              <span className="material-symbols-outlined animate-spin">progress_activity</span>
+              Signing in...
+            </>
+          ) : (
+            <>
+              Sign in
+              <span className="material-symbols-outlined">arrow_forward</span>
+            </>
+          )}
+        </Button>
+      </form>
+
+      <Link to="/register" className="text-label-md text-primary hover:underline">
+        New here? Register your company or school
+      </Link>
+    </AuthScreen>
   )
 }
