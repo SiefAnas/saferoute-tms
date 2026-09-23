@@ -155,7 +155,7 @@ export function LoginPage() {
           </div>
           {showForgot && <ForgotPasswordPanel onClose={() => setShowForgot(false)} />}
 
-          <Button type="submit" disabled={submitting} className="w-full">
+          <Button type="submit" size="lg" disabled={submitting} className="w-full">
             {submitting ? (
               <>
                 <span className="material-symbols-outlined animate-spin">progress_activity</span>

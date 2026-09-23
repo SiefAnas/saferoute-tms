@@ -211,7 +211,7 @@ export function DriverDashboard() {
             disabled={checkOut.isPending}
             onClick={() => checkOut.mutate(currentSession.id)}
           >
-            {checkOut.isPending ? 'PLEASE WAIT…' : 'CHECK OUT'}
+            {checkOut.isPending ? 'Please wait…' : 'Check out'}
           </Button>
         </Card>
       )}
@@ -522,13 +522,16 @@ function ShiftCard({
           <StatusBadge tone="neutral" label={ended ? 'Shift Ended' : 'Checked Out'} />
         )}
       </div>
+      {/* The one primary action of a driver's whole day — the only button in the app that
+          keeps the large treatment (size="lg"), everything else was normalized down tonight. */}
       <Button
-        className="h-16 w-full"
+        size="lg"
+        className="w-full"
         onClick={() => (session ? onCheckOut(session.id) : onCheckIn())}
         disabled={pending || (ended && !session)}
       >
         <span className="material-symbols-outlined text-[24px]">{session ? 'logout' : 'login'}</span>
-        <span className="text-title-lg font-bold">{pending ? 'PLEASE WAIT…' : session ? 'CHECK OUT' : ended ? 'SHIFT ENDED' : 'CHECK IN'}</span>
+        <span>{pending ? 'Please wait…' : session ? 'Check out' : ended ? 'Shift ended' : 'Check in'}</span>
       </Button>
       {session && <span className="text-body-md text-on-surface-variant">{formatDuration(elapsedMinutes)} so far</span>}
     </Card>

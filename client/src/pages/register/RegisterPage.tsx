@@ -347,7 +347,7 @@ export function RegisterPage() {
             </p>
           )}
 
-          <Button type="submit" disabled={submit.isPending} className="w-full">
+          <Button type="submit" size="lg" disabled={submit.isPending} className="w-full">
             {submit.isPending ? STAGE_LABEL[stage] : claiming ? 'Claim & Register' : 'Create Account'}
           </Button>
           {submit.isPending && showColdStartHint && (
