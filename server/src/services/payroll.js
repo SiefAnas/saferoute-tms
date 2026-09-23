@@ -50,7 +50,7 @@ async function addAdjustment(req, body = {}) {
 // over a date range from before this shipped doesn't retroactively change old pay.
 async function dailyRatePayCents(req, driverId, rule, sessionsClause, sessionsRange) {
   const { rows: sessions } = await pool.query(
-    `SELECT id, shift_period, (check_in_at AT TIME ZONE 'UTC')::date::text AS work_date
+    `SELECT id, shift_period, check_in_at::date::text AS work_date
        FROM sessions WHERE ${sessionsClause}`,
     sessionsRange
   );
@@ -134,7 +134,7 @@ async function summary(req, driverId, { from, to } = {}) {
 
   const shifts = (await pool.query(
     `SELECT COALESCE(SUM(duration_minutes),0)::int AS minutes,
-            COUNT(DISTINCT (check_in_at AT TIME ZONE 'UTC')::date)::int AS days
+            COUNT(DISTINCT check_in_at::date)::int AS days
        FROM sessions WHERE ${clause}`,
     range
   )).rows[0];

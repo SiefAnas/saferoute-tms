@@ -52,7 +52,7 @@ async function checkIn(req, body = {}) {
     const { rows: already } = await client.query(
       `SELECT 1 FROM sessions
         WHERE user_id = $1 AND company_id = $2 AND shift_period = $3
-          AND (check_in_at AT TIME ZONE 'UTC')::date = (now() AT TIME ZONE 'UTC')::date
+          AND check_in_at::date = CURRENT_DATE
         LIMIT 1`,
       [userId, tenantId, shift_period]
     );

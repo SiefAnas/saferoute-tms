@@ -179,7 +179,7 @@ async function main() {
       console.log('\n--- Skip Today\'s Pickup (real logic + real notification) ---');
       const soon = (await pool.query("SELECT to_char(now() + interval '65 minutes', 'HH24:MI') AS t")).rows[0].t;
       const nowHm = (await pool.query("SELECT to_char(now(), 'HH24:MI') AS t")).rows[0].t;
-      const today = (await pool.query('SELECT CURRENT_DATE AS d')).rows[0].d.toISOString().slice(0, 10);
+      const today = (await pool.query('SELECT CURRENT_DATE::text AS d')).rows[0].d;
 
       await api('POST', '/assignments', tA1, {
         student_id: stuEligible.id, driver_user_id: driverXId, van_id: vanA.id, start_date: today, pickup_time: soon,

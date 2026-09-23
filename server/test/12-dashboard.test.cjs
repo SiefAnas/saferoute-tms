@@ -94,8 +94,10 @@ async function main() {
       eq('driver GET /dashboard/absent-today -> 403 (company_admin only)', (await api('GET', '/dashboard/absent-today', driverToken)).status, 403);
 
       console.log('\n--- Company payroll summary ---');
-      const today = (await pool.query('SELECT CURRENT_DATE AS d')).rows[0].d.toISOString().slice(0, 10);
-      const tomorrow = (await pool.query("SELECT (CURRENT_DATE + 1) AS d")).rows[0].d.toISOString().slice(0, 10);
+      // Starts at yesterday on purpose: the sessions above are "2-3 hours ago", which is
+      // yesterday if the suite runs just after midnight.
+      const today = (await pool.query("SELECT (CURRENT_DATE - 1)::text AS d")).rows[0].d;
+      const tomorrow = (await pool.query("SELECT (CURRENT_DATE + 1)::text AS d")).rows[0].d;
       const company = await api('GET', `/payroll/summary/company?from=${today}&to=${tomorrow}`, adminToken);
       // driver1: hourly $20 * 2h = $40.00; driver2: daily $150 * 1 day = $150.00 -> total $190.00, 300 minutes.
       (company.status === 200 && company.body.driver_count === 2 && company.body.total_minutes === 300 && company.body.total_pay_cents === 19000)

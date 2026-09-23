@@ -156,7 +156,7 @@ async function getStudentDetail(req, studentId) {
     `SELECT trip_type, status, driver_confirmed_at, staff_confirmed_at, completed_at, created_at
        FROM trips
       WHERE student_id = $1 AND company_id = $2
-        AND (created_at AT TIME ZONE 'UTC')::date = CURRENT_DATE
+        AND created_at::date = CURRENT_DATE
       ORDER BY created_at ASC`,
     [studentId, req.auth.tenantId]
   );

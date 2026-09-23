@@ -21,8 +21,10 @@ async function getAbsentToday(req) {
 }
 
 async function getAbsentTodayForCompany(req) {
-  const { rows: dateRows } = await pool.query('SELECT CURRENT_DATE AS d');
-  const today = dateRows[0].d.toISOString().slice(0, 10);
+  // ::text on purpose: pg parses DATE into a JS Date at local midnight, and toISOString() on
+  // that shifts to the previous day on any server running east of UTC (e.g. Egypt, UTC+2/+3).
+  const { rows: dateRows } = await pool.query('SELECT CURRENT_DATE::text AS d');
+  const today = dateRows[0].d;
 
   const [skips, noShows, students] = await Promise.all([
     req.db.findMany('pickup_skips', { where: { skip_date: today } }),

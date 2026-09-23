@@ -255,7 +255,7 @@ async function main() {
       eq('company_admin GET /schedule/today -> 403 (driver only)', (await api('GET', '/schedule/today', adminA)).status, 403);
 
       console.log('\n--- Overrides: upsert / list / resolve in schedule / delete ---');
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = (await pool.query('SELECT CURRENT_DATE::text AS d')).rows[0].d; // DB's today, not UTC
       const ov = await api('POST', `/assignments/${asg2.body.id}/overrides`, adminA, { override_date: todayStr, pickup_time: '09:00' });
       eq('company_admin creates an override for today -> 201', ov.status, 201);
       const todayWithOverride = await api('GET', '/schedule/today', driverA);

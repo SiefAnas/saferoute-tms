@@ -30,7 +30,12 @@ function readScope(req) {
 }
 
 async function listScheduleChangesToday(req) {
-  return req.db.findMany('schedule_changes', { ...readScope(req), where: { change_date: new Date().toISOString().slice(0, 10) }, orderBy: 'created_at' });
+  // "Today" must come from Postgres (same CURRENT_DATE that change_date defaults to on insert),
+  // not from JS. new Date().toISOString() is always UTC, so it was one day ahead of the DB for
+  // ~4 hours every evening in US timezones and this list came back empty. ::text keeps pg from
+  // turning the DATE into a JS Date (which would bring the same UTC shift back).
+  const { rows } = await pool.query('SELECT CURRENT_DATE::text AS d');
+  return req.db.findMany('schedule_changes', { ...readScope(req), where: { change_date: rows[0].d }, orderBy: 'created_at' });
 }
 
 async function logScheduleChange(req, studentId, { change_type, note } = {}) {
