@@ -112,7 +112,13 @@ export function ActionError({ message }: { message: string }) {
 }
 
 // Turns a thrown error into the message for ActionError.
+// A 5xx carries no useful text ("internal server error"), and the server may have saved the
+// action before failing, so say that plainly instead of implying nothing happened.
+export const SERVER_ERROR_MESSAGE =
+  'SafeRoute had a problem finishing this. The screen has been refreshed: check whether it went through before trying again.'
+
 export function messageFor(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.status >= 500) return SERVER_ERROR_MESSAGE
   if (error instanceof ApiError) return error.message
   if (error instanceof NetworkError) return error.message
   return fallback

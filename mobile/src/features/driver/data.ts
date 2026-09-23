@@ -84,22 +84,26 @@ export function useStudentDetails(ids: string[]): Map<string, Student> {
   }, [results])
 }
 
-// The van the driver is on today: the van on their current active assignment. The design makes
-// the van number part of the header, so it is worth the two extra calls.
+// The van the driver is on today: the van on their current active assignment. Fetched by id
+// (GET /vans/:id) rather than listing every company van, so the driver app only ever asks for
+// the driver's own data. If the van can't be read the header just leaves it out.
 export function useMyVan(): { van: Van | null; isLoading: boolean } {
   const assignmentsQuery = useQuery({
     queryKey: ['assignments'],
     queryFn: () => api.get<Assignment[]>('/assignments'),
   })
-  const vansQuery = useQuery({ queryKey: ['vans'], queryFn: () => api.get<Van[]>('/vans') })
+  const vanId = useMemo(
+    () => [...currentAssignmentBy(assignmentsQuery.data ?? [], 'driver_user_id').values()][0]?.van_id ?? null,
+    [assignmentsQuery.data],
+  )
+  const vanQuery = useQuery({
+    queryKey: ['van', vanId],
+    queryFn: () => api.get<Van>(`/vans/${vanId}`),
+    enabled: vanId !== null,
+    staleTime: 5 * 60_000,
+  })
 
-  const van = useMemo(() => {
-    const mine = [...currentAssignmentBy(assignmentsQuery.data ?? [], 'driver_user_id').values()][0]
-    if (!mine) return null
-    return (vansQuery.data ?? []).find((v) => v.id === mine.van_id) ?? null
-  }, [assignmentsQuery.data, vansQuery.data])
-
-  return { van, isLoading: assignmentsQuery.isLoading || vansQuery.isLoading }
+  return { van: vanQuery.data ?? null, isLoading: assignmentsQuery.isLoading || (vanId !== null && vanQuery.isLoading) }
 }
 
 export function homeAddress(s: Student | undefined): { line1: string; line2: string } | null {

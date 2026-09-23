@@ -249,8 +249,10 @@ function SkipBarScreen({
         `/parent/students/${student.id}/skip-pickup`,
         shiftChoice ? { shift_choice: shiftChoice } : undefined,
       ),
-    onSuccess: () => {
-      setError(null)
+    // onSettled: the live API has saved a skip and then answered 500 (notification email
+    // failed, see MOBILE_BACKEND_NEEDS.md), so reload after any outcome to show the truth.
+    onSuccess: () => setError(null),
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['skip-status', student.id] })
       void queryClient.invalidateQueries({ queryKey: ['parent-student-detail', student.id] })
     },

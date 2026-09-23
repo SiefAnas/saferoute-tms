@@ -85,7 +85,9 @@ export default function TodayScreen() {
         ...(coords ? { check_in_lat: coords.lat, check_in_lng: coords.lng } : {}),
       })
     },
-    onSuccess: invalidateSessions,
+    // onSettled, not onSuccess: after ANY outcome (including a timeout or a 5xx where the
+    // server may have saved it anyway) reload, so the screen shows what really happened.
+    onSettled: invalidateSessions,
     onError: fail('Check-in failed.'),
   })
 
@@ -97,7 +99,7 @@ export default function TodayScreen() {
         coords ? { check_out_lat: coords.lat, check_out_lng: coords.lng } : {},
       )
     },
-    onSuccess: invalidateSessions,
+    onSettled: invalidateSessions,
     onError: fail('Check-out failed.'),
   })
 
@@ -108,7 +110,7 @@ export default function TodayScreen() {
         trip_type: tripTypeFor(vars.shiftPeriod),
         shift_period: vars.shiftPeriod,
       }),
-    onSuccess: () => {
+    onSettled: () => {
       // The trip lands 'pending' and the row shows "Awaiting school" until the school confirms
       // it (or the server auto-completes it after 5 minutes). The session's trip_count changes
       // too, hence both keys.
@@ -125,7 +127,9 @@ export default function TodayScreen() {
       api.post<{ reported: boolean }>(`/schedule/${vars.assignmentId}/no-show`, {
         shift_period: vars.shiftPeriod,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schedule-today'] }),
+    // Seen live: the API saved the no-show and then answered 500 (its notification email
+    // failed, see MOBILE_BACKEND_NEEDS.md). Reloading after any outcome shows the real state.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['schedule-today'] }),
     onError: fail('Could not report the no-show.'),
   })
 

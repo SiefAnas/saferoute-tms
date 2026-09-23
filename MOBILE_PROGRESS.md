@@ -29,17 +29,23 @@ end-to-end test on the live API, then polish, verify, and README.
   - Shared Coming soon dialog + row (`src/components/Dialogs.tsx`).
   - Tests: api client, localDate, roles, stops.
 - `e026d42` Bundle only the four Inter weights used; expo-doctor clean.
+- `65c516d` Progress log rewritten to match reality (session 2).
+- (next commit) E2E on the live API: 33/35 checks pass. The 2 failures are a server bug
+  (no-show and skip save, then answer 500; see `MOBILE_BACKEND_NEEDS.md`). App fixes:
+  - Every driver action and the parent skip now reload their data after ANY outcome
+    (`onSettled`), so a 500-after-save or a timeout still shows the real state.
+  - A 5xx now shows "had a problem… check whether it went through" instead of the server's
+    useless "internal server error".
+  - The driver header reads only its own van with `GET /vans/:id` (was: every company van).
 
 ## In progress
-- Step 2.1: end-to-end test on the live API with `Mobile Test ...` data.
+- Step 2.2: polish.
 
 ## Next steps (in order)
-1. E2E on the live API (driver: login, today, check in, pickup, check out; parent: login, child,
-   skip). Fix app bugs found.
-2. Polish: empty / loading / error + retry on every screen, touch targets, a11y labels,
+1. Polish: empty / loading / error + retry on every screen, touch targets, a11y labels,
    placeholder icon + splash.
-3. Verify: tsc, lint, jest, expo-doctor, `expo export` ios + android.
-4. `mobile/README.md` for Expo Go on Windows, EAS later, where to change name / bundle id / API URL.
+2. Verify: tsc, lint, jest, expo-doctor, `expo export` ios + android.
+3. `mobile/README.md` for Expo Go on Windows, EAS later, where to change name / bundle id / API URL.
 
 ## Decisions I made and why
 - **Expo SDK 57** (latest stable): Expo Go in the app stores tracks the latest SDK, so it runs
@@ -56,6 +62,10 @@ end-to-end test on the live API, then polish, verify, and README.
 
 ## API differences found (contract vs code)
 The contract is accurate for everything the app needs. Small differences, none blocking:
+- **Live API bug:** no-show and skip-pickup return 500 AFTER saving (notification email
+  failure). Details and fix in `MOBILE_BACKEND_NEEDS.md`.
+- `POST /students` requires `notes` (contract doesn't say; admin-only, the app doesn't create
+  students).
 - `POST /schedule/:assignmentId/no-show` returns `{ reported, noShow, notified }`; the contract
   only shows `{ reported: true }`. The app only reads `reported`.
 - `GET /sessions` is ordered by `check_in_at` ascending, not newest first. The app sorts itself.
@@ -66,12 +76,22 @@ The contract is accurate for everything the app needs. Small differences, none b
   is denied or unavailable.
 
 ## Test accounts and test data created (no passwords)
-- Session 1 was creating `Mobile Test ...` records on the live API with a script outside the
-  repo when it stopped. Unknown what exists; checked in step 2.1 below.
+- Session 1 may have left `Mobile Test ...` records (its script and passwords are lost).
+  Not touched.
+- Session 2, run id `f5r4u`, all on the live API (Neon), passwords kept outside the repo:
+  - Company "Mobile Test Transport f5r4u": admin `mobile-coadmin-f5r4u@example.test`.
+  - School "Mobile Test Elementary f5r4u": admin `mobile-schooladmin-f5r4u@example.test`.
+  - Driver `mobile-driver-f5r4u@example.test` ($21/hr).
+  - Parent `mobile-parent-f5r4u@example.test`, linked to Ava and Ben.
+  - Van `MT-f5r4u`, number 07.
+  - Students "Mobile Test Ava / Ben / Cara f5r4u" (Ava + Ben both shifts, Cara afternoon
+    only), plus one extra contact on Ava.
+  - Activity: 1 morning shift, 1 pickup trip (Ava), 1 no-show (Ben), 1 parent skip (Ben).
+  - The assignments start 2026-09-23 with no end date, so they show up every day.
 
 ## How to run it
 See `mobile/README.md` (being rewritten in step 2.4). Short version: `cd mobile`,
 `npm install`, `npx expo start`, scan the QR code with Expo Go.
 
 ## Known issues
-- None confirmed yet in session 2.
+- Server: no-show / skip-pickup can answer 500 after saving (see above). The app copes.
