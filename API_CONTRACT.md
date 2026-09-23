@@ -5,6 +5,57 @@ Written from the code on branch `mvp-finish` (`server/src/routes/*`, `server/src
 
 - **Driver** and **Parent** endpoints are documented in full (the mobile apps need them).
 - **Company admin / school admin / school staff** are listed with less detail at the end.
+- **Who can see which students**: section 0 below (branch `access-scope`). Enforced on the
+  server; the app must follow it too (only ask for what the role can see).
+
+---
+
+## 0. Access rules (who sees which students)
+
+The most important rule in the app: children's names and home addresses. Every role sees only
+the students it is assigned to. **Enforced on the server**, never only in the UI.
+
+| Role | Can see students |
+|---|---|
+| `company_admin` | only students of their own company |
+| `school_admin` | only students of their own school (from any company) |
+| `school_staff` | only students granted to them (`staff_student_access`) |
+| `parent` | only their own linked children, only through `/parent/*` |
+| `driver` | only students on the driver's **own** assignments (morning or afternoon) that are **active today or start in the future**. Not ended assignments, not other drivers' students |
+
+"See" means everything: lists, get by id, and student data inside other responses (trips,
+schedule, assignments, vans, schools, dashboard). **A student (or van, school, assignment,
+trip) outside the caller's scope returns `404`, not `403`**, so the app can't tell whether the
+id exists. `403` means the role may not call that endpoint at all.
+
+**Driver writes** follow the same rule, stricter: logging a trip (`POST /trips`) or reporting a
+no-show needs the student's assignment to run **today** and cover that shift.
+Not the driver's student (or an ended assignment) → `404`; the driver's student but not on
+today's run for that shift (starts later, or the other shift) → `409`.
+
+### Which endpoints each role can call
+
+| Endpoint | company_admin | school_admin | school_staff | driver | parent |
+|---|---|---|---|---|---|
+| `GET /students`, `GET /students/:id` | company | school | granted | own not-ended assignments | 403 |
+| `POST/PATCH/DELETE /students…` | ✓ | 403 | 403 | 403 | 403 |
+| `GET /vans`, `GET /vans/:id` | company | 403 | 403 | vans on own not-ended assignments | 403 |
+| `GET /schools/:id` | schools the company has students at | 403 | 403 | schools of own not-ended assignments' students | 403 |
+| `GET /schools`, `GET /schools/me` | list / 403 | 403 / own | 403 / own | 403 | 403 |
+| `GET /assignments`, `GET /assignments/:id` | company | 403 | 403 | own, not ended | 403 |
+| `GET /schedule/today`, `POST /schedule/:id/no-show` | 403 | 403 | 403 | own, today | 403 |
+| `GET /sessions`, `POST /sessions/checkin…` | read company | 403 | 403 | own | 403 |
+| `GET /trips`, `GET /trips/:id` | company | school | granted | trips on own shifts | 403 |
+| `POST /trips` | 403 | 403 | 403 | own students on today's run | 403 |
+| `POST /trips/:id/confirm` | 403 | school | granted | 403 | 403 |
+| `GET /dashboard/absent-today` | company | school | granted | 403 | 403 |
+| `GET/POST /schedule-changes…` | 403 | school | granted | 403 | 403 |
+| `GET /payroll/summary/:driverId`, `/payroll/adjustments/:driverId` | company | 403 | 403 | own id | 403 |
+| `/parent/*` | 403 | 403 | 403 | 403 | own linked children |
+
+"Trips on own shifts" is the driver's own work history: it can include a trip for a student
+whose assignment has since ended. The trip row only has the `student_id`; the student record
+itself (`GET /students/:id`) is then `404`.
 
 ---
 
@@ -175,7 +226,9 @@ Log a pickup or drop-off for a student on the currently open shift.
 - The web app uses `pickup` for morning stops and `dropoff` for afternoon stops.
 - `201` → the trip, `status: "pending"` until the school confirms (or 5 minutes pass: the
   server auto-completes it).
-- `409 "check in for that shift before logging a trip"`, `404` student not in your company, `400`.
+- `409 "check in for that shift before logging a trip"`, `404` student not on one of your
+  (not-ended) assignments, `409 "this student is not on your morning run today"` (assignment
+  starts later or covers the other shift only), `400`.
 
 ### `GET /trips` (driver: trips on own shifts)
 All of the driver's trips (not only today; filter by local date of `created_at`):
@@ -190,9 +243,12 @@ All of the driver's trips (not only today; filter by local date of `created_at`)
 ### `POST /schedule/:assignmentId/no-show` (driver only)
 "Arrived, nobody came out." Body `{ "shift_period": "morning" }`. `200 {"reported": true}`.
 Notifies the school and company admins. Errors: `409 "check in for that shift before reporting a no-show"`,
-`409` already reported for this shift today, `404` not your assignment.
+`409` already reported for this shift today, `409 "this assignment is not on your … run today"`
+(starts later / other shift), `404` not your assignment or it has ended.
+The response also has `notified`: the emails that were actually sent. A failed email never
+fails the request (the no-show is saved either way).
 
-### `GET /students/:id` (driver can read)
+### `GET /students/:id` (driver: own students only)
 Full student record plus extra contacts:
 ```json
 { "id": "7e43…", "company_id": "…", "school_id": "…", "full_name": "Maya Robinson", "grade": "3", "age": 8,
@@ -201,25 +257,28 @@ Full student record plus extra contacts:
   "notes": "Allergic to peanuts.", "created_at": "…", "updated_at": "…",
   "contacts": [ { "id": "…", "name": "Ruth Brooks", "phone": "555-0102", "relationship": "Grandmother", "student_id": "7e43…", "company_id": "…", "school_id": "…", "created_at": "…" } ] }
 ```
-Note: a driver can currently read any student in their company (not only assigned ones), see
-`MVP_FINISH_REPORT.md`. The app should only request students from `/schedule/today`.
+A driver can read only students on their own assignments that are active today or start
+later (section 0). Anyone else → `404`. `GET /students` (list) returns the same set.
 
 ### `GET /schools/:id` (driver, company admin)
-Only schools the company has a student at (or its own placeholders). `404` otherwise.
+Company admin: schools the company has a student at. Driver: only schools of students on the
+driver's own not-ended assignments. `404` otherwise.
 ```json
 { "id": "…", "name": "Lincoln Elementary", "address": "200 School St", "zip_code": "62704", "state": "IL",
   "phone": "555-300-1200", "hours": "8:00 AM – 3:00 PM", "website": null }
 ```
 
-### `GET /vans` / `GET /vans/:id` (any company user, read)
+### `GET /vans` / `GET /vans/:id` (company admin: fleet; driver: own vans only)
+Driver: only vans on the driver's own not-ended assignments; any other van → `404`.
 ```json
 { "id": "78a2…", "company_id": "…", "number": "04", "license_plate": "KX-4471", "brand": "Ford", "model": "Transit",
   "year": 2021, "color": "White", "created_at": "…", "updated_at": "…" }
 ```
 `number` is optional (`null`); show "Van 04" when set, else brand + model.
 
-### `GET /assignments` (driver: own)
-The driver's assignments (all dates). Used to find today's van: the active one
+### `GET /assignments` (driver: own, not ended)
+The driver's assignments that are active today or start later (ended ones are left out, and
+`GET /assignments/:id` of an ended one is `404`). Used to find today's van: the active one
 (`start_date <= today` and `end_date` null or `>= today`, comparing `YYYY-MM-DD` strings) → `van_id`.
 ```json
 { "id": "c2a0…", "company_id": "…", "student_id": "7e43…", "driver_user_id": "83ac…", "van_id": "78a2…",
@@ -296,7 +355,8 @@ and the cutoff before pickup time). Two shapes:
 - Non-split child: no body. Split child: `{ "shift_choice": "morning" }` or `{ "shift_choice": "whole_day" }`
   (whole day also cancels the afternoon ride).
 - `200 { "skipped": true, "skips": [...], "notified": ["…emails…"] }`. Notifies the driver(s),
-  the school and the company admins.
+  the school and the company admins. `notified` lists only emails actually sent; a failed email
+  never fails the request (the skip is saved either way).
 - Errors: `400` no pickup today / missing `shift_choice` for a split child, `403` too late,
   `409` already skipped.
 
