@@ -11,6 +11,24 @@ export function localISODate(d: Date = new Date()): string {
   return `${y}-${m}-${day}`
 }
 
+// Calendar arithmetic on "YYYY-MM-DD" strings, done on a local-time Date built from the parts
+// (so no UTC shift), e.g. the driver Week tab's previous/next week.
+export function addDaysISO(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  return localISODate(new Date(y, m - 1, d + days))
+}
+
+// Monday of the week containing `d`, as "YYYY-MM-DD".
+export function mondayOf(d: Date = new Date()): string {
+  return localISODate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)))
+}
+
+// A local Date at midnight for a "YYYY-MM-DD" string, only for display (weekday / month names).
+export function localDateOf(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
 // The API sends Postgres DATE columns as "2026-09-22T00:00:00.000Z" (pg turns them into a JS
 // Date on a UTC server, then JSON). The date part is already the real calendar date, so read it
 // directly. Parsing it with new Date() would move it to the day before anywhere west of UTC.
