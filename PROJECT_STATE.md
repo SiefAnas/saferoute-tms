@@ -146,20 +146,20 @@ since they were never promised for this pass):
 - **Test runs need no DB setup** — `npm test` provisions its own embedded Postgres
   per suite automatically.
 
-### Seed accounts (live on the current Neon DB right now — verified moments ago)
-All passwords: **`Secret123!`**
+### Test accounts
+The seed logins that used to be listed here (`admin@3bees.test`, `driver1@3bees.test`, …) **no
+longer work**: the Neon database now holds different demo data, and there is no seed script
+for it. To get a test account today:
 
-| Email | Role | Org | Notes |
-|---|---|---|---|
-| `admin@3bees.test` | company_admin | 3 Bees Transportation | Original seed company; has 2 drivers, 2 vans |
-| `driver1@3bees.test` | driver | 3 Bees Transportation | Marcus Rodriguez, phone `555-0187`; has trip history |
-| `driver2@3bees.test` | driver | 3 Bees Transportation | Sarah Jenkins; no pay rate set (tests the "no rate" UI state) |
-| `jamie@greenvalley.test` | company_admin | Green Valley Transport | Created via the live Register flow (fresh-org demo) |
-| `principal@willowcreek.test` | school_admin | Willow Creek Elementary | Created via the live claim flow (claim-flow demo) |
-| `jordan@willowcreek.test` | school_staff | Willow Creek Elementary | Granted access to 1 of 2 students (Emma Johnson) |
-
-Willow Creek Elementary has 2 students (Emma Johnson grade 3, Liam Carter grade 4), both
-linked to 3 Bees Transportation as their company.
+- **Sign up**: on the live site (or local client) use "Register your company or school". A new
+  company or school admin can log in right away (no email verification for a new org). Use an
+  `@example.test` email so it's easy to find and delete later.
+- **Drivers, parents, school staff**: log in as that admin and create them from the app
+  (Drivers / Parents / Staff pages).
+- **Everything at once**: `API_BASE=<api url> node server/scripts/e2e-roles.mjs` signs up two
+  test companies and a school, creates a driver, parent and staff account, and prints every
+  email it made (password `Secret123!`). It writes real rows and doesn't clean up; go easy on
+  the live API (login is rate limited: 20 per 15 minutes per IP).
 
 ### Other
 - Dev mailer logs "sent" emails to the API server's console (no real email sends) —

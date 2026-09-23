@@ -11,8 +11,12 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 - **`DATABASE_URL` sslmode**: `require` → `verify-full` on Render, on its own deploy, revert if
   the API can't connect. `NEXT_STEPS.md` §2.
 - **Test data left in Neon** by the MVP-finish checks (all "MVP Test …" / `@example.test`,
-  listed in `MVP_FINISH_REPORT.md`) and by the access-scope e2e run (`…muekdz3c…`, listed in
-  `ACCESS_SCOPE_REPORT.md`). Delete when you like; nothing depends on it.
+  listed in `MVP_FINISH_REPORT.md`), by the access-scope e2e run on the local API (`…muekdz3c…`,
+  listed in `ACCESS_SCOPE_REPORT.md`) and by the live e2e check after the merge (`…muelscel…`:
+  companies "MVP Test Transport/Other Co muelscel", school "MVP Test Elementary muelscel",
+  placeholder "MVP Test School muelscel", drivers/parent/staff `mvp-*-muelscel@example.test`,
+  vans `MVP-muelscel`/`MVP2-muelscel`, 4 students, 4 assignments, 1 session, 1 trip).
+  Delete when you like; nothing depends on it.
 
 ## Open decisions
 - **Whose day does the app follow, Boston time or Cairo time?** Neon `SHOW timezone` = `GMT`
