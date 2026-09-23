@@ -12,7 +12,7 @@ import { ApiError } from '../../lib/api'
 const FORGOT_PASSWORD_ROLES = [
   { key: 'driver', label: 'Driver', message: 'Please contact your company administrator to reset your password.' },
   { key: 'parent', label: 'Parent', message: 'Please contact your company administrator to reset your password.' },
-  { key: 'school_staff', label: 'School Staff', message: 'Please contact your school administrator to reset your password.' },
+  { key: 'school_staff', label: 'School staff', message: 'Please contact your school administrator to reset your password.' },
 ] as const
 
 // ASSUMPTION (flagged for confirmation): this is one shared login page for all 4 roles
@@ -81,25 +81,25 @@ export function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0F172A] p-4">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-sidebar p-4">
       <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-20">
         <div className="absolute top-[-10%] left-[-10%] h-[40%] w-[40%] rounded-full bg-primary-container blur-[120px]" />
         <div className="absolute right-[-10%] bottom-[-10%] h-[30%] w-[30%] rounded-full bg-secondary-container blur-[100px]" />
       </div>
 
-      <div className="relative z-10 flex w-full max-w-[440px] flex-col items-center gap-8 rounded-xl border border-outline-variant bg-white p-8">
+      <div className="relative z-10 flex w-full max-w-[440px] flex-col items-center gap-8 rounded-xl bg-surface p-8 shadow-drawer">
         <div className="flex flex-col items-center gap-2">
           <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-lg bg-primary-container">
             <span className="material-symbols-outlined !text-[40px] text-on-primary-container">route</span>
           </div>
           <h1 className="text-headline-md tracking-tight text-primary">SafeRoute Logistics</h1>
-          <p className="text-label-md tracking-widest text-secondary uppercase">Sign in to your account</p>
+          <p className="text-label-md text-muted">Sign in to your account</p>
         </div>
 
         <form className="flex w-full flex-col gap-6" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-2">
-            <label className="px-1 text-label-md text-on-surface-variant" htmlFor="email">
-              EMAIL ADDRESS
+            <label className="px-1 text-[12px] font-semibold text-muted" htmlFor="email">
+              Email address
             </label>
             <Input
               id="email"
@@ -113,8 +113,8 @@ export function LoginPage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="px-1 text-label-md text-on-surface-variant" htmlFor="password">
-              PASSWORD
+            <label className="px-1 text-[12px] font-semibold text-muted" htmlFor="password">
+              Password
             </label>
             <div className="relative flex items-center">
               <Input
@@ -163,7 +163,7 @@ export function LoginPage() {
               </>
             ) : (
               <>
-                Sign In
+                Sign in
                 <span className="material-symbols-outlined">arrow_forward</span>
               </>
             )}

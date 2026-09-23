@@ -3,8 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api'
 import { Modal } from './Modal'
 import { Button } from './Button'
-import { Input } from './Input'
-import { PasswordStrengthMeter } from './PasswordStrengthMeter'
+import { Field, Input } from './Input'
+import { PasswordField } from './PasswordField'
 import type { PublicUser } from '../types/api'
 
 // Shared edit form for an admin-created account (driver/parent/school_staff) — gives the
@@ -27,7 +27,6 @@ export function EditAccountModal({
   const [email, setEmail] = useState(user.email)
   const [isActive, setIsActive] = useState(user.is_active)
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const save = useMutation({
@@ -64,66 +63,51 @@ export function EditAccountModal({
   return (
     <Modal title={`Edit ${user.full_name}`} onClose={onClose}>
       <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-        <Input required placeholder="Full name (as it should appear in the app)" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        <Input required type="email" placeholder="Email address (used to log in)" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <Input required type="tel" placeholder="Phone number (e.g. 555-123-4567)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <Field label="Full name">
+          <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        </Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Email (used to log in)">
+            <Input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Field label="Phone">
+            <Input required type="tel" placeholder="555-123-4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </Field>
+        </div>
         {(user.role === 'driver' || user.role === 'parent') && (
-          <Input required placeholder="Home address (street, city, state, zip)" value={address} onChange={(e) => setAddress(e.target.value)} />
+          <Field label="Home address">
+            <Input required placeholder="Street, city, state, zip" value={address} onChange={(e) => setAddress(e.target.value)} />
+          </Field>
         )}
         {user.role === 'driver' && (
-          <Input
-            required
-            placeholder="Driver license number"
-            value={licenseNumber}
-            onChange={(e) => setLicenseNumber(e.target.value)}
-          />
+          <Field label="Driver license number">
+            <Input required value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} />
+          </Field>
         )}
-        <div className="flex flex-col gap-2">
-          <div className="relative flex items-center">
-            <Input
-              type={showPassword ? 'text' : 'password'}
-              minLength={8}
-              placeholder="New password (leave blank to keep current)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="pr-12"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              className="absolute right-4 text-outline hover:text-secondary"
-            >
-              <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
-            </button>
-          </div>
-          <p className="text-label-md text-on-surface-variant">
-            Leave blank to keep the current password. To set a new one: at least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character.
-          </p>
-          <PasswordStrengthMeter password={password} />
-        </div>
-        <label className="flex cursor-pointer items-center gap-2 text-body-md text-on-surface">
-          <input
-            type="checkbox"
-            checked={isActive}
-            onChange={(e) => setIsActive(e.target.checked)}
-            className="h-4 w-4 rounded border-outline text-primary focus:ring-primary-container"
-          />
+        <PasswordField
+          label="New password"
+          value={password}
+          onChange={setPassword}
+          placeholder="Leave blank to keep the current one"
+          hint="Leave blank to keep the current password. To set a new one: at least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character."
+        />
+        <label className="flex cursor-pointer items-center gap-2 text-[14px] text-ink">
+          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-4 w-4 accent-amber" />
           Account active{!isActive && '. This account will not be able to log in'}
         </label>
 
         {error && (
-          <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
+          <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">
             {error}
           </p>
         )}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button type="submit" disabled={save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save Changes'}
+            {save.isPending ? 'Saving…' : 'Save changes'}
           </Button>
         </div>
       </form>

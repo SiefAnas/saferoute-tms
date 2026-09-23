@@ -60,3 +60,37 @@ export function formatRelativeTime(iso: string): string {
   const diffDay = Math.round(diffHr / 24)
   return `${diffDay}d ago`
 }
+
+// "Sep 14" from a timestamp (local time).
+export function formatMonthDay(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+// "Tue, Sep 22" for a local Date.
+export function formatWeekdayDate(d: Date = new Date()): string {
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+// "Sep 14" for a Postgres DATE value ("2026-09-14T00:00:00.000Z"). Reads the calendar date as
+// written instead of letting new Date() shift it to the day before west of UTC.
+export function formatCalendarMonthDay(value: string): string {
+  const [y, m, d] = calendarDateOf(value).split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+// "$22.00 / hr" or "$160.00 / day".
+export function formatRate(rateCents: number, rateType: 'hourly' | 'daily'): string {
+  return `${formatMoney(rateCents)} / ${rateType === 'hourly' ? 'hr' : 'day'}`
+}
+
+// "Good morning" / "Good afternoon" / "Good evening" by local time of day.
+export function greeting(d: Date = new Date()): string {
+  const h = d.getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
+export function firstName(fullName: string | null | undefined): string {
+  return (fullName ?? '').trim().split(/\s+/)[0] ?? ''
+}

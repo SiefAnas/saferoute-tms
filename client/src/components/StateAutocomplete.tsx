@@ -47,20 +47,20 @@ export function StateAutocomplete({ id, value, onChange, required }: StateAutoco
         autoComplete="off"
       />
       {open && query.trim().length > 0 && (
-        <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-lg border border-outline-variant p-2">
+        <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto rounded-row border border-line bg-surface p-1">
           {matches.length ? (
             matches.map((s) => (
               <button
                 key={s.code}
                 type="button"
                 onClick={() => select(s.code)}
-                className="rounded-lg px-3 py-2 text-left text-body-md transition-colors hover:bg-surface-container"
+                className="rounded-row px-2.5 py-1.5 text-left text-[14px] text-ink transition-colors hover:bg-surface-2"
               >
                 {s.name} ({s.code})
               </button>
             ))
           ) : (
-            <p className="p-2 text-body-md text-on-surface-variant">No matching state</p>
+            <p className="p-2 text-[13px] text-muted">No matching state</p>
           )}
         </div>
       )}

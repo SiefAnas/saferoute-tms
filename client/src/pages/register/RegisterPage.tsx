@@ -148,7 +148,7 @@ export function RegisterPage() {
   if (pendingClaimEmail) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-surface p-4">
-        <div className="flex w-full max-w-[440px] flex-col items-center gap-4 rounded-xl border border-outline-variant bg-white p-8 text-center">
+        <div className="flex w-full max-w-[440px] flex-col items-center gap-4 rounded-card bg-surface shadow-card p-8 text-center">
           <span className="material-symbols-outlined !text-[40px] text-primary">mark_email_read</span>
           <h1 className="text-headline-md text-primary">Check your email</h1>
           <p className="text-body-md text-on-surface-variant">
@@ -165,13 +165,13 @@ export function RegisterPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface p-4">
-      <div className="flex w-full max-w-[480px] flex-col gap-6 rounded-xl border border-outline-variant bg-white p-8">
+      <div className="flex w-full max-w-[480px] flex-col gap-6 rounded-card bg-surface shadow-card p-8">
         <div className="flex flex-col items-center gap-2 text-center">
           <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-lg bg-primary-container">
             <span className="material-symbols-outlined !text-[40px] text-on-primary-container">route</span>
           </div>
           <h1 className="text-headline-md text-primary">Register your organization</h1>
-          <p className="text-label-md text-secondary uppercase">Self-serve signup: no verification required for a new org</p>
+          <p className="text-[13px] text-muted">Self-serve signup: no verification required for a new org</p>
         </div>
 
         <div className="flex gap-2">
@@ -184,7 +184,7 @@ export function RegisterPage() {
                 kind === k ? 'border-primary bg-primary-fixed text-on-primary-fixed-variant' : 'border-outline-variant text-on-surface-variant'
               }`}
             >
-              {k === 'company' ? 'Transportation Company' : 'School'}
+              {k === 'company' ? 'Transportation company' : 'School'}
             </button>
           ))}
         </div>
@@ -348,7 +348,7 @@ export function RegisterPage() {
           )}
 
           <Button type="submit" size="lg" disabled={submit.isPending} className="w-full">
-            {submit.isPending ? STAGE_LABEL[stage] : claiming ? 'Claim & Register' : 'Create Account'}
+            {submit.isPending ? STAGE_LABEL[stage] : claiming ? 'Claim and register' : 'Create account'}
           </Button>
           {submit.isPending && showColdStartHint && (
             <p className="text-center text-label-md text-on-surface-variant">

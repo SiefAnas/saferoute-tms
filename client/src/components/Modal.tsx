@@ -6,9 +6,8 @@ interface ModalProps {
   children: ReactNode
 }
 
-// No modal/dialog pattern existed anywhere in this codebase before the Driver dashboard
-// rework (student/school detail views) — this is the first one, built to match the
-// existing Card/Button visual language rather than a new design.
+// Centered dialog for create/edit forms. Restyled to the refresh tokens: surface card, 14px
+// radius, card-title heading, theme-aware scrim. Row details use Drawer instead.
 export function Modal({ title, onClose, children }: ModalProps) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -19,23 +18,23 @@ export function Modal({ title, onClose, children }: ModalProps) {
   }, [onClose])
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4" onClick={onClose}>
       <div
-        className="flex max-h-[85vh] w-full max-w-[560px] flex-col overflow-y-auto rounded-xl border border-outline-variant bg-surface-container-lowest"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="flex max-h-[85vh] w-full max-w-[560px] flex-col overflow-y-auto rounded-card bg-surface text-ink shadow-drawer"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-outline-variant bg-surface-bright px-6 py-4">
-          <h2 className="text-headline-sm text-primary">{title}</h2>
+        <div className="flex items-center justify-between border-b border-divider px-6 py-4">
+          <h2 className="text-card-title">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-outline hover:text-secondary"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-row text-muted hover:bg-surface-2"
           >
-            <span className="material-symbols-outlined">close</span>
+            <span className="material-symbols-outlined !text-[20px]">close</span>
           </button>
         </div>
         <div className="flex flex-col gap-4 p-6">{children}</div>
