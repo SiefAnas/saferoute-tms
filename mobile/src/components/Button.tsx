@@ -34,7 +34,7 @@ export function Button({
   accessibilityHint,
 }: Props) {
   const colors = useColors()
-  const height = compact ? 38 : 52
+  const height = compact ? 44 : 52 // 44 = the platform minimum touch target
   const isDisabled = disabled || busy
 
   const bg =

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -6,7 +6,7 @@ import { useAuth } from '@/auth/auth'
 import { Button } from '@/components/Button'
 import { Icon } from '@/components/Icon'
 import { Text } from '@/components/Text'
-import { ActionError, messageFor } from '@/components/States'
+import { ActionError, messageFor, SLOW_AFTER_MS, SLOW_MESSAGE } from '@/components/States'
 import { APP_NAME } from '@/config'
 import { destinationForRole } from '@/lib/roles'
 import { radius } from '@/theme/tokens'
@@ -23,6 +23,17 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Sign-in is usually the first request after the API has been idle, so it's the one most
+  // likely to be slow while the server wakes up. Say so instead of leaving a silent spinner.
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!busy) return
+    const t = setTimeout(() => setSlow(true), SLOW_AFTER_MS)
+    return () => {
+      clearTimeout(t)
+      setSlow(false)
+    }
+  }, [busy])
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !busy
 
@@ -132,6 +143,11 @@ export default function LoginScreen() {
         {error ? <ActionError message={error} /> : null}
 
         <Button label="Sign in" busy={busy} busyLabel="Signing in…" disabled={!canSubmit} onPress={submit} />
+        {busy && slow ? (
+          <Text size={13} color={colors.muted} style={{ textAlign: 'center' }} accessibilityLiveRegion="polite">
+            {SLOW_MESSAGE}
+          </Text>
+        ) : null}
 
         {/* There is no password reset endpoint (API_CONTRACT.md section 2, V2_ROADMAP.md):
             drivers and parents get their password from the admin who created the account, and

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { ActivityIndicator, View } from 'react-native'
 import { radius } from '@/theme/tokens'
 import { useColors } from '@/theme/theme'
@@ -59,15 +60,25 @@ export function EmptyState({
 
 export function Loading({ label = 'Loading…' }: { label?: string }) {
   const colors = useColors()
+  // The API spins down when nobody uses it, and the first call after that can take up to a
+  // minute. After a few seconds say so, so a driver doesn't think the app froze.
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_AFTER_MS)
+    return () => clearTimeout(t)
+  }, [])
   return (
-    <View style={{ alignItems: 'center', gap: 12, paddingVertical: 48 }} accessibilityLiveRegion="polite">
+    <View style={{ alignItems: 'center', gap: 12, paddingVertical: 48, paddingHorizontal: 32 }} accessibilityLiveRegion="polite">
       <ActivityIndicator color={colors.muted} />
-      <Text size={13} color={colors.muted}>
-        {label}
+      <Text size={13} color={colors.muted} style={{ textAlign: 'center' }}>
+        {slow ? SLOW_MESSAGE : label}
       </Text>
     </View>
   )
 }
+
+export const SLOW_AFTER_MS = 6000
+export const SLOW_MESSAGE = 'Still loading. SafeRoute may be waking up, this can take up to a minute.'
 
 // One place that turns a thrown error into something a driver or parent can act on.
 // A NetworkError gets "Try again" (the API is on a plan that spins down, so the first call

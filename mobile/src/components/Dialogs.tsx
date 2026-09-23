@@ -214,6 +214,7 @@ export function ComingSoonRow({
         borderColor: colors.line,
         paddingHorizontal: 12,
         paddingVertical: 10,
+        minHeight: 44,
         backgroundColor: pressed ? colors.surface2 : 'transparent',
       })}
     >

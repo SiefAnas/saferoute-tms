@@ -87,6 +87,7 @@ export default function ParentStudentsScreen() {
                   accessibilityRole="tab"
                   accessibilityState={{ selected: active }}
                   accessibilityLabel={s.full_name}
+                  hitSlop={{ top: 4, bottom: 4 }} // 36pt chip + slop = 44pt touch target
                   style={{
                     height: 36,
                     justifyContent: 'center',

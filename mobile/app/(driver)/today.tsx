@@ -438,7 +438,7 @@ function ShiftSwitch({
             accessibilityLabel={`${shiftName(p)} shift, ${counts[p]} students`}
             style={{
               flex: 1,
-              height: 38,
+              height: 44, // drivers tap this in a moving van: platform minimum touch target
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
