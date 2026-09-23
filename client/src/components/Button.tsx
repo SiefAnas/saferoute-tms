@@ -6,7 +6,8 @@ import type { ButtonHTMLAttributes } from 'react'
 //   outline — every other real action.
 //   ghost   — low-emphasis actions (toolbar "CSV", "Clear search").
 //   danger  — an outline button with danger text (driver "No-show").
-type Variant = 'primary' | 'outline' | 'ghost' | 'danger'
+//   caution — caution-tinted fill for a fix-it action on a row (Payroll "Set rate").
+type Variant = 'primary' | 'outline' | 'ghost' | 'danger' | 'caution'
 
 // sm 32 = table-row / compact actions, md 38 = normal web buttons, lg 52 = mobile thumb actions
 // and the few screens' one big action (Login/Register submit, driver Check in / Check out).
@@ -22,6 +23,7 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   outline: 'border border-outline bg-outline-bg text-ink hover:bg-surface-2',
   ghost: 'text-muted hover:bg-surface-2',
   danger: 'border border-outline bg-outline-bg text-danger-ink hover:bg-alert-bg',
+  caution: 'bg-caution-bg text-caution-fg hover:opacity-90',
 }
 
 const SIZE_CLASSES: Record<Size, string> = {
