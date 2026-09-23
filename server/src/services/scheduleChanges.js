@@ -106,7 +106,9 @@ async function applyPickupSkip(req, student) {
 // assigned driver and linked parent(s) as extraRecipients — the one recipient set this task
 // asks for that no existing helper covers on its own.
 async function notifyScheduleChangeLogged(student, changeType, note) {
-  const [driverRows, parentRows] = await Promise.all([
+  let extraRecipients = [];
+  try {
+    const [driverRows, parentRows] = await Promise.all([
     pool.query(
       `SELECT u.email FROM assignments a JOIN users u ON u.id = a.driver_user_id
         WHERE a.student_id = $1 AND a.company_id = $2
@@ -116,7 +118,11 @@ async function notifyScheduleChangeLogged(student, changeType, note) {
     ),
     pool.query(`SELECT u.email FROM parent_students ps JOIN users u ON u.id = ps.parent_user_id WHERE ps.student_id = $1`, [student.id]),
   ]);
-  const extraRecipients = [...driverRows.rows.map((r) => r.email), ...parentRows.rows.map((r) => r.email)];
+    extraRecipients = [...driverRows.rows.map((r) => r.email), ...parentRows.rows.map((r) => r.email)];
+  } catch (err) {
+    // Still notify the admins; the change itself is already saved.
+    console.error(`[mail] recipient lookup failed event=schedule_change error=${err?.code ?? ''} ${err?.message ?? err}`);
+  }
 
   const label = changeType === 'left_early' ? 'left school early today' : 'is staying later than usual today';
   const subject = `Schedule change for ${student.full_name}: ${changeType === 'left_early' ? 'left early' : 'staying later'}`;
@@ -125,7 +131,7 @@ async function notifyScheduleChangeLogged(student, changeType, note) {
     (note ? ` Note: ${note}` : '') +
     " Today's scheduled company pickup for this student has been cancelled.";
 
-  return notifyCompanyAndSchoolAdmins(student.company_id, student.school_id, { subject, text, extraRecipients });
+  return notifyCompanyAndSchoolAdmins(student.company_id, student.school_id, { subject, text, extraRecipients, event: 'schedule_change' });
 }
 
 module.exports = { listScheduleChangesToday, logScheduleChange };

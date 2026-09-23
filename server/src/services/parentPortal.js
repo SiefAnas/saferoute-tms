@@ -309,9 +309,15 @@ async function skipPickup(req, studentId, body = {}) {
 // different drivers, both of whom need to know, not just one.
 async function notifyPickupSkipped(req, student, driverUserIds, subject, text) {
   const uniqueDriverIds = [...new Set(driverUserIds.filter(Boolean))];
-  const drivers = await Promise.all(uniqueDriverIds.map((id) => req.db.findById('users', id)));
-  const driverEmails = drivers.filter(Boolean).map((d) => d.email);
-  return notifyCompanyAndSchoolAdmins(req.auth.tenantId, student.school_id, { subject, text, extraRecipients: driverEmails });
+  let driverEmails = [];
+  try {
+    const drivers = await Promise.all(uniqueDriverIds.map((id) => req.db.findById('users', id)));
+    driverEmails = drivers.filter(Boolean).map((d) => d.email);
+  } catch (err) {
+    // Still notify the admins; the skip itself is already saved.
+    console.error(`[mail] recipient lookup failed event=pickup_skip error=${err?.code ?? ''} ${err?.message ?? err}`);
+  }
+  return notifyCompanyAndSchoolAdmins(req.auth.tenantId, student.school_id, { subject, text, extraRecipients: driverEmails, event: 'pickup_skip' });
 }
 
 module.exports = { listMyStudents, getMyProfile, getSkipStatus, skipPickup, getStudentDetail };

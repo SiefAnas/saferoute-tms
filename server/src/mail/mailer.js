@@ -26,7 +26,10 @@ function getSmtpTransport() {
   return smtpTransport;
 }
 
+let forcedFailure = null;
+
 async function sendMail({ to, subject, text }) {
+  if (forcedFailure) throw forcedFailure;
   const useSmtp = process.env.NODE_ENV !== 'test' && !!process.env.SMTP_HOST;
 
   if (useSmtp) {
@@ -47,7 +50,25 @@ async function sendMail({ to, subject, text }) {
   return message;
 }
 
+// Email is always a side effect of an action that is already saved, so a failed send must
+// never fail the request. Returns true if sent, false if not. The log carries only the event
+// type and the error (addresses redacted), never the recipient, subject or body.
+async function sendMailSafe(message, event) {
+  try {
+    await sendMail(message);
+    return true;
+  } catch (err) {
+    const code = err?.responseCode ?? err?.code ?? 'unknown';
+    const detail = String(err?.message ?? err).replace(/[^\s<>"'@]+@[^\s<>"'@]+/g, '[email]');
+    console.error(`[mail] send failed event=${event} code=${code} error=${detail}`);
+    return false;
+  }
+}
+
 // Test hooks
+function _failWith(err) {
+  forcedFailure = err ?? null;
+}
 function _sent() {
   return sentMessages;
 }
@@ -55,4 +76,4 @@ function _reset() {
   sentMessages.length = 0;
 }
 
-module.exports = { sendMail, _sent, _reset };
+module.exports = { sendMail, sendMailSafe, _sent, _reset, _failWith };

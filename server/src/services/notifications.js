@@ -3,7 +3,7 @@
 // second feature (driver no-show) needed the exact same "notify company + school admins"
 // recipient logic that the parent Skip Pickup feature already had.
 const pool = require('../db/pool');
-const { sendMail } = require('../mail/mailer');
+const { sendMailSafe } = require('../mail/mailer');
 
 // Notifies every active company_admin of `companyId` and every active school_admin of
 // `schoolId` (both raw pool — narrow, deliberate cross-tenant reads, same precedent as
@@ -18,17 +18,27 @@ const { sendMail } = require('../mail/mailer');
 // school_id, so company_admin rows (school_id IS NULL) never matched — zero company admins
 // notified, no error, just missing recipients. Explicit companyId makes this correct
 // regardless of the caller's own tenant type.
-async function notifyCompanyAndSchoolAdmins(companyId, schoolId, { subject, text, extraRecipients = [] }) {
-  const [companyAdmins, schoolAdmins] = await Promise.all([
-    pool.query(`SELECT email FROM users WHERE company_id = $1 AND role = 'company_admin' AND is_active`, [companyId]).then((r) => r.rows),
-    pool.query(`SELECT email FROM users WHERE school_id = $1 AND role = 'school_admin' AND is_active`, [schoolId]).then((r) => r.rows),
-  ]);
-  const recipients = [
-    ...new Set([...companyAdmins.map((u) => u.email), ...schoolAdmins.map((u) => u.email), ...extraRecipients]),
-  ].filter(Boolean);
+//
+// Never throws: every caller has already saved its row, so a failed recipient lookup or a
+// failed send is logged (event type + error, no PII) and the request still succeeds. Each
+// recipient is sent independently; returns only the recipients that were actually sent to.
+async function notifyCompanyAndSchoolAdmins(companyId, schoolId, { subject, text, extraRecipients = [], event = 'notification' }) {
+  let recipients;
+  try {
+    const [companyAdmins, schoolAdmins] = await Promise.all([
+      pool.query(`SELECT email FROM users WHERE company_id = $1 AND role = 'company_admin' AND is_active`, [companyId]).then((r) => r.rows),
+      pool.query(`SELECT email FROM users WHERE school_id = $1 AND role = 'school_admin' AND is_active`, [schoolId]).then((r) => r.rows),
+    ]);
+    recipients = [
+      ...new Set([...companyAdmins.map((u) => u.email), ...schoolAdmins.map((u) => u.email), ...extraRecipients]),
+    ].filter(Boolean);
+  } catch (err) {
+    console.error(`[mail] recipient lookup failed event=${event} error=${err?.code ?? ''} ${err?.message ?? err}`);
+    return [];
+  }
 
-  await Promise.all(recipients.map((to) => sendMail({ to, subject, text })));
-  return recipients;
+  const sent = await Promise.all(recipients.map((to) => sendMailSafe({ to, subject, text }, event)));
+  return recipients.filter((_, i) => sent[i]);
 }
 
 module.exports = { notifyCompanyAndSchoolAdmins };

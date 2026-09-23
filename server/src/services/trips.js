@@ -154,7 +154,7 @@ async function autoCompleteStaleTrips() {
     const text =
       `${student?.full_name ?? 'A student'}'s ${t.trip_type} was not confirmed by school staff within ` +
       `${autoCompleteMinutes} minutes and was auto-completed${shiftNote}. Please verify this actually happened.`;
-    await notifyCompanyAndSchoolAdmins(t.company_id, t.school_id, { subject, text });
+    await notifyCompanyAndSchoolAdmins(t.company_id, t.school_id, { subject, text, event: 'trip_auto_completed' });
   }));
 
   return rowCount;
