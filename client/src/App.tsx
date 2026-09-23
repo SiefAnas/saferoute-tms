@@ -7,7 +7,11 @@ import { ParentLayout } from './layouts/ParentLayout'
 import { LoginPage } from './pages/login/LoginPage'
 import { RegisterPage } from './pages/register/RegisterPage'
 import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
-import { DriverDashboard } from './pages/driver/DriverDashboard'
+import { DriverLayout } from './layouts/DriverLayout'
+import { DriverTodayPage } from './pages/driver/DriverTodayPage'
+import { DriverTripsPage } from './pages/driver/DriverTripsPage'
+import { DriverWeekPage } from './pages/driver/DriverWeekPage'
+import { DriverPayPage } from './pages/driver/DriverPayPage'
 import { CompanyAdminDashboard } from './pages/company/CompanyAdminDashboard'
 import { DriversPage } from './pages/company/DriversPage'
 import { ParentsPage } from './pages/company/ParentsPage'
@@ -59,8 +63,6 @@ const SCHOOL_ADMIN_NAV: NavGroup[] = [
 const SCHOOL_STAFF_NAV: NavGroup[] = [
   { items: [{ to: '/school-staff', label: 'Pickup & drop-off', icon: 'how_to_reg', end: true }] },
 ]
-const DRIVER_NAV: NavGroup[] = [{ items: [{ to: '/driver', label: 'Dashboard', icon: 'dashboard', end: true }] }]
-
 function RootRedirect() {
   const { user, token } = useAuth()
   if (!token || !user) return <Navigate to="/login" replace />
@@ -75,8 +77,11 @@ function App() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       <Route element={<ProtectedRoute roles={['driver']} />}>
-        <Route element={<AdminLayout hubName="Driver Portal" nav={DRIVER_NAV} />}>
-          <Route path="/driver" element={<DriverDashboard />} />
+        <Route element={<DriverLayout />}>
+          <Route path="/driver" element={<DriverTodayPage />} />
+          <Route path="/driver/trips" element={<DriverTripsPage />} />
+          <Route path="/driver/week" element={<DriverWeekPage />} />
+          <Route path="/driver/pay" element={<DriverPayPage />} />
         </Route>
       </Route>
 
