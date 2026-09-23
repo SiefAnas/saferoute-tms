@@ -30,7 +30,7 @@ the mobile work.
 | Driver: Week tab | `GET /schedule/week?from=YYYY-MM-DD`: same shape as `/schedule/today`, one entry per weekday, with overrides, skips and no-shows applied |
 | Driver: Pay → "Paid in {month}" | Payment history ledger + `GET /payroll/payments?from&to` (own driver) |
 | Parent: live location and ETA / "van is X stops away" | Route order per driver + current stop; live location pings + ETA service |
-| Login: forgot password | `POST /auth/forgot-password` + `/auth/reset-password` (needs working email) |
+| ~~Login: forgot password~~ | **Done** (branch `auth-accounts`): the app's "Forgot password?" screen calls `POST /auth/forgot-password`; the emailed link opens the website to set the new password. First-login "Choose your password" screen too. Email delivery needs the Render SMTP vars. |
 | Push notifications (not in the app at all yet) | Device token table + FCM/APNs sender |
 
 ## Nice to have for the app

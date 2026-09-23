@@ -6,6 +6,13 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 `API_CONTRACT.md` (for the mobile apps), `NEXT_STEPS.md`, `BACKLOG.md`.
 
 ## Needs Anas
+- **Review `auth-accounts`**: temporary passwords with a forced change at first login, forgot /
+  reset password, admin reset, old sessions end after a change; web + mobile screens. Report:
+  `AUTH_ACCOUNTS_REPORT.md`. It has a migration (021, additive): run `npm run migrate:up`
+  against Neon when you merge, before or with the deploy.
+- **`APP_URL` on Render (API service)**: the website address for the reset-password link, e.g.
+  `https://saferoute-tms-client.onrender.com`. Without it the link uses the first
+  `ALLOWED_ORIGINS` entry, which is the same site today.
 - **Render SMTP vars (Resend)**: `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/
   `MAIL_FROM` on the API service. Steps in `NEXT_STEPS.md` §1. Still unverified end to end.
 - **`DATABASE_URL` sslmode**: `require` → `verify-full` on Render, on its own deploy, revert if
@@ -18,9 +25,6 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 - **Whose day does the app follow, Boston time or Cairo time?** Neon `SHOW timezone` = `GMT`
   (UTC), so the server's "today" flips to tomorrow at ~8pm Boston. Proposed fix: set the Neon
   database timezone (e.g. `America/New_York`). Not done, waiting on you.
-- **Driver account flow** (for the mobile app): today a company admin creates each driver and sets
-  their password; there's no self-registration, invite link or password reset. Decide the mobile
-  flow (see `MVP_FINISH_REPORT.md`, step 6).
 - **Seed accounts in `PROJECT_STATE.md` are stale**: Neon now holds different demo companies
   (Blue Ridge, Metro, Sunrise) and no "3 Bees"; the documented logins don't work.
 
