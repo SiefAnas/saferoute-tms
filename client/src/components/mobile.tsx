@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, Suspense, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { NavLink } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
@@ -25,7 +25,9 @@ export function MobileShell({ header, tabs, children }: { header: ReactNode; tab
       <div className="mx-auto flex h-dvh max-w-[480px] flex-col bg-bg md:border-x md:border-line">
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-3.5">
           {header}
-          <ThumbSlotContext.Provider value={thumbSlot}>{children}</ThumbSlotContext.Provider>
+          <ThumbSlotContext.Provider value={thumbSlot}>
+            <Suspense fallback={<p className="px-5 pt-6 text-[14px] text-muted">Loading…</p>}>{children}</Suspense>
+          </ThumbSlotContext.Provider>
         </div>
         <div ref={slotRef} />
         <nav className="grid shrink-0 border-t border-line bg-surface pt-2 pb-[max(24px,env(safe-area-inset-bottom))]" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>

@@ -184,7 +184,7 @@ export function RegisterPage() {
                 kind === k ? 'border-primary bg-primary-fixed text-on-primary-fixed-variant' : 'border-outline-variant text-on-surface-variant'
               }`}
             >
-              {k === 'company' ? 'Transportation Company' : 'School'}
+              {k === 'company' ? 'Transportation company' : 'School'}
             </button>
           ))}
         </div>
@@ -348,7 +348,7 @@ export function RegisterPage() {
           )}
 
           <Button type="submit" size="lg" disabled={submit.isPending} className="w-full">
-            {submit.isPending ? STAGE_LABEL[stage] : claiming ? 'Claim & Register' : 'Create Account'}
+            {submit.isPending ? STAGE_LABEL[stage] : claiming ? 'Claim and register' : 'Create account'}
           </Button>
           {submit.isPending && showColdStartHint && (
             <p className="text-center text-label-md text-on-surface-variant">

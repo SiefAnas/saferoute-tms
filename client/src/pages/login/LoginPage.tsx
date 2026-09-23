@@ -12,7 +12,7 @@ import { ApiError } from '../../lib/api'
 const FORGOT_PASSWORD_ROLES = [
   { key: 'driver', label: 'Driver', message: 'Please contact your company administrator to reset your password.' },
   { key: 'parent', label: 'Parent', message: 'Please contact your company administrator to reset your password.' },
-  { key: 'school_staff', label: 'School Staff', message: 'Please contact your school administrator to reset your password.' },
+  { key: 'school_staff', label: 'School staff', message: 'Please contact your school administrator to reset your password.' },
 ] as const
 
 // ASSUMPTION (flagged for confirmation): this is one shared login page for all 4 roles

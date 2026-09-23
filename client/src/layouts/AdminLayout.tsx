@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -239,7 +239,9 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-6 md:px-7">
             <div className="mx-auto max-w-[1440px]">
-              <Outlet />
+              <Suspense fallback={<p className="text-[14px] text-muted">Loading…</p>}>
+                <Outlet />
+              </Suspense>
             </div>
           </div>
         </main>

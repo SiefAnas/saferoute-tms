@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 import { ROLE_HOME } from './lib/roleHome'
@@ -8,24 +9,26 @@ import { LoginPage } from './pages/login/LoginPage'
 import { RegisterPage } from './pages/register/RegisterPage'
 import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
 import { DriverLayout } from './layouts/DriverLayout'
-import { DriverTodayPage } from './pages/driver/DriverTodayPage'
-import { DriverTripsPage } from './pages/driver/DriverTripsPage'
-import { DriverWeekPage } from './pages/driver/DriverWeekPage'
-import { DriverPayPage } from './pages/driver/DriverPayPage'
-import { CompanyAdminDashboard } from './pages/company/CompanyAdminDashboard'
-import { DriversPage } from './pages/company/DriversPage'
-import { ParentsPage } from './pages/company/ParentsPage'
-import { VansPage } from './pages/company/VansPage'
-import { AssignmentsPage } from './pages/company/AssignmentsPage'
-import { PayrollPage } from './pages/company/PayrollPage'
-import { CompanyStudentsPage } from './pages/company/StudentsPage'
-import { CompanyProfilePage } from './pages/company/CompanyProfilePage'
-import { StudentsPage } from './pages/school-admin/StudentsPage'
-import { StaffAccessPage } from './pages/school-admin/StaffAccessPage'
-import { SchoolProfilePage } from './pages/school-admin/SchoolProfilePage'
-import { SchoolStaffDashboard } from './pages/school-staff/SchoolStaffDashboard'
-import { ParentHomePage } from './pages/parent/ParentHomePage'
-import { ParentProfilePage } from './pages/parent/ParentProfilePage'
+
+// Each role's screens load on demand, so a driver's phone never downloads the admin pages.
+const DriverTodayPage = lazy(() => import('./pages/driver/DriverTodayPage').then((m) => ({ default: m.DriverTodayPage })))
+const DriverTripsPage = lazy(() => import('./pages/driver/DriverTripsPage').then((m) => ({ default: m.DriverTripsPage })))
+const DriverWeekPage = lazy(() => import('./pages/driver/DriverWeekPage').then((m) => ({ default: m.DriverWeekPage })))
+const DriverPayPage = lazy(() => import('./pages/driver/DriverPayPage').then((m) => ({ default: m.DriverPayPage })))
+const CompanyAdminDashboard = lazy(() => import('./pages/company/CompanyAdminDashboard').then((m) => ({ default: m.CompanyAdminDashboard })))
+const DriversPage = lazy(() => import('./pages/company/DriversPage').then((m) => ({ default: m.DriversPage })))
+const ParentsPage = lazy(() => import('./pages/company/ParentsPage').then((m) => ({ default: m.ParentsPage })))
+const VansPage = lazy(() => import('./pages/company/VansPage').then((m) => ({ default: m.VansPage })))
+const AssignmentsPage = lazy(() => import('./pages/company/AssignmentsPage').then((m) => ({ default: m.AssignmentsPage })))
+const PayrollPage = lazy(() => import('./pages/company/PayrollPage').then((m) => ({ default: m.PayrollPage })))
+const CompanyStudentsPage = lazy(() => import('./pages/company/StudentsPage').then((m) => ({ default: m.CompanyStudentsPage })))
+const CompanyProfilePage = lazy(() => import('./pages/company/CompanyProfilePage').then((m) => ({ default: m.CompanyProfilePage })))
+const StudentsPage = lazy(() => import('./pages/school-admin/StudentsPage').then((m) => ({ default: m.StudentsPage })))
+const StaffAccessPage = lazy(() => import('./pages/school-admin/StaffAccessPage').then((m) => ({ default: m.StaffAccessPage })))
+const SchoolProfilePage = lazy(() => import('./pages/school-admin/SchoolProfilePage').then((m) => ({ default: m.SchoolProfilePage })))
+const SchoolStaffDashboard = lazy(() => import('./pages/school-staff/SchoolStaffDashboard').then((m) => ({ default: m.SchoolStaffDashboard })))
+const ParentHomePage = lazy(() => import('./pages/parent/ParentHomePage').then((m) => ({ default: m.ParentHomePage })))
+const ParentProfilePage = lazy(() => import('./pages/parent/ParentProfilePage').then((m) => ({ default: m.ParentProfilePage })))
 
 // Sidebar nav per role (design 5a, "Sidebar"): grouped, with the only uppercase text in the app
 // as the group labels. Company order keeps Anas's earlier dashboard → drivers → fleet → … order
@@ -71,58 +74,60 @@ function RootRedirect() {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
+    <Suspense fallback={null}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
 
-      <Route element={<ProtectedRoute roles={['driver']} />}>
-        <Route element={<DriverLayout />}>
-          <Route path="/driver" element={<DriverTodayPage />} />
-          <Route path="/driver/trips" element={<DriverTripsPage />} />
-          <Route path="/driver/week" element={<DriverWeekPage />} />
-          <Route path="/driver/pay" element={<DriverPayPage />} />
+        <Route element={<ProtectedRoute roles={['driver']} />}>
+          <Route element={<DriverLayout />}>
+            <Route path="/driver" element={<DriverTodayPage />} />
+            <Route path="/driver/trips" element={<DriverTripsPage />} />
+            <Route path="/driver/week" element={<DriverWeekPage />} />
+            <Route path="/driver/pay" element={<DriverPayPage />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route element={<ProtectedRoute roles={['company_admin']} />}>
-        <Route element={<AdminLayout hubName="Dispatcher Hub" nav={COMPANY_NAV} />}>
-          <Route path="/company" element={<CompanyAdminDashboard />} />
-          <Route path="/company/drivers" element={<DriversPage />} />
-          <Route path="/company/vans" element={<VansPage />} />
-          <Route path="/company/assignments" element={<AssignmentsPage />} />
-          <Route path="/company/payroll" element={<PayrollPage />} />
-          <Route path="/company/students" element={<CompanyStudentsPage />} />
-          <Route path="/company/parents" element={<ParentsPage />} />
-          <Route path="/company/profile" element={<CompanyProfilePage />} />
+        <Route element={<ProtectedRoute roles={['company_admin']} />}>
+          <Route element={<AdminLayout hubName="Dispatcher Hub" nav={COMPANY_NAV} />}>
+            <Route path="/company" element={<CompanyAdminDashboard />} />
+            <Route path="/company/drivers" element={<DriversPage />} />
+            <Route path="/company/vans" element={<VansPage />} />
+            <Route path="/company/assignments" element={<AssignmentsPage />} />
+            <Route path="/company/payroll" element={<PayrollPage />} />
+            <Route path="/company/students" element={<CompanyStudentsPage />} />
+            <Route path="/company/parents" element={<ParentsPage />} />
+            <Route path="/company/profile" element={<CompanyProfilePage />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route element={<ProtectedRoute roles={['school_admin']} />}>
-        <Route element={<AdminLayout hubName="School Hub" nav={SCHOOL_ADMIN_NAV} />}>
-          <Route path="/school-admin" element={<StudentsPage />} />
-          <Route path="/school-admin/pickup" element={<SchoolStaffDashboard />} />
-          <Route path="/school-admin/staff" element={<StaffAccessPage />} />
-          <Route path="/school-admin/profile" element={<SchoolProfilePage />} />
+        <Route element={<ProtectedRoute roles={['school_admin']} />}>
+          <Route element={<AdminLayout hubName="School Hub" nav={SCHOOL_ADMIN_NAV} />}>
+            <Route path="/school-admin" element={<StudentsPage />} />
+            <Route path="/school-admin/pickup" element={<SchoolStaffDashboard />} />
+            <Route path="/school-admin/staff" element={<StaffAccessPage />} />
+            <Route path="/school-admin/profile" element={<SchoolProfilePage />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route element={<ProtectedRoute roles={['school_staff']} />}>
-        <Route element={<AdminLayout hubName="School Hub" nav={SCHOOL_STAFF_NAV} />}>
-          <Route path="/school-staff" element={<SchoolStaffDashboard />} />
+        <Route element={<ProtectedRoute roles={['school_staff']} />}>
+          <Route element={<AdminLayout hubName="School Hub" nav={SCHOOL_STAFF_NAV} />}>
+            <Route path="/school-staff" element={<SchoolStaffDashboard />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route element={<ProtectedRoute roles={['parent']} />}>
-        <Route element={<ParentLayout />}>
-          <Route path="/parent" element={<ParentHomePage />} />
-          <Route path="/parent/profile" element={<ParentProfilePage />} />
+        <Route element={<ProtectedRoute roles={['parent']} />}>
+          <Route element={<ParentLayout />}>
+            <Route path="/parent" element={<ParentHomePage />} />
+            <Route path="/parent/profile" element={<ParentProfilePage />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route path="/" element={<RootRedirect />} />
-      <Route path="*" element={<RootRedirect />} />
-    </Routes>
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="*" element={<RootRedirect />} />
+      </Routes>
+    </Suspense>
   )
 }
 
