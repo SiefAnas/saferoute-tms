@@ -15,11 +15,11 @@
 const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
-const { requireOperable, requireRole } = require('../middleware/authorize');
+const { requireOperable, requireRole, denyRoles } = require('../middleware/authorize');
 const { HttpError } = require('../errors');
 
 const router = express.Router();
-router.use(authenticate, requireOperable, attachScopedDb);
+router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent'));
 const companyAdmin = requireRole('company_admin');
 
 function assertValidYear(year) {

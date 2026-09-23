@@ -2,11 +2,11 @@
 const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
-const { requireOperable } = require('../middleware/authorize');
+const { requireOperable, denyRoles } = require('../middleware/authorize');
 const { checkIn, checkOut, listSessions, getSession } = require('../services/sessions');
 
 const router = express.Router();
-router.use(authenticate, requireOperable, attachScopedDb);
+router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent'));
 
 router.post('/checkin', async (req, res, next) => {
   try { res.status(201).json(await checkIn(req, req.body || {})); } catch (e) { next(e); }
