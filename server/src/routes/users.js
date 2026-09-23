@@ -3,7 +3,7 @@ const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
-const { createUser, listUsers, getUser, updateUser } = require('../services/users');
+const { createUser, listUsers, getUser, updateUser, adminResetPassword } = require('../services/users');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
@@ -21,6 +21,11 @@ router.get('/:id', adminsOnly, async (req, res, next) => {
 });
 router.patch('/:id', adminsOnly, async (req, res, next) => {
   try { res.json(await updateUser(req, req.params.id, req.body || {})); } catch (e) { next(e); }
+});
+
+// Give the user a new temporary password (shown once). See services/users.js adminResetPassword.
+router.post('/:id/reset-password', adminsOnly, async (req, res, next) => {
+  try { res.json(await adminResetPassword(req, req.params.id)); } catch (e) { next(e); }
 });
 
 module.exports = router;

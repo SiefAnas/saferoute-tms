@@ -55,4 +55,17 @@ function runMigrateUp({ silent = true } = {}) {
   execSync('npm run migrate:up', { cwd: SERVER_DIR, stdio: silent ? 'ignore' : 'inherit' });
 }
 
-module.exports = { createRecorder, startEmbeddedPostgres, runMigrateUp, SERVER_DIR };
+// Accounts made through POST /users get a generated temporary password and must set their own
+// before using the app (auth-accounts). Logs in with the temp password and sets `newPassword`,
+// so a suite can then log in normally. Returns the change-password response body.
+async function activateAccount(base, email, temporaryPassword, newPassword) {
+  const post = (p, token, body) => fetch(base + p, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  }).then((r) => r.json());
+  const { token } = await post('/auth/login', null, { email, password: temporaryPassword });
+  return post('/auth/change-password', token, { currentPassword: temporaryPassword, newPassword });
+}
+
+module.exports = { createRecorder, startEmbeddedPostgres, runMigrateUp, activateAccount, SERVER_DIR };

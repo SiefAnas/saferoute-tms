@@ -25,6 +25,19 @@ async function api(method, path, token, body) {
   try { data = await r.json() } catch {}
   return { status: r.status, body: data }
 }
+// Accounts made with POST /users get a temporary password and must set their own first
+// (auth-accounts). Checks that, then sets PW so the rest of the script can log in normally.
+async function activate(email, created) {
+  const temp = created.body?.temporary_password
+  check(Boolean(temp) && created.body?.must_change_password === true, `${email}: temporary password returned, change required`, created.body)
+  const first = await login(email, temp)
+  check(first.user.must_change_password === true, `${email}: first login says must change password`)
+  const blocked = await api('GET', '/auth/me', first.token)
+  check(blocked.status === 200, `${email}: /auth/me allowed before the change`, blocked)
+  const changed = await api('POST', '/auth/change-password', first.token, { currentPassword: temp, newPassword: PW })
+  check(changed.status === 200, `${email}: set own password -> 200`, changed)
+}
+
 async function login(email, password = PW) {
   const r = await api('POST', '/auth/login', null, { email, password })
   if (r.status !== 200) throw new Error(`login ${email} -> ${r.status} ${JSON.stringify(r.body)}`)
@@ -63,9 +76,10 @@ async function main() {
   if (ph.body?.id) created.push(`school placeholder "${ph.body.name}" (${ph.body.id})`)
 
   const drvEmail = `mvp-driver-${stamp}@example.test`
-  const drv = await api('POST', '/users', A, { role: 'driver', fullName: `MVP Test Driver ${stamp}`, email: drvEmail, phone: '555-0100', address: '1 Test St', licenseNumber: 'T123', password: PW })
+  const drv = await api('POST', '/users', A, { role: 'driver', fullName: `MVP Test Driver ${stamp}`, email: drvEmail, phone: '555-0100', address: '1 Test St', licenseNumber: 'T123' })
   check(drv.status === 201, 'create driver -> 201', drv)
   created.push(`driver ${drvEmail} (${drv.body?.id})`)
+  await activate(drvEmail, drv)
 
   const van = await api('POST', '/vans', A, { number: `T${stamp.slice(-3)}`, license_plate: `MVP-${stamp}`, brand: 'Ford', model: 'Transit', year: 2022, color: 'White' })
   check(van.status === 201 && van.body.number === `T${stamp.slice(-3)}`, 'create van with number -> 201, number returned', van)
@@ -120,9 +134,10 @@ async function main() {
     return r.body
   }
   const drv2Email = `mvp-driver2-${stamp}@example.test`
-  const drv2 = await api('POST', '/users', A, { role: 'driver', fullName: `MVP Test Driver Two ${stamp}`, email: drv2Email, phone: '555-0110', address: '1 Test St', licenseNumber: 'T124', password: PW })
+  const drv2 = await api('POST', '/users', A, { role: 'driver', fullName: `MVP Test Driver Two ${stamp}`, email: drv2Email, phone: '555-0110', address: '1 Test St', licenseNumber: 'T124' })
   check(drv2.status === 201, 'create second driver -> 201', drv2)
   created.push(`driver ${drv2Email} (${drv2.body?.id})`)
+  await activate(drv2Email, drv2)
   const van2 = await api('POST', '/vans', A, { license_plate: `MVP2-${stamp}`, brand: 'Ford', model: 'Transit', year: 2022, color: 'White' })
   check(van2.status === 201, 'create second van -> 201', van2)
   created.push(`van MVP2-${stamp} (${van2.body?.id})`)
@@ -158,9 +173,10 @@ async function main() {
 
   console.log('\n--- Parent ---')
   const parEmail = `mvp-parent-${stamp}@example.test`
-  const par = await api('POST', '/users', A, { role: 'parent', fullName: `MVP Test Parent ${stamp}`, email: parEmail, phone: '555-0101', address: '2 Test St', password: PW })
+  const par = await api('POST', '/users', A, { role: 'parent', fullName: `MVP Test Parent ${stamp}`, email: parEmail, phone: '555-0101', address: '2 Test St' })
   check(par.status === 201, 'create parent -> 201', par)
   created.push(`parent ${parEmail} (${par.body?.id})`)
+  await activate(parEmail, par)
   const link = await api('POST', '/parent-access', A, { parent_user_id: par.body.id, student_id: stu.body.id })
   check(link.status === 201, 'link parent to student', link)
   const P = (await login(parEmail)).token
@@ -184,9 +200,10 @@ async function main() {
   const conf = await api('POST', `/trips/${trip.body.id}/confirm`, SA)
   check(conf.status === 200 && conf.body.status === 'complete', 'school admin confirms the trip -> complete', conf)
   const stEmail = `mvp-staff-${stamp}@example.test`
-  const stCreate = await api('POST', '/users', SA, { role: 'school_staff', fullName: `MVP Test Staff ${stamp}`, email: stEmail, password: PW })
+  const stCreate = await api('POST', '/users', SA, { role: 'school_staff', fullName: `MVP Test Staff ${stamp}`, email: stEmail })
   check(stCreate.status === 201, 'school admin creates a staff account', stCreate)
   created.push(`school staff ${stEmail}`)
+  await activate(stEmail, stCreate)
   const ST = (await login(stEmail)).token
   const stStudents = await api('GET', '/students', ST)
   check(stStudents.status === 200 && !stStudents.body.some((s) => s.id === stu.body.id), 'school staff does NOT see an ungranted student', stStudents.body?.map((s) => s.full_name))

@@ -11,7 +11,7 @@ process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/
 process.env.JWT_SECRET = 'test-secret-09';
 process.env.NODE_ENV = 'test';
 
-const { createRecorder, startEmbeddedPostgres, runMigrateUp } = require('./lib/testkit.cjs');
+const { createRecorder, startEmbeddedPostgres, runMigrateUp, activateAccount } = require('./lib/testkit.cjs');
 const createApp = require('../src/app.js');
 const pool = require('../src/db/pool.js');
 const { hashPassword } = require('../src/auth/password.js');
@@ -98,6 +98,7 @@ async function main() {
         ? ok('company_admin creates parent account (email_verified stamped)')
         : bad(`parent create: ${mkParent.status} ${JSON.stringify(mkParent.body)}`);
       const parentId = mkParent.body.id;
+      await activateAccount(BASE, 'parent1@co.com', mkParent.body.temporary_password, PW);
       eq('created_by_user_id stamped to creating admin', mkParent.body.created_by_user_id, a1.user.id);
       eq(
         'company_admin creating a school_staff -> 403 (still cross-side gated)',
@@ -119,13 +120,10 @@ async function main() {
       (emailEdit.status === 200 && emailEdit.body.email === 'driverx-new@co.com')
         ? ok('creator can edit the account they created\'s email')
         : bad(`email edit: ${emailEdit.status} ${JSON.stringify(emailEdit.body)}`);
+      // auth-accounts: admins no longer set passwords through PATCH; they use
+      // POST /users/:id/reset-password (a temporary password, covered by suite 20).
       const pwEdit = await api('PATCH', `/users/${driverXId}`, tA1, { password: 'NewSecret456!' });
-      eq('creator can edit the account they created\'s password -> 200', pwEdit.status, 200);
-      const loginOldPw = await login('driverx-new@co.com', PW);
-      const loginNewPw = await login('driverx-new@co.com', 'NewSecret456!');
-      (!loginOldPw.token && loginNewPw.token)
-        ? ok('password change took effect (old rejected, new accepted)')
-        : bad('password change did not take effect correctly');
+      eq('PATCH with a password -> 400 (use reset-password)', pwEdit.status, 400);
 
       eq(
         'grandfathered (created_by_user_id NULL) row editable by any same-tenant admin',
