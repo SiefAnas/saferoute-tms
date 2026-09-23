@@ -252,7 +252,7 @@ export function CompanyAdminDashboard() {
             {/* Placeholder: a real map needs a map provider (not set up). Check-in GPS is already
                 stored on sessions, so pins can come from there once one is chosen. */}
             <div className="flex flex-1 items-center justify-center bg-[repeating-linear-gradient(135deg,var(--color-table-head)_0_12px,var(--color-bg)_12px_24px)] p-6">
-              <div className="flex w-full max-w-sm flex-col items-center gap-2 rounded-m bg-surface px-5 py-4 text-center shadow-card">
+              <div className="flex w-full max-w-[24rem] flex-col items-center gap-2 rounded-m bg-surface px-5 py-4 text-center shadow-card">
                 <IconTile icon="map" tone="neutral" />
                 <span className="text-[14px] font-semibold text-ink">Map coming later</span>
                 <span className="text-[12px] text-muted">

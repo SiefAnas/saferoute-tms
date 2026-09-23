@@ -274,7 +274,7 @@ export function NoMatches({ q, hint, onClear }: { q: string; hint: string; onCle
         <span className="material-symbols-outlined !text-[24px]">search_off</span>
       </span>
       <p className="text-[15px] font-semibold text-ink">No matches for &ldquo;{q}&rdquo;</p>
-      <p className="max-w-sm text-[13px] text-muted">{hint}</p>
+      <p className="max-w-[24rem] text-[13px] text-muted">{hint}</p>
       <button
         type="button"
         onClick={onClear}

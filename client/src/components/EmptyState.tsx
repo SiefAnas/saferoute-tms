@@ -43,7 +43,7 @@ export function EmptyState({
     <div className={`flex flex-col items-center gap-3 px-6 py-9 text-center ${className}`}>
       <IconTile icon={icon} tone={tone} size={48} />
       <p className="text-[15px] font-semibold text-ink">{title}</p>
-      {body && <p className="max-w-sm text-[13px] leading-normal text-pretty text-muted">{body}</p>}
+      {body && <p className="max-w-[24rem] text-[13px] leading-normal text-pretty text-muted">{body}</p>}
       {action}
     </div>
   )
