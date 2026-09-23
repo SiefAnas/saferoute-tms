@@ -351,7 +351,7 @@ export function DriverDashboard() {
                             </button>
                           ))}
                           <Button
-                            variant="secondary"
+                            variant="primary"
                             className="h-10 px-4 text-label-md"
                             disabled={!openSession || logTrip.isPending || alreadyLogged}
                             onClick={() => logTrip.mutate({ studentId: item.student.id, tripType: type, shiftPeriod: period })}
@@ -420,7 +420,7 @@ export function DriverDashboard() {
                   {trip.status === 'complete' ? (
                     <StatusBadge tone="success" label={trip.auto_completed ? 'Auto-completed' : 'Complete'} />
                   ) : (
-                    <StatusBadge tone="active" label="Awaiting staff confirmation" pulse />
+                    <StatusBadge tone="caution" label="Awaiting staff confirmation" />
                   )}
                 </div>
               </Card>
@@ -517,7 +517,7 @@ function ShiftCard({
       <div className="flex items-center justify-between">
         <h2 className="text-title-lg text-on-surface">{label}</h2>
         {session ? (
-          <StatusBadge tone="success" label="Checked In" pulse />
+          <StatusBadge tone="success" label="Checked In" />
         ) : (
           <StatusBadge tone="neutral" label={ended ? 'Shift Ended' : 'Checked Out'} />
         )}

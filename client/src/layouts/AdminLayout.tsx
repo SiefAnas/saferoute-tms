@@ -63,7 +63,7 @@ export function AdminLayout({
 
       {mobileNavOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileNavOpen(false)} />
+          <div className="absolute inset-0 bg-scrim" onClick={() => setMobileNavOpen(false)} />
           <aside className="relative flex h-full w-64 flex-col gap-2 overflow-y-auto bg-surface-container-low px-4 py-6 shadow-lg">
             <div className="mb-6 flex items-center justify-between px-2">
               <div>

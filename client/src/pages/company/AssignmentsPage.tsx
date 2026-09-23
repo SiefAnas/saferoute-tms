@@ -331,7 +331,7 @@ export function AssignmentsPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button type="submit" variant="secondary" disabled={createAssignment.isPending} className="flex-1">
+              <Button type="submit" variant="primary" disabled={createAssignment.isPending} className="flex-1">
                 {createAssignment.isPending ? 'Creating…' : 'Create Assignment'}
               </Button>
               <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>

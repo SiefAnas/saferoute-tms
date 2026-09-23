@@ -299,7 +299,7 @@ export function VansPage() {
               reflects whichever assignment is active today, it isn't set here.
             </p>
             <div className="flex gap-2">
-              <Button type="submit" variant="secondary" disabled={saving} className="flex-1">
+              <Button type="submit" variant="primary" disabled={saving} className="flex-1">
                 {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Van'}
               </Button>
               <Button type="button" variant="outline" onClick={resetForm}>

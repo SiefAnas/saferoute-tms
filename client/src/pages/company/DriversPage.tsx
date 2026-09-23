@@ -194,7 +194,7 @@ export function DriversPage() {
                       </td>
                       <td className="px-6 py-3">
                         {open ? (
-                          <StatusBadge tone="success" label="Checked In" pulse />
+                          <StatusBadge tone="success" label="Checked In" />
                         ) : (
                           <StatusBadge tone="neutral" label="Checked Out" />
                         )}
@@ -204,7 +204,7 @@ export function DriversPage() {
                         {driver.is_active ? (
                           <StatusBadge tone="success" label="Active" />
                         ) : (
-                          <StatusBadge tone="error" label="Deactivated" />
+                          <StatusBadge tone="alert" label="Deactivated" />
                         )}
                       </td>
                       <td className="px-6 py-3">
@@ -282,7 +282,7 @@ export function DriversPage() {
               <PasswordStrengthMeter password={driverPassword} />
             </div>
             <div className="flex gap-2">
-              <Button type="submit" variant="secondary" disabled={addDriver.isPending} className="flex-1">
+              <Button type="submit" variant="primary" disabled={addDriver.isPending} className="flex-1">
                 {addDriver.isPending ? 'Creating…' : 'Add Driver'}
               </Button>
               <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>

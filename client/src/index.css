@@ -1,100 +1,128 @@
 @import 'tailwindcss';
 
 /*
- * Design tokens ported verbatim from design-reference/DESIGN.md (the "Road & Logistics"
- * Stitch design system) into Tailwind v4's CSS-first @theme, so `bg-primary-container`,
- * `text-on-surface-variant`, `rounded-xl`, `p-md`, etc. all resolve to the exact tracked
- * values instead of Tailwind's stock palette.
+ * Design tokens: the one source of truth for color, shadow and type in this app.
  *
- * Note: DESIGN.md's YAML frontmatter is used as the source of truth for radius values —
- * it disagrees slightly with the inline JS config baked into the Stitch code.html mockups
- * (e.g. "full" is 9999px here vs 0.75rem there), and DESIGN.md is the explicitly-designated
- * design-system doc while the mockups are markup/styling reference.
+ * Values come from the approved "SafeRoute refresh" handoff
+ * (design-reference/design_handoff_saferoute_refresh/README.md, designs 3a / 3b / 4a / 5a / 5b).
+ *
+ * How theming works:
+ *   - Every color is a CSS variable Tailwind reads through @theme, so `bg-card`, `text-muted`,
+ *     `border-line` etc. resolve to the variable, not a baked-in hex.
+ *   - Light values live in @theme. Dark values override the SAME variables under
+ *     `[data-theme='dark']` on <html> (set by lib/theme.ts), so no page ever needs a `dark:` class.
+ *   - The web (admin) and mobile (driver/parent) designs use different light palettes for the same
+ *     roles (e.g. mobile's primary action is near-black, web's is amber). The mobile shells put
+ *     `.mobile-app` on their root, which re-points the shared semantic roles at the mobile palette.
+ *     Shared components (Button, StatusBadge, Card, EmptyState) then look right in both without
+ *     knowing which app they're in.
  */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 @theme {
-  --color-surface: #f7f9fb;
-  --color-surface-dim: #d8dadc;
-  --color-surface-bright: #f7f9fb;
-  --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f2f4f6;
-  --color-surface-container: #eceef0;
-  --color-surface-container-high: #e6e8ea;
-  --color-surface-container-highest: #e0e3e5;
-  --color-on-surface: #191c1e;
-  --color-on-surface-variant: #534434;
-  --color-inverse-surface: #2d3133;
-  --color-inverse-on-surface: #eff1f3;
-  --color-outline: #867461;
-  --color-outline-variant: #d8c3ad;
-  --color-surface-tint: #855300;
-  --color-primary: #855300;
-  --color-on-primary: #ffffff;
-  --color-primary-container: #f59e0b;
-  --color-on-primary-container: #613b00;
-  --color-inverse-primary: #ffb95f;
-  --color-secondary: #545f73;
-  --color-on-secondary: #ffffff;
-  --color-secondary-container: #d5e0f8;
-  --color-on-secondary-container: #586377;
-  --color-tertiary: #565e74;
-  --color-on-tertiary: #ffffff;
-  --color-tertiary-container: #a9b0c9;
-  --color-on-tertiary-container: #3b4358;
-  --color-error: #ba1a1a;
-  --color-on-error: #ffffff;
-  --color-error-container: #ffdad6;
-  --color-on-error-container: #93000a;
-  --color-primary-fixed: #ffddb8;
-  --color-primary-fixed-dim: #ffb95f;
-  --color-on-primary-fixed: #2a1700;
-  --color-on-primary-fixed-variant: #653e00;
-  --color-secondary-fixed: #d8e3fb;
-  --color-secondary-fixed-dim: #bcc7de;
-  --color-on-secondary-fixed: #111c2d;
-  --color-on-secondary-fixed-variant: #3c475a;
-  --color-tertiary-fixed: #dae2fd;
-  --color-tertiary-fixed-dim: #bec6e0;
-  --color-on-tertiary-fixed: #131b2e;
-  --color-on-tertiary-fixed-variant: #3f465c;
-  --color-background: #f7f9fb;
-  --color-on-background: #191c1e;
-  --color-surface-variant: #e0e3e5;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Public Sans', 'Inter', ui-sans-serif, sans-serif;
 
-  /*
-   * Semantic status roles (overnight task: a real status-color system, extending this same
-   * @theme rather than a parallel one). Four roles, each with the same container/on-container
-   * pairing the rest of this file already uses:
-   *   success — done/safe/checked-in.  Was missing entirely; StatusBadge previously hardcoded
-   *             raw Tailwind emerald-500/700/50 for this instead of a real token, exactly the
-   *             "default Tailwind color, not a design decision" problem this task exists to fix.
-   *   warning — active/in-progress/caution. Aliases the existing primary (amber) role rather
-   *             than introducing a second amber, since "active" already meant this. Named
-   *             separately so call sites can reach for "this is a caution state" instead of
-   *             "this is the brand primary" — those two meanings currently share one color,
-   *             which is a real hierarchy problem (a "warning" indicator now looks identical
-   *             to the primary call-to-action button); worth a dedicated pass later, not
-   *             tonight's scope.
-   *   danger  — alert/error/deactivated. Aliases the existing error role (already a real red).
-   *   neutral — done-but-unremarkable/inactive. Aliases the existing on-surface-variant/
-   *             surface-container-high pairing (already real greys, not Tailwind defaults).
-   */
-  --color-success: #0f6e3d;
-  --color-on-success: #ffffff;
-  --color-success-container: #d7f2df;
-  --color-on-success-container: #0a4527;
-  --color-warning: var(--color-primary);
-  --color-on-warning: var(--color-on-primary);
-  --color-warning-container: var(--color-primary-container);
-  --color-on-warning-container: var(--color-on-primary-container);
-  --color-danger: var(--color-error);
-  --color-on-danger: var(--color-on-error);
-  --color-danger-container: var(--color-error-container);
-  --color-on-danger-container: var(--color-on-error-container);
-  --color-neutral: var(--color-on-surface-variant);
-  --color-neutral-container: var(--color-surface-container-high);
-  --color-on-neutral-container: var(--color-on-surface-variant);
+  /* ---- Shared semantic roles (web 3b values; .mobile-app re-points them) ---- */
+  --color-bg: #f2f4f6; /* page background */
+  --color-surface: #ffffff; /* cards, bars, sheets, drawers */
+  --color-surface-2: #eceef0; /* avatars, count chips, tinted boxes */
+  --color-line: #e0e3e5; /* borders */
+  --color-divider: #eceef0; /* hairline row dividers */
+  --color-outline: #c9ced6; /* outline-button border */
+  --color-outline-bg: #ffffff; /* outline-button fill */
+  --color-ink: #191c1e; /* body text */
+  --color-ink-sub: #3c475a; /* secondary figures in tables */
+  --color-muted: #545f73;
+  --color-faint: #8b97a8;
+  --color-action: #f59e0b; /* the ONE primary action per screen */
+  --color-action-hover: #f3a724;
+  --color-on-action: #2a1700;
+  --color-danger-ink: #93000a; /* No-show / destructive text on an outline button */
+  --color-scrim: rgba(16, 21, 28, 0.35);
+  --color-progress: #f59e0b;
+  --color-track: #eceef0;
+  --color-avatar: #eceef0;
+  --color-on-avatar: #545f73;
 
-  /* 8px linear rhythm (DESIGN.md "Layout & Spacing") */
+  /* Amber is the same in both themes. */
+  --color-amber: #f59e0b;
+  --color-amber-hover: #f3a724;
+  --color-on-amber: #2a1700;
+  --color-amber-soft: #ffb95f; /* hero figures on slate */
+
+  /* Status pills: success / caution / alert / info / neutral / next */
+  --color-success-bg: #e0f5ea;
+  --color-success-fg: #0b6b45;
+  --color-caution-bg: #ffddb8;
+  --color-caution-fg: #653e00;
+  --color-alert-bg: #ffdad6;
+  --color-alert-fg: #93000a;
+  --color-info-bg: #dae2fd;
+  --color-info-fg: #3f465c;
+  --color-neutral-bg: #eceef0;
+  --color-neutral-fg: #545f73;
+  --color-next-bg: #f59e0b;
+  --color-next-fg: #2a1700;
+
+  /* ---- Web shell only (3b) ---- */
+  --color-sidebar: #1e2632;
+  --color-sidebar-line: #2f3a48;
+  --color-sidebar-ink: #d5dbe4;
+  --color-sidebar-icon: #8b97a8;
+  --color-sidebar-label: #6f7b8c;
+  --color-sidebar-chip: #323c4a;
+  --color-topbar: #ffffff;
+  --color-table-head: #f7f9fb;
+  --color-hero: #1e2632; /* live-status panels: slate with amber figures */
+  --color-hero-ink: #ffffff;
+  --color-hero-muted: #aab4c3;
+  --color-hero-sub: #d5dbe4;
+  --color-drawer-head: #1e2632;
+  --color-row-selected: #fff8ef;
+  --color-row-hover: rgba(245, 158, 11, 0.07);
+  --color-empty: #f7f9fb;
+  --color-toast: #1e2632;
+  --color-toast-icon: #6ee7b7;
+
+  /* ---- Mobile only (3a / 5b) ---- */
+  --color-seg-track: #efeff1;
+  --color-seg-on: #ffffff;
+  --color-tab-on: #111318;
+  --color-tab-off: #8a8f98;
+  --color-note-bg: #fffaeb;
+  --color-note-fg: #7a2e0e;
+  --color-note-icon: #b54708;
+  --color-call-bg: #111318;
+  --color-on-call: #ffffff;
+  --color-cal-worked: #111318;
+  --color-on-cal-worked: #ffffff;
+  --color-cal-today: #f59e0b;
+  --color-on-cal-today: #111318;
+  --color-cal-off: #b0b4ba;
+
+  /* Elevation. Tailwind copies shadow values into the utility, so the real values live in the
+     --elev-* variables below (which dark mode and .mobile-app override) and these point at them. */
+  --shadow-card: var(--elev-card);
+  --shadow-hero: var(--elev-hero);
+  --shadow-drawer: var(--elev-drawer);
+  --shadow-sheet: var(--elev-sheet);
+  --shadow-seg: var(--elev-seg);
+  --shadow-toast: var(--elev-toast);
+  --shadow-action: var(--elev-action);
+
+  /* Card chrome: web cards float on a shadow with no border; mobile cards get a hairline border. */
+  --color-card-line: transparent;
+
+  /* Radii: web cards 14 / buttons 9 / row buttons 8 / pills 12; mobile cards+buttons 10 / sheets 20 */
+  --radius-card: 14px;
+  --radius-btn: 9px;
+  --radius-row: 8px;
+  --radius-pill: 12px;
+  --radius-m: 10px;
+  --radius-sheet: 20px;
+
+  /* 8px linear rhythm */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
@@ -102,12 +130,241 @@
   --spacing-xl: 48px;
   --spacing-gutter: 20px;
 
-  /* Shape language: 4px standard, 8px large containers, full pills */
+  /*
+   * Legacy role names from the first ("Road & Logistics" Stitch) design system. Pages that have
+   * not been moved to the new roles above still use these, so they are re-pointed at the new
+   * palette (and follow dark mode) instead of keeping the old brown/tan values.
+   */
+  --color-background: var(--color-bg);
+  --color-on-background: var(--color-ink);
+  --color-surface-bright: var(--color-table-head);
+  --color-surface-dim: var(--color-line);
+  --color-surface-container-lowest: var(--color-surface);
+  --color-surface-container-low: var(--color-table-head);
+  --color-surface-container: var(--color-surface-2);
+  --color-surface-container-high: var(--color-line);
+  --color-surface-container-highest: var(--color-line);
+  --color-surface-variant: var(--color-line);
+  --color-on-surface: var(--color-ink);
+  --color-on-surface-variant: var(--color-muted);
+  --color-outline-variant: var(--color-line);
+  --color-inverse-surface: #2d3133;
+  --color-inverse-on-surface: #eff1f3;
+  --color-surface-tint: #855300;
+  --color-primary: #855300;
+  --color-on-primary: #ffffff;
+  --color-primary-container: var(--color-amber);
+  --color-on-primary-container: var(--color-on-amber);
+  --color-inverse-primary: #ffb95f;
+  --color-secondary: var(--color-muted);
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: var(--color-info-bg);
+  --color-on-secondary-container: var(--color-info-fg);
+  --color-tertiary: #565e74;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #a9b0c9;
+  --color-on-tertiary-container: #3b4358;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: var(--color-alert-bg);
+  --color-on-error-container: var(--color-alert-fg);
+  --color-primary-fixed: var(--color-caution-bg);
+  --color-primary-fixed-dim: #ffb95f;
+  --color-on-primary-fixed: var(--color-on-amber);
+  --color-on-primary-fixed-variant: var(--color-caution-fg);
+  --color-secondary-fixed: #d8e3fb;
+  --color-secondary-fixed-dim: #bcc7de;
+  --color-on-secondary-fixed: #111c2d;
+  --color-on-secondary-fixed-variant: var(--color-ink-sub);
+  --color-tertiary-fixed: var(--color-info-bg);
+  --color-tertiary-fixed-dim: #bec6e0;
+  --color-on-tertiary-fixed: #131b2e;
+  --color-on-tertiary-fixed-variant: var(--color-info-fg);
+  --color-success: var(--color-success-fg);
+  --color-on-success: #ffffff;
+  --color-success-container: var(--color-success-bg);
+  --color-on-success-container: var(--color-success-fg);
+  --color-warning: var(--color-caution-fg);
+  --color-on-warning: #ffffff;
+  --color-warning-container: var(--color-caution-bg);
+  --color-on-warning-container: var(--color-caution-fg);
+  --color-danger: var(--color-error);
+  --color-on-danger: var(--color-on-error);
+  --color-danger-container: var(--color-alert-bg);
+  --color-on-danger-container: var(--color-alert-fg);
+  --color-neutral: var(--color-muted);
+  --color-neutral-container: var(--color-neutral-bg);
+  --color-on-neutral-container: var(--color-neutral-fg);
+
+  /* Legacy radii (kept: existing pages use rounded-lg / rounded-xl) */
   --radius-sm: 0.125rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
   --radius-full: 9999px;
+}
+
+/* Elevation values (see the --shadow-* note in @theme). */
+:root {
+  --elev-card: 0 1px 2px rgba(25, 28, 30, 0.06), 0 4px 12px rgba(25, 28, 30, 0.04);
+  --elev-hero: 0 8px 24px -10px rgba(16, 21, 28, 0.5);
+  --elev-drawer: -24px 0 60px -12px rgba(16, 21, 28, 0.4);
+  --elev-sheet: 0 -12px 40px rgba(16, 24, 40, 0.18);
+  --elev-seg: 0 1px 2px rgba(16, 24, 40, 0.12);
+  --elev-toast: 0 16px 40px -10px rgba(16, 21, 28, 0.5);
+  --elev-action: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 3px rgba(133, 83, 0, 0.3);
+}
+
+/* ---- Dark theme (web 3b dark) ---- */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #141a22;
+  --color-surface: #1e2632;
+  --color-surface-2: #273140;
+  --color-line: #2f3a48;
+  --color-divider: #2a3441;
+  --color-outline: #3a4656;
+  --color-outline-bg: #1e2632;
+  --color-ink: #eef1f5;
+  --color-ink-sub: #d5dbe4;
+  --color-muted: #aab4c3;
+  --color-faint: #6f7b8c;
+  --color-danger-ink: #ff9b91;
+  --color-scrim: rgba(0, 0, 0, 0.55);
+  --color-track: #2f3a48;
+  --color-avatar: #273140;
+  --color-on-avatar: #d5dbe4;
+
+  --color-success-bg: #123d2e;
+  --color-success-fg: #6ee7b7;
+  --color-caution-bg: #3d2a0a;
+  --color-caution-fg: #ffb95f;
+  --color-alert-bg: #3f1716;
+  --color-alert-fg: #ff9b91;
+  --color-info-bg: #1f2a4a;
+  --color-info-fg: #a9b8f5;
+  --color-neutral-bg: #273140;
+  --color-neutral-fg: #aab4c3;
+
+  --color-sidebar: #0f141b;
+  --color-sidebar-line: #222b37;
+  --color-topbar: #1a212b;
+  --color-table-head: #232c38;
+  --color-hero: #273140;
+  --color-drawer-head: #0f141b;
+  --color-row-selected: #2a2418;
+  --color-empty: #273140;
+  --color-toast: #273140;
+
+  --elev-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --elev-hero: 0 8px 24px -10px rgba(0, 0, 0, 0.6);
+
+  /* Legacy names whose light value wasn't already a new role */
+  --color-primary: #ffb95f;
+  --color-on-primary: #2a1700;
+  --color-error: #ff9b91;
+  --color-on-error: #3f1716;
+  --color-inverse-surface: #eef1f5;
+  --color-inverse-on-surface: #141a22;
+}
+
+/* ---- Mobile shells (driver 3a, parent 5b): light ---- */
+.mobile-app {
+  --color-bg: #fafafa;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f4f6;
+  --color-line: #e8e8ea;
+  --color-divider: #f0f0f2;
+  --color-outline: #e0e0e3;
+  --color-outline-bg: #ffffff;
+  --color-ink: #111318;
+  --color-muted: #6b6f76;
+  --color-faint: #9aa0a6;
+  --color-action: #111318;
+  --color-action-hover: #2a2d33;
+  --color-on-action: #ffffff;
+  --color-danger-ink: #b42318;
+  --color-scrim: rgba(17, 19, 24, 0.38);
+  --color-progress: #111318;
+  --color-track: #ececef;
+  --color-avatar: #f4f4f6;
+  --color-on-avatar: #111318;
+  --elev-action: none;
+  --elev-card: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --color-card-line: #e8e8ea;
+  --radius-card: 10px;
+
+  --color-success-bg: #ecfdf3;
+  --color-success-fg: #067647;
+  --color-caution-bg: #fffaeb;
+  --color-caution-fg: #b54708;
+  --color-alert-bg: #fef3f2;
+  --color-alert-fg: #b42318;
+  --color-info-bg: #eff8ff;
+  --color-info-fg: #175cd3;
+  --color-neutral-bg: #f2f4f7;
+  --color-neutral-fg: #475467;
+  --color-next-bg: #111318;
+  --color-next-fg: #ffffff;
+
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+}
+
+/* ---- Mobile shells: dark (slate + amber) ---- */
+:root[data-theme='dark'] .mobile-app {
+  --color-bg: #141a22;
+  --color-surface: #1e2632;
+  --color-surface-2: #273140;
+  --color-line: #2f3a48;
+  --color-divider: #2a3441;
+  --color-outline: #3a4656;
+  --color-outline-bg: #1e2632;
+  --color-ink: #eef1f5;
+  --color-muted: #aab4c3;
+  --color-faint: #6f7b8c;
+  --color-action: #f59e0b;
+  --color-action-hover: #f3a724;
+  --color-on-action: #2a1700;
+  --color-danger-ink: #ff9b91;
+  --color-scrim: rgba(0, 0, 0, 0.6);
+  --color-progress: #f59e0b;
+  --color-track: #2f3a48;
+  --color-avatar: #273140;
+  --color-on-avatar: #eef1f5;
+
+  --color-success-bg: #123d2e;
+  --color-success-fg: #6ee7b7;
+  --color-caution-bg: #3d2a0a;
+  --color-caution-fg: #ffb95f;
+  --color-alert-bg: #3f1716;
+  --color-alert-fg: #ff9b91;
+  --color-info-bg: #1f2a4a;
+  --color-info-fg: #a9b8f5;
+  --color-neutral-bg: #273140;
+  --color-neutral-fg: #aab4c3;
+  --color-next-bg: #f59e0b;
+  --color-next-fg: #2a1700;
+
+  --color-seg-track: #0f141b;
+  --color-seg-on: #273140;
+  --color-tab-on: #ffb95f;
+  --color-tab-off: #6f7b8c;
+  --color-note-bg: #3d2a0a;
+  --color-note-fg: #ffd9a6;
+  --color-note-icon: #ffb95f;
+  --color-call-bg: #f59e0b;
+  --color-on-call: #2a1700;
+  --color-cal-worked: #f59e0b;
+  --color-on-cal-worked: #2a1700;
+  --color-cal-today: #eef1f5;
+  --color-on-cal-today: #141a22;
+  --color-cal-off: #56616f;
+
+  --elev-sheet: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  --elev-seg: none;
+  --elev-card: none;
+  --color-card-line: #2f3a48;
 }
 
 @layer base {
@@ -118,9 +375,13 @@
   }
   body {
     margin: 0;
-    background-color: var(--color-background);
-    color: var(--color-on-surface);
+    font-family: var(--font-sans);
+    background-color: var(--color-bg);
+    color: var(--color-ink);
     -webkit-font-smoothing: antialiased;
+    transition:
+      background-color 0.25s,
+      color 0.25s;
   }
   .material-symbols-outlined {
     font-variation-settings:
@@ -133,68 +394,132 @@
   }
 }
 
+@layer utilities {
+  /* Times and money always line up in columns. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
 /*
- * Typography scale (DESIGN.md "Typography"). Hand-written utility classes rather than
- * Tailwind v4's newer nested --text-*--line-height theme keys, so the exact family/size/
- * weight/leading/tracking combination from the design system is guaranteed regardless of
- * Tailwind version behavior.
+ * Typography scale. The first block is the refresh's named styles; the older DESIGN.md
+ * classes below stay for pages that still use them.
  */
 @layer components {
+  .text-page-title {
+    font-family: var(--font-display);
+    font-size: 22px;
+    line-height: 28px;
+    font-weight: 700;
+  }
+  .text-card-title {
+    font-family: var(--font-display);
+    font-size: 16px;
+    line-height: 22px;
+    font-weight: 700;
+  }
+  .text-hero-figure {
+    font-family: var(--font-display);
+    font-size: 32px;
+    line-height: 38px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .text-stat-figure {
+    font-family: var(--font-display);
+    font-size: 28px;
+    line-height: 34px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .text-group-label {
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase; /* the only uppercase the refresh allows */
+  }
+  .text-m-greeting {
+    font-size: 24px;
+    line-height: 30px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .text-m-section {
+    font-size: 17px;
+    line-height: 24px;
+    font-weight: 600;
+  }
+
   .text-display-lg {
-    font-family: 'Public Sans', sans-serif;
+    font-family: var(--font-display);
     font-size: 48px;
     line-height: 56px;
     font-weight: 700;
     letter-spacing: -0.02em;
   }
   .text-headline-lg {
-    font-family: 'Public Sans', sans-serif;
+    font-family: var(--font-display);
     font-size: 32px;
     line-height: 40px;
     font-weight: 600;
   }
   .text-headline-lg-mobile {
-    font-family: 'Public Sans', sans-serif;
+    font-family: var(--font-display);
     font-size: 24px;
     line-height: 32px;
     font-weight: 600;
   }
   .text-headline-md {
-    font-family: 'Public Sans', sans-serif;
+    font-family: var(--font-display);
     font-size: 24px;
     line-height: 32px;
     font-weight: 600;
   }
+  .text-headline-sm {
+    font-family: var(--font-display);
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 700;
+  }
   .text-title-lg {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans);
     font-size: 18px;
     line-height: 28px;
     font-weight: 600;
   }
+  .text-title-md {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 600;
+  }
   .text-body-lg {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans);
     font-size: 16px;
     line-height: 24px;
     font-weight: 400;
   }
   .text-body-md {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans);
     font-size: 14px;
     line-height: 20px;
     font-weight: 400;
   }
   .text-label-md {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans);
     font-size: 12px;
     line-height: 16px;
     font-weight: 600;
     letter-spacing: 0.05em;
   }
   .text-data-mono {
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans);
     font-size: 14px;
     line-height: 20px;
     font-weight: 500;
     letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
   }
 }

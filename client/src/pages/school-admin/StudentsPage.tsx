@@ -137,7 +137,7 @@ export function StudentsPage() {
             <Input required placeholder="Company name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
             <Input required placeholder="Address (street, city, state, zip)" value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} />
             <div className="flex gap-2">
-              <Button type="submit" variant="secondary" disabled={createCompany.isPending} className="flex-1">
+              <Button type="submit" variant="primary" disabled={createCompany.isPending} className="flex-1">
                 {createCompany.isPending ? 'Creating…' : 'Create Placeholder'}
               </Button>
               <Button type="button" variant="outline" onClick={() => setShowAddCompanyModal(false)}>

@@ -219,7 +219,7 @@ export function PayrollPage() {
               onChange={(e) => setRateDollars(e.target.value)}
             />
             <div className="flex gap-2">
-              <Button type="submit" variant="secondary" disabled={setRule.isPending} className="flex-1">
+              <Button type="submit" variant="primary" disabled={setRule.isPending} className="flex-1">
                 {setRule.isPending ? 'Saving…' : 'Save Rate'}
               </Button>
               <Button type="button" variant="outline" onClick={() => setShowRateModal(false)}>
@@ -264,7 +264,7 @@ export function PayrollPage() {
               className="h-14 w-full rounded-lg border border-outline bg-surface-container-lowest px-4 text-body-lg outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20"
             />
             <div className="flex gap-2">
-              <Button type="submit" variant="secondary" disabled={addAdjustment.isPending} className="flex-1">
+              <Button type="submit" variant="primary" disabled={addAdjustment.isPending} className="flex-1">
                 {addAdjustment.isPending ? 'Saving…' : 'Add Adjustment'}
               </Button>
               <Button type="button" variant="outline" onClick={() => setShowAdjModal(false)}>

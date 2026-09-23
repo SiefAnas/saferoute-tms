@@ -136,7 +136,7 @@ export function CompanyAdminDashboard() {
                   <tr key={driver.id} className="hover:bg-surface-container-low">
                     <td className="px-6 py-3 text-body-md font-medium">{driver.full_name}</td>
                     <td className="px-6 py-3">
-                      {open ? <StatusBadge tone="success" label="Checked In" pulse /> : <StatusBadge tone="neutral" label="Checked Out" />}
+                      {open ? <StatusBadge tone="success" label="Checked In" /> : <StatusBadge tone="neutral" label="Checked Out" />}
                     </td>
                     <td className="px-6 py-3 text-data-mono text-secondary">{formatDuration(minutesToday)}</td>
                     <td className="px-6 py-3 text-data-mono text-secondary">{plate ?? '-'}</td>

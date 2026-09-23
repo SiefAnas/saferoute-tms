@@ -375,13 +375,13 @@ function StudentAccessPanel({
             const { score, signals } = hasAccess ? { score: 0, signals: [] as string[] } : scoreParentMatch(s, parent)
             const isPossibleMatch = !hasAccess && score >= MATCH_THRESHOLD
             return (
-              <tr key={s.id} className={isPossibleMatch ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-surface-container-low'}>
+              <tr key={s.id} className={isPossibleMatch ? 'bg-row-selected hover:bg-row-hover' : 'hover:bg-surface-container-low'}>
                 <td className="px-6 py-3 text-body-md font-medium">
                   {s.full_name}
                   {isPossibleMatch && (
                     <span
                       title={signals.join('; ')}
-                      className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-label-md text-amber-700"
+                      className="ml-2 inline-flex items-center gap-1 rounded-full bg-caution-bg px-2 py-0.5 text-label-md text-caution-fg"
                     >
                       <span className="material-symbols-outlined !text-[14px]">person_search</span>
                       Possible match

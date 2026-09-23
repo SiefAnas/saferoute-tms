@@ -649,7 +649,7 @@ export function CompanyStudentsPage() {
             )}
 
             <div className="flex gap-2">
-              <Button type="submit" variant="secondary" disabled={saving} className="flex-1">
+              <Button type="submit" variant="primary" disabled={saving} className="flex-1">
                 {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Student'}
               </Button>
               <Button type="button" variant="outline" onClick={resetForm}>

@@ -124,7 +124,7 @@ export function SchoolStaffDashboard() {
                 <li key={`${e.student_id}-${i}`} className="flex items-center justify-between px-6 py-3">
                   <span className="text-body-md font-medium">{e.student_name}</span>
                   <StatusBadge
-                    tone={e.type === 'parent_skipped' ? 'neutral' : 'error'}
+                    tone={e.type === 'parent_skipped' ? 'info' : 'alert'}
                     label={e.type === 'parent_skipped' ? 'Skipped by parent' : 'Driver reported no-show'}
                   />
                 </li>
@@ -238,12 +238,12 @@ function PendingTripRow({ trip, studentName }: { trip: Trip; studentName: string
             ''
           )}
         </p>
-        <StatusBadge tone="active" label="Awaiting your confirmation" pulse />
+        <StatusBadge tone="caution" label="Awaiting your confirmation" />
         {confirm.isError && (
           <p className="mt-1 text-body-md text-error">{confirm.error instanceof ApiError ? confirm.error.message : 'Could not confirm.'}</p>
         )}
       </div>
-      <Button variant="secondary" disabled={confirm.isPending} onClick={() => confirm.mutate()}>
+      <Button variant="primary" disabled={confirm.isPending} onClick={() => confirm.mutate()}>
         {confirm.isPending ? 'Confirming…' : 'Confirm'}
       </Button>
     </div>
@@ -324,7 +324,7 @@ function StudentRow({
         <td className="px-6 py-3">
           {absent ? (
             <StatusBadge
-              tone={absent.type === 'parent_skipped' ? 'neutral' : 'error'}
+              tone={absent.type === 'parent_skipped' ? 'info' : 'alert'}
               label={absent.type === 'parent_skipped' ? 'Skipped' : 'No-show'}
             />
           ) : (
