@@ -5,9 +5,6 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 `API_CONTRACT.md` (for the mobile apps), `NEXT_STEPS.md`, `BACKLOG.md`.
 
 ## Needs Anas
-- **Review `mvp-finish` and say OK** → then merge to `main` (Render deploys both services). The
-  Neon migration (20: `vans.number`, `companies.email/city`) is already applied; it's additive,
-  so the live app kept working before the merge.
 - **Render SMTP vars (Resend)**: `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/
   `MAIL_FROM` on the API service. Steps in `NEXT_STEPS.md` §1. Still unverified end to end.
 - **`DATABASE_URL` sslmode**: `require` → `verify-full` on Render, on its own deploy, revert if

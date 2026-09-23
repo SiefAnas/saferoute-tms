@@ -1,6 +1,11 @@
 # MVP finish report: branch `mvp-finish`
 
-**Status: pushed `mvp-finish`, NOT merged to `main`, waiting for your OK (step 8.4 not done).**
+**Status: done. Anas approved; `mvp-finish` merged to `main` (`4ee1cd0`) on 2026-09-23 and deployed.**
+
+Live checks after deploy: API `/health` ok; the parent fix is live (test parent gets 403 on
+`GET /students`); live `GET /vans` returns `number`, a duplicate number returns 409;
+`/companies/me` returns email/city; the live site shows "Van 04" on Fleet, email/city on
+Company profile and the Coming Soon map card; no console errors.
 Worked only in `C:\Users\anas2\saferoute-tms`. No force push, no history rewrite. `main` untouched.
 
 ## Summary
