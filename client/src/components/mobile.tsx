@@ -2,6 +2,7 @@ import { createContext, Suspense, useCallback, useContext, useEffect, useState, 
 import { createPortal } from 'react-dom'
 import { NavLink } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
+import { useComingSoon } from './ComingSoon'
 
 // Building blocks for the mobile shells (driver 3a, parent 5b). Everything here sits inside a
 // `.mobile-app` root, so the shared color roles already resolve to the mobile palette.
@@ -15,11 +16,14 @@ export interface MobileTab {
   label: string
   icon: string
   end?: boolean
+  // V2 tab: shown, but tapping it opens the Coming Soon dialog instead of navigating.
+  comingSoon?: string
 }
 
 export function MobileShell({ header, tabs, children }: { header: ReactNode; tabs: MobileTab[]; children: ReactNode }) {
   const [thumbSlot, setThumbSlot] = useState<HTMLElement | null>(null)
   const slotRef = useCallback((el: HTMLDivElement | null) => setThumbSlot(el), [])
+  const openComingSoon = useComingSoon()
   return (
     <div className="mobile-app min-h-dvh">
       <div className="mx-auto flex h-dvh max-w-[480px] flex-col bg-bg md:border-x md:border-line">
@@ -31,7 +35,18 @@ export function MobileShell({ header, tabs, children }: { header: ReactNode; tab
         </div>
         <div ref={slotRef} />
         <nav className="grid shrink-0 border-t border-line bg-surface pt-2 pb-[max(24px,env(safe-area-inset-bottom))]" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
-          {tabs.map((t) => (
+          {tabs.map((t) =>
+            t.comingSoon ? (
+              <button
+                key={t.to}
+                type="button"
+                onClick={() => openComingSoon(t.comingSoon)}
+                className="flex cursor-pointer flex-col items-center gap-[3px] text-[11px] font-medium text-tab-off"
+              >
+                <span className="material-symbols-outlined !text-[22px]">{t.icon}</span>
+                {t.label}
+              </button>
+            ) : (
             <NavLink
               key={t.to}
               to={t.to}
@@ -43,7 +58,8 @@ export function MobileShell({ header, tabs, children }: { header: ReactNode; tab
               <span className="material-symbols-outlined !text-[22px]">{t.icon}</span>
               {t.label}
             </NavLink>
-          ))}
+            ),
+          )}
         </nav>
       </div>
     </div>

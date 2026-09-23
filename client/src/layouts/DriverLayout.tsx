@@ -7,7 +7,7 @@ import { useMyVan } from '../pages/driver/driverData'
 const TABS: MobileTab[] = [
   { to: '/driver', label: 'Today', icon: 'route', end: true },
   { to: '/driver/trips', label: 'Trips', icon: 'receipt_long' },
-  { to: '/driver/week', label: 'Week', icon: 'calendar_view_week' },
+  { to: '/driver/week', label: 'Week', icon: 'calendar_view_week', comingSoon: 'The week schedule' },
   { to: '/driver/pay', label: 'Pay', icon: 'payments' },
 ]
 

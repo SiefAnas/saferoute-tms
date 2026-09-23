@@ -11,6 +11,7 @@ import { IconTile } from '../../components/EmptyState'
 import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
 import { Avatar, FilterChip, Segmented, StatCard } from '../../components/Records'
 import { PageTopBar } from '../../layouts/TopBar'
+import { DashboardSearch } from './DashboardSearch'
 import type {
   AbsentTodayEntry,
   Assignment,
@@ -197,6 +198,7 @@ export function CompanyAdminDashboard() {
         title={`${greeting()}, ${firstName(user?.full_name)}`}
         subtitle={new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
       >
+        <DashboardSearch drivers={drivers} vans={vansQuery.data ?? []} students={studentsQuery.data ?? []} sessions={sessions} />
         <Segmented
           label="Run"
           value={run}

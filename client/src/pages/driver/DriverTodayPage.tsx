@@ -77,6 +77,7 @@ export function DriverTodayPage() {
   const [selected, setSelected] = useState<ShiftPeriod | null>(null)
   const shift: ShiftPeriod = selected ?? defaultShift(openSession)
   const [pendingSwitch, setPendingSwitch] = useState<ShiftPeriod | null>(null)
+  const [confirmEarlyOut, setConfirmEarlyOut] = useState(false)
   const [sheet, setSheet] = useState<SheetTarget | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -293,7 +294,7 @@ export function DriverTodayPage() {
           must always be able to end their shift. Kept large per the Check in/Check out rule. */}
       {isOpenHere && next && (
         <div className="mx-4 mt-5">
-          <Button size="lg" variant="outline" className="w-full" disabled={busy} onClick={() => checkOut.mutate(openSession!.id)}>
+          <Button size="lg" variant="outline" className="w-full" disabled={busy} onClick={() => setConfirmEarlyOut(true)}>
             {checkOut.isPending ? 'Please wait…' : `Check out of ${shift} shift early`}
           </Button>
         </div>
@@ -370,6 +371,21 @@ export function DriverTodayPage() {
           </>
         )}
       </ThumbBar>
+
+      {confirmEarlyOut && openSession && (
+        <ConfirmCard
+          title={`Check out of ${shift} shift?`}
+          body={`${stops.filter((s) => s.state === 'todo').length} ${stops.filter((s) => s.state === 'todo').length === 1 ? 'student is' : 'students are'} not handled yet. Once you check out you can't come back to this shift today.`}
+          cancelLabel="Stay checked in"
+          confirmLabel="Check out"
+          busy={checkOut.isPending}
+          onCancel={() => setConfirmEarlyOut(false)}
+          onConfirm={() => {
+            checkOut.mutate(openSession.id)
+            setConfirmEarlyOut(false)
+          }}
+        />
+      )}
 
       {pendingSwitch && (
         <ConfirmCard

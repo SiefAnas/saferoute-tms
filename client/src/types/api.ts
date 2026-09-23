@@ -115,6 +115,8 @@ export interface ParentProfile {
 export interface Van {
   id: string
   company_id: string
+  // Short fleet number shown as "Van 04" (added with migration 9). Null for vans without one.
+  number: string | null
   license_plate: string
   brand: string
   model: string

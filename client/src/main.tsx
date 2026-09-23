@@ -6,6 +6,7 @@ import './index.css'
 import { queryClient } from './lib/queryClient'
 import { AuthProvider } from './lib/auth'
 import { initTheme } from './lib/theme'
+import { ComingSoonProvider } from './components/ComingSoon'
 import App from './App.tsx'
 
 initTheme()
@@ -15,7 +16,9 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
-          <App />
+          <ComingSoonProvider>
+            <App />
+          </ComingSoonProvider>
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
