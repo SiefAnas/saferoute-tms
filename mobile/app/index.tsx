@@ -8,5 +8,6 @@ export default function Index() {
   const { status, user } = useAuth()
   if (status === 'loading') return null
   if (status === 'signedOut') return <Redirect href="/login" />
+  if (user?.must_change_password) return <Redirect href="/set-password" />
   return <Redirect href={destinationForRole(user?.role)} />
 }
