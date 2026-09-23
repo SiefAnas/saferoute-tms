@@ -6,7 +6,8 @@ import { formatTimeOfDay } from '../../lib/format'
 import { Button } from '../../components/Button'
 import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
 import { ConfirmCard, ThumbBar } from '../../components/mobile'
-import { StudentSheet, type SheetTarget } from './StudentSheet'
+import { StudentPanel, StudentSheet, type SheetTarget } from './StudentSheet'
+import { LG_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import {
   clockTime,
   homeAddress,
@@ -66,8 +67,11 @@ function defaultShift(open: DriverSession | undefined): ShiftPeriod {
 // Driver app, Today tab (design 3a). The shift switch only changes what's shown; checking in
 // is the thumb bar's job. The thumb bar walks the driver through one stop at a time:
 // check in → next stop (No-show / Picked up | Dropped off) → check out.
+// Wide desktops (lg) show the run list and the selected student's details side by side instead
+// of opening the bottom sheet.
 export function DriverTodayPage() {
   const queryClient = useQueryClient()
+  const sideBySide = useMediaQuery(LG_QUERY)
   const { query: sessionsQuery, openSession, endedToday } = useDriverSessions()
   const scheduleQuery = useTodaySchedule()
   const { today: todaysTrips } = useTodaysTrips()
@@ -144,8 +148,17 @@ export function DriverTodayPage() {
     else checkIn.mutate({ shiftPeriod: shift })
   }
 
-  const openSheet = (s: Stop) =>
-    setSheet({ studentId: s.item.student.id, schoolId: s.item.school.id, period: shift, time: s.time, parentSkipped: s.parentSkipped })
+  const targetOf = (s: Stop): SheetTarget => ({
+    studentId: s.item.student.id,
+    schoolId: s.item.school.id,
+    period: shift,
+    time: s.time,
+    parentSkipped: s.parentSkipped,
+  })
+  const openSheet = (s: Stop) => setSheet(targetOf(s))
+  // Side by side: the student picked in the list (on this shift), else the next stop, else the first.
+  const pickedStop = sheet && sheet.period === shift ? stops.find((s) => s.item.student.id === sheet.studentId) : undefined
+  const panelStop = sideBySide ? (pickedStop ?? next ?? stops[0]) : undefined
 
   if (sessionsQuery.isLoading || scheduleQuery.isLoading) {
     return <p className="px-5 pt-6 text-[14px] text-muted">Loading…</p>
@@ -171,6 +184,8 @@ export function DriverTodayPage() {
 
   return (
     <>
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:items-start">
+      <div className="min-w-0">
       <div className="flex flex-col gap-3.5 px-5 pt-4 pb-3.5">
         <div role="tablist" aria-label="Shift" className="grid grid-cols-2 gap-[3px] rounded-m bg-seg-track p-[3px]">
           {(['morning', 'afternoon'] as const).map((p) => (
@@ -246,9 +261,10 @@ export function DriverTodayPage() {
                 key={s.item.assignment_id}
                 type="button"
                 onClick={() => openSheet(s)}
+                aria-current={panelStop === s ? 'true' : undefined}
                 className={`grid w-full cursor-pointer grid-cols-[26px_1fr_auto] items-center gap-3 px-3.5 py-3 text-left hover:bg-surface-2/60 ${
                   i ? 'border-t border-divider' : ''
-                } ${s.state === 'skipped' || s.state === 'noshow' ? 'opacity-60' : ''}`}
+                } ${s.state === 'skipped' || s.state === 'noshow' ? 'opacity-60' : ''} ${panelStop === s ? 'bg-row-selected' : ''}`}
               >
                 <span
                   className={`flex h-[26px] w-[26px] items-center justify-center rounded-full text-[12px] font-semibold ${
@@ -288,7 +304,11 @@ export function DriverTodayPage() {
           })}
         </div>
       )}
-      {stops.length > 0 && <span className="mx-5 mt-2.5 text-[12px] text-faint">Tap a student for address, parents and notes.</span>}
+      {stops.length > 0 && (
+        <span className="mx-5 mt-2.5 block text-[12px] text-faint">
+          {sideBySide ? 'Select a student to see their address, parents and notes.' : 'Tap a student for address, parents and notes.'}
+        </span>
+      )}
 
       {/* Checking out early (stops still left) isn't in the design's thumb bar, but a driver
           must always be able to end their shift. Kept large per the Check in/Check out rule. */}
@@ -299,6 +319,14 @@ export function DriverTodayPage() {
           </Button>
         </div>
       )}
+      </div>
+
+      {panelStop && (
+        <div className="mx-4 mt-4 lg:sticky lg:top-0 lg:ml-2">
+          <StudentPanel key={`${panelStop.item.student.id}-${shift}`} target={targetOf(panelStop)} />
+        </div>
+      )}
+      </div>
 
       <ThumbBar>
         {actionError && (
@@ -408,7 +436,7 @@ export function DriverTodayPage() {
         />
       )}
 
-      {sheet && <StudentSheet target={sheet} onClose={() => setSheet(null)} />}
+      {sheet && !sideBySide && <StudentSheet target={sheet} onClose={() => setSheet(null)} />}
     </>
   )
 }

@@ -313,6 +313,37 @@
   color: var(--color-ink);
 }
 
+/* ---- Driver/parent pages at tablet/desktop width (.web-portal) ----
+   They keep the web (3b) palette like the admin shell; these give the mobile-only roles web
+   values: amber for the call button and today, slate for worked days. Dark = the mobile dark. */
+.web-portal {
+  --color-seg-track: #eceef0;
+  --color-seg-on: #ffffff;
+  --color-call-bg: #f59e0b;
+  --color-on-call: #2a1700;
+  --color-cal-worked: #1e2632;
+  --color-on-cal-worked: #ffffff;
+  --color-cal-today: #f59e0b;
+  --color-on-cal-today: #2a1700;
+  --color-cal-off: #8b97a8;
+  --color-card-line: #e0e3e5;
+}
+:root[data-theme='dark'] .web-portal {
+  --color-seg-track: #0f141b;
+  --color-seg-on: #273140;
+  --color-note-bg: #3d2a0a;
+  --color-note-fg: #ffd9a6;
+  --color-note-icon: #ffb95f;
+  --color-call-bg: #f59e0b;
+  --color-on-call: #2a1700;
+  --color-cal-worked: #f59e0b;
+  --color-on-cal-worked: #2a1700;
+  --color-cal-today: #eef1f5;
+  --color-on-cal-today: #141a22;
+  --color-cal-off: #56616f;
+  --color-card-line: #2f3a48;
+}
+
 /* ---- Mobile shells: dark (slate + amber) ---- */
 :root[data-theme='dark'] .mobile-app {
   --color-bg: #141a22;

@@ -6,6 +6,8 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 `API_CONTRACT.md` (for the mobile apps), `NEXT_STEPS.md`, `BACKLOG.md`.
 
 ## Needs Anas
+- **Review `web-desktop-layout`**: driver and parent pages get a website layout from 768px (side
+  by side from 1024px); phone layout unchanged. Report: `DESKTOP_LAYOUT_REPORT.md`.
 - **Render SMTP vars (Resend)**: `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/
   `MAIL_FROM` on the API service. Steps in `NEXT_STEPS.md` §1. Still unverified end to end.
 - **`DATABASE_URL` sslmode**: `require` → `verify-full` on Render, on its own deploy, revert if

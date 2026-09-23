@@ -16,8 +16,32 @@ export interface SheetTarget {
 
 // Student sheet (design 3a): who they are, where they're going on this shift, notes, every
 // contact with a call button, and the school. Real data from GET /students/:id (includes
-// student_contacts) and GET /schools/:id.
+// student_contacts) and GET /schools/:id. Phones and tablets show it as a bottom sheet; wide
+// desktops show the same content as a panel next to the run list (StudentPanel).
 export function StudentSheet({ target, onClose }: { target: SheetTarget; onClose: () => void }) {
+  const d = useStudentData(target)
+  return (
+    <BottomSheet onClose={onClose} label={d.s?.full_name ?? 'Student'} header={<StudentHeader d={d} onClose={onClose} />}>
+      <StudentBody target={target} d={d} />
+    </BottomSheet>
+  )
+}
+
+export function StudentPanel({ target }: { target: SheetTarget }) {
+  const d = useStudentData(target)
+  return (
+    <section aria-label={d.s?.full_name ?? 'Student'} className="flex flex-col overflow-hidden rounded-card border border-line bg-surface shadow-card">
+      <StudentHeader d={d} className="pt-5" />
+      <div className="flex flex-col gap-4 px-5 pb-5">
+        <StudentBody target={target} d={d} />
+      </div>
+    </section>
+  )
+}
+
+type StudentData = ReturnType<typeof useStudentData>
+
+function useStudentData(target: SheetTarget) {
   const studentQuery = useQuery({
     queryKey: ['student', target.studentId],
     queryFn: () => api.get<Student>(`/students/${target.studentId}`),
@@ -34,29 +58,35 @@ export function StudentSheet({ target, onClose }: { target: SheetTarget; onClose
   const schoolStop = { label: school?.name ?? 'School', line: schoolLine || 'No address on file' }
   const [from, to] = target.period === 'morning' ? [homeStop, schoolStop] : [schoolStop, homeStop]
   const meta = s ? [s.grade ? `Grade ${s.grade}` : null, s.age != null ? `Age ${s.age}` : null].filter(Boolean).join(' · ') : ''
+  return { s, school, schoolLine, from, to, meta }
+}
 
+function StudentHeader({ d, onClose, className = 'pt-2.5' }: { d: StudentData; onClose?: () => void; className?: string }) {
   return (
-    <BottomSheet
-      onClose={onClose}
-      label={s?.full_name ?? 'Student'}
-      header={
-        <div className="flex items-center gap-3 px-5 pt-2.5 pb-3.5">
-          <Avatar name={s?.full_name} size={44} />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-[18px] font-semibold text-ink">{s?.full_name ?? 'Loading…'}</span>
-            {meta && <span className="text-[13px] text-muted">{meta}</span>}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-full bg-surface-2 text-ink"
-          >
-            <span className="material-symbols-outlined !text-[20px]">close</span>
-          </button>
-        </div>
-      }
-    >
+    <div className={`flex items-center gap-3 px-5 pb-3.5 ${className}`}>
+      <Avatar name={d.s?.full_name} size={44} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[18px] font-semibold text-ink">{d.s?.full_name ?? 'Loading…'}</span>
+        {d.meta && <span className="text-[13px] text-muted">{d.meta}</span>}
+      </div>
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-full bg-surface-2 text-ink"
+        >
+          <span className="material-symbols-outlined !text-[20px]">close</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+function StudentBody({ target, d }: { target: SheetTarget; d: StudentData }) {
+  const { s, school, schoolLine, from, to } = d
+  return (
+    <>
       <div className="flex flex-col gap-2.5 rounded-m border border-line px-3.5 py-3">
         <span className="text-[12px] font-semibold text-muted">
           {shiftName(target.period)} {target.period === 'morning' ? 'pickup' : 'drop-off'}
@@ -130,7 +160,7 @@ export function StudentSheet({ target, onClose }: { target: SheetTarget; onClose
           <span className="text-[13px] text-muted">Loading…</span>
         )}
       </div>
-    </BottomSheet>
+    </>
   )
 }
 

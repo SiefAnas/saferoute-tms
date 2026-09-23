@@ -30,7 +30,7 @@ export function ParentProfilePage() {
   ]
 
   return (
-    <>
+    <div className="md:max-w-[680px]">
       <SectionHeader title="Profile" />
       <div className="mx-4 rounded-m border border-line bg-surface shadow-card">
         {rows.map((r, i) => (
@@ -52,6 +52,6 @@ export function ParentProfilePage() {
         ) : null}
         .
       </p>
-    </>
+    </div>
   )
 }

@@ -48,9 +48,11 @@ export function DriverPayPage() {
   const noRate = payQuery.error instanceof ApiError && payQuery.error.status === 404
   const hours = p ? (p.worked_minutes / 60).toFixed(p.worked_minutes % 60 === 0 ? 0 : 2) : ''
 
+  // Wide desktops: the pay card and the calendar sit side by side.
   return (
     <>
       <SectionHeader title="Pay" aside={monthName} />
+      <div className="lg:grid lg:grid-cols-2 lg:items-start">
       <div className="mx-4 flex flex-col gap-1 rounded-m border border-line bg-surface p-4 shadow-card">
         {payQuery.isLoading ? (
           <span className="text-[14px] text-muted">Loading…</span>
@@ -75,7 +77,7 @@ export function DriverPayPage() {
         )}
       </div>
 
-      <div className="mx-4 mt-3 flex flex-col gap-2 rounded-m border border-line bg-surface px-4 py-3.5 shadow-card">
+      <div className="mx-4 mt-3 flex flex-col gap-2 rounded-m border border-line bg-surface px-4 py-3.5 shadow-card lg:mt-0 lg:max-w-[440px]">
         <span className="text-[13px] font-medium text-ink">Days worked</span>
         <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-faint">
           {WEEKDAYS.map((w, i) => (
@@ -106,6 +108,7 @@ export function DriverPayPage() {
             )
           })}
         </div>
+      </div>
       </div>
     </>
   )

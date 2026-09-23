@@ -8,6 +8,7 @@ import { Avatar } from '../../components/Records'
 import { CallButton, ConfirmCard, ThumbBar } from '../../components/mobile'
 import type { BadgeTone } from '../../components/StatusBadge'
 import { useComingSoon } from '../../components/ComingSoon'
+import { LG_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import type { ParentStudentDetail, ParentTransportEntry, SkipStatus, Student } from '../../types/api'
 
 const BANNER: Record<BadgeTone, string> = {
@@ -25,7 +26,10 @@ const BANNER: Record<BadgeTone, string> = {
 // V2 (V2_ROADMAP.md): the design's "Van 04 is 3 stops away" banner and live map need live stop
 // progress / GPS. The banner shows what IS known (skipped, arrived, dropped off, next pickup
 // time) and a "Live location and ETA" row opens Coming Soon.
+//
+// Wide desktops (lg) show the children list and the selected child side by side.
 export function ParentHomePage() {
+  const sideBySide = useMediaQuery(LG_QUERY)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const studentsQuery = useQuery({ queryKey: ['parent-students'], queryFn: () => api.get<Student[]>('/parent/students') })
   const students = studentsQuery.data ?? []
@@ -46,6 +50,34 @@ export function ParentHomePage() {
         title="No students linked yet"
         body="Ask your transportation company to link your child to your account. They'll show up here."
       />
+    )
+  }
+
+  if (sideBySide) {
+    return (
+      <div className="grid grid-cols-[300px_minmax(0,1fr)] items-start gap-2 pt-4">
+        <nav aria-label="Your children" className="mx-4 flex flex-col overflow-hidden rounded-m border border-line bg-surface shadow-card">
+          <span className="px-4 pt-3 pb-2 text-[13px] font-semibold text-ink">Your children</span>
+          {students.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              aria-current={selectedId === s.id ? 'true' : undefined}
+              onClick={() => setSelectedId(s.id)}
+              className={`flex cursor-pointer items-center gap-3 border-t border-divider px-4 py-3 text-left hover:bg-surface-2/60 ${
+                selectedId === s.id ? 'bg-row-selected' : ''
+              }`}
+            >
+              <Avatar name={s.full_name} size={32} />
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-[14px] font-medium text-ink">{s.full_name}</span>
+                {s.grade && <span className="text-[12px] text-muted">Grade {s.grade}</span>}
+              </span>
+            </button>
+          ))}
+        </nav>
+        <div className="flex min-w-0 flex-col gap-3">{selected && <ChildView key={selected.id} student={selected} />}</div>
+      </div>
     )
   }
 
