@@ -75,4 +75,20 @@ function ownerScope(req, table) {
   return null;
 }
 
-module.exports = { requireRole, denyRoles, requireOperable, ownerScope, DRIVER_OWNER_COLUMN };
+// The driver access rule, in one place: a driver reaches only what is tied to their OWN
+// assignments that have not ended (running today or starting later). Ended assignments and
+// other drivers' assignments are out. Returns an accessor option (spread it into
+// findMany/findById), or null for every other role:
+//   driverScope(req, 'student_id')  -> students   (filters students.id)
+//   driverScope(req, 'van_id')      -> vans       (filters vans.id)
+//   driverScope(req, 'id')          -> assignments themselves
+// Out-of-scope rows read as not found (404), never 403. Raw-SQL call sites use
+// assignmentNotEndedSql() from db/scoped.js for the same window.
+function driverScope(req, refColumn, column = 'id') {
+  if (req.auth.role !== 'driver') return null;
+  return {
+    ownerIn: { column, table: 'assignments', refColumn, match: { driver_user_id: req.auth.userId }, notEnded: true },
+  };
+}
+
+module.exports = { requireRole, denyRoles, requireOperable, ownerScope, driverScope, DRIVER_OWNER_COLUMN };

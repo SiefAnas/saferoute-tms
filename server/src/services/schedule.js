@@ -5,6 +5,8 @@
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
 const { notifyCompanyAndSchoolAdmins } = require('./notifications');
+const { assignmentNotEndedSql } = require('../db/scoped');
+const { driverScope } = require('../middleware/authorize');
 
 // Raw pool query (not req.db): "active today" is a date-range condition req.db's
 // equality-only `where` can't express — same precedent as payroll.js's summary() and
@@ -42,7 +44,7 @@ async function getTodaySchedule(req) {
       WHERE a.driver_user_id = $1
         AND a.company_id = $2
         AND a.start_date <= CURRENT_DATE
-        AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+        AND ${assignmentNotEndedSql('a')}
       ORDER BY st.full_name`,
     [req.auth.userId, req.auth.tenantId]
   );
@@ -71,10 +73,13 @@ async function markNoShow(req, assignmentId, body = {}) {
   if (!['morning', 'afternoon'].includes(shift_period)) {
     throw new HttpError(400, "shift_period must be 'morning' or 'afternoon'");
   }
-  const assignment = await req.db.findById('assignments', assignmentId, {
-    owner: { column: 'driver_user_id', value: req.auth.userId },
-  });
+  // Out of the driver's scope (another driver's, or ended) -> 404; in scope but not running
+  // today for this shift (starts later, or the other shift only) -> 409.
+  const assignment = await req.db.findById('assignments', assignmentId, driverScope(req, 'id'));
   if (!assignment) throw new HttpError(404, 'assignment not found');
+  if (!(await findTodaysAssignment(req, { assignmentId }, shift_period))) {
+    throw new HttpError(409, `this assignment is not on your ${shift_period} run today`);
+  }
 
   const open = (await req.db.findMany('sessions', { owner: { column: 'user_id', value: req.auth.userId } })).find(
     (s) => s.check_out_at === null && s.shift_period === shift_period
@@ -102,6 +107,23 @@ async function markNoShow(req, assignmentId, body = {}) {
   const notified = await notifyCompanyAndSchoolAdmins(req.auth.tenantId, student.school_id, { subject, text, event: 'no_show' });
 
   return { reported: true, noShow: inserted.rows[0], notified };
+}
+
+// The driver's own assignment (by id, or for a student) that runs TODAY and covers
+// `shiftPeriod`. Driver writes (log a trip, report a no-show) require one; reads use the wider
+// driverScope window, which also includes assignments starting later.
+async function findTodaysAssignment(req, { assignmentId, studentId }, shiftPeriod) {
+  const { rows } = await pool.query(
+    `SELECT a.* FROM assignments a
+      WHERE a.driver_user_id = $1 AND a.company_id = $2
+        AND ${assignmentId ? 'a.id' : 'a.student_id'} = $3
+        AND a.start_date <= CURRENT_DATE
+        AND ${assignmentNotEndedSql('a')}
+        AND a.shift_period IN ($4, 'both')
+      LIMIT 1`,
+    [req.auth.userId, req.auth.tenantId, assignmentId ?? studentId, shiftPeriod]
+  );
+  return rows[0] ?? null;
 }
 
 async function assertOwnedAssignment(req, assignmentId) {
@@ -153,4 +175,4 @@ async function deleteOverride(req, assignmentId, overrideId) {
   return row;
 }
 
-module.exports = { getTodaySchedule, upsertOverride, listOverrides, deleteOverride, markNoShow };
+module.exports = { getTodaySchedule, upsertOverride, listOverrides, deleteOverride, markNoShow, findTodaysAssignment };

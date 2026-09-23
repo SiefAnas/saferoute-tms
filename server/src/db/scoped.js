@@ -41,6 +41,14 @@ const TABLE_SCOPE = {
   schedule_changes: { company: 'company_id', school: 'school_id' }, // dual-tenant, like trips
 };
 
+// "This assignment has not ended": running today or starting later. The one SQL definition of
+// the driver access window (see driverScope in middleware/authorize.js); `alias` is the
+// assignments table alias in the calling query, or '' for an unaliased one.
+function assignmentNotEndedSql(alias = '') {
+  const p = alias ? `${alias}.` : '';
+  return `(${p}end_date IS NULL OR ${p}end_date >= CURRENT_DATE)`;
+}
+
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 const ident = (s) => {
   if (typeof s !== 'string' || !IDENT.test(s)) throw new ScopeError(`unsafe identifier: ${s}`);
@@ -66,6 +74,8 @@ function createScopedDb(pool, tenant, actor) {
   // ownerIn implements a whitelisted subquery sub-scope, e.g. school_staff limited to their
   // granted students: student_id IN (SELECT student_id FROM staff_student_access WHERE
   // staff_user_id = $me). All identifiers are validated; the match value is parameterized.
+  // ownerIn.notEnded (assignments only) adds the assignment-not-ended window to the subquery,
+  // for the driver scope: rows tied to the driver's own current or future assignments.
   const buildWhere = (table, { where = {}, owner = null, ownerIn = null } = {}) => {
     const col = scopeColumn(table, tenant.type);
     const clauses = [`${ident(col)} = $1`];
@@ -79,6 +89,10 @@ function createScopedDb(pool, tenant, actor) {
       for (const [k, v] of Object.entries(ownerIn.match)) {
         values.push(v);
         subClauses.push(`${ident(k)} = $${values.length}`);
+      }
+      if (ownerIn.notEnded) {
+        if (ownerIn.table !== 'assignments') throw new ScopeError('notEnded applies to assignments only');
+        subClauses.push(assignmentNotEndedSql());
       }
       clauses.push(
         `${ident(ownerIn.column)} IN (SELECT ${ident(ownerIn.refColumn)} FROM ${ident(ownerIn.table)} WHERE ${subClauses.join(' AND ')})`
@@ -170,4 +184,4 @@ function createScopedDb(pool, tenant, actor) {
   };
 }
 
-module.exports = { createScopedDb, tenantTypeForRole, scopeColumn, ScopeError, TABLE_SCOPE };
+module.exports = { createScopedDb, tenantTypeForRole, scopeColumn, assignmentNotEndedSql, ScopeError, TABLE_SCOPE };

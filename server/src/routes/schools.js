@@ -7,7 +7,7 @@ const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
-const { listCompanySchools, getCompanySchool } = require('../services/schools');
+const { listCompanySchools, getCompanySchool, getDriverSchool } = require('../services/schools');
 const { assertValidZip, assertValidState, assertMaxLength } = require('../validate');
 const { HttpError } = require('../errors');
 
@@ -60,7 +60,10 @@ router.patch('/me', requireRole('school_admin'), async (req, res, next) => {
 
 router.get('/:id', requireRole('company_admin', 'driver'), async (req, res, next) => {
   try {
-    const school = await getCompanySchool(req.auth.tenantId, req.params.id);
+    // A driver only reaches schools of students on their own not-ended assignments.
+    const school = req.auth.role === 'driver'
+      ? await getDriverSchool(req.auth.tenantId, req.auth.userId, req.params.id)
+      : await getCompanySchool(req.auth.tenantId, req.params.id);
     if (!school) throw new HttpError(404, 'school not found');
     res.json(school);
   } catch (e) {

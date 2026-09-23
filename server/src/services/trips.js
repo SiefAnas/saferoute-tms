@@ -7,6 +7,8 @@ const { withTx } = require('../db/tx');
 const { HttpError } = require('../errors');
 const { autoCompleteMinutes } = require('../config');
 const { notifyCompanyAndSchoolAdmins } = require('./notifications');
+const { driverScope } = require('../middleware/authorize');
+const { findTodaysAssignment } = require('./schedule');
 
 // Read sub-scope by role:
 //  - driver       -> trips within their own shifts
@@ -43,9 +45,14 @@ async function logTrip(req, body = {}) {
     .find((s) => s.check_out_at === null && s.shift_period === shift_period);
   if (!open) throw new HttpError(409, 'check in for that shift before logging a trip');
 
-  // Student must be in the driver's company; grab its school_id for the trip's denormalized key.
-  const student = await req.db.findById('students', student_id);
-  if (!student) throw new HttpError(404, 'student not found in your company');
+  // Student must be on one of the driver's own not-ended assignments (404 otherwise, same as
+  // a read), and that assignment must run today for this shift. Grab its school_id for the
+  // trip's denormalized key.
+  const student = await req.db.findById('students', student_id, driverScope(req, 'student_id'));
+  if (!student) throw new HttpError(404, 'student not found');
+  if (!(await findTodaysAssignment(req, { studentId: student_id }, shift_period))) {
+    throw new HttpError(409, `this student is not on your ${shift_period} run today`);
+  }
 
   // Insert + trip_count bump as one transaction (BACKLOG fix): previously two separate
   // pool.query calls, so a failure between them could drift the per-shift count.

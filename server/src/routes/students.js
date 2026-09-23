@@ -6,7 +6,7 @@
 const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
-const { requireOperable, requireRole, denyRoles } = require('../middleware/authorize');
+const { requireOperable, requireRole, denyRoles, driverScope } = require('../middleware/authorize');
 const { HttpError, mapMissingRefError } = require('../errors');
 const { assertValidZip, assertValidState } = require('../validate');
 const pool = require('../db/pool');
@@ -17,9 +17,11 @@ const companyAdmin = requireRole('company_admin');
 
 const mapFk = (err) => mapMissingRefError(err, 'school_id not found');
 
-// school_staff -> only students granted via staff_student_access (§7.4); everyone else
-// (company_admin, school_admin) gets the full tenant scope. Same pattern as Trips' readScope.
+// school_staff -> only students granted via staff_student_access (§7.4); driver -> only
+// students on their own not-ended assignments (driverScope); company_admin and school_admin
+// get the full tenant scope. Same pattern as Trips' readScope.
 function readScope(req) {
+  if (req.auth.role === 'driver') return driverScope(req, 'student_id');
   if (req.auth.role === 'school_staff') {
     return { ownerIn: { column: 'id', table: 'staff_student_access', refColumn: 'student_id', match: { staff_user_id: req.auth.userId } } };
   }

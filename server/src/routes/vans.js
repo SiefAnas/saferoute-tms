@@ -15,7 +15,7 @@
 const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
-const { requireOperable, requireRole, denyRoles } = require('../middleware/authorize');
+const { requireOperable, requireRole, denyRoles, driverScope } = require('../middleware/authorize');
 const { HttpError } = require('../errors');
 
 const router = express.Router();
@@ -60,13 +60,14 @@ router.post('/', companyAdmin, async (req, res, next) => {
   } catch (e) { next(mapVanError(e)); }
 });
 
+// A driver reads only the vans on their own not-ended assignments; admins read the fleet.
 router.get('/', async (req, res, next) => {
-  try { res.json(await req.db.findMany('vans', { orderBy: 'license_plate' })); } catch (e) { next(e); }
+  try { res.json(await req.db.findMany('vans', { ...driverScope(req, 'van_id'), orderBy: 'license_plate' })); } catch (e) { next(e); }
 });
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const row = await req.db.findById('vans', req.params.id);
+    const row = await req.db.findById('vans', req.params.id, driverScope(req, 'van_id') ?? {});
     if (!row) throw new HttpError(404, 'van not found');
     res.json(row);
   } catch (e) { next(e); }

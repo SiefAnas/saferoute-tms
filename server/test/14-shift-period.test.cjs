@@ -197,7 +197,14 @@ async function main() {
         (await api('POST', '/trips', d1Tok, { student_id: stuConflict.id, trip_type: 'dropoff', shift_period: 'morning' })).status,
         409
       );
-      const tripAfternoon = await api('POST', '/trips', d1Tok, { student_id: stuConflict.id, trip_type: 'pickup', shift_period: 'afternoon' });
+      // Access-scope rule: d1 has Conflict Kid for the morning only (the afternoon run is d2's),
+      // so d1 can't log Conflict Kid's afternoon trip. d1's all-day ('both') student can.
+      eq(
+        "an afternoon trip for a student whose afternoon run is another driver's -> 409",
+        (await api('POST', '/trips', d1Tok, { student_id: stuConflict.id, trip_type: 'pickup', shift_period: 'afternoon' })).status,
+        409
+      );
+      const tripAfternoon = await api('POST', '/trips', d1Tok, { student_id: defaultAsg.body.student_id, trip_type: 'pickup', shift_period: 'afternoon' });
       (tripAfternoon.status === 201 && tripAfternoon.body.shift_period === 'afternoon' && tripAfternoon.body.session_id === ciAfternoon.body.id)
         ? ok('trip logged with shift_period=afternoon attaches to the afternoon session')
         : bad(`trip: ${tripAfternoon.status} ${JSON.stringify(tripAfternoon.body)}`);

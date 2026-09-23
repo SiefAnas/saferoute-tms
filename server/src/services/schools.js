@@ -7,6 +7,7 @@
 // TABLE_SCOPE (a company has no tenant column on the schools table — same reason
 // src/services/placeholders.js uses the raw pool for its own cross-tenant creates).
 const pool = require('../db/pool');
+const { assignmentNotEndedSql } = require('../db/scoped');
 
 // Also includes school placeholders created by one of this company's own users (POST
 // /placeholders/school), even before any student is added there, so a stub the company just
@@ -39,4 +40,19 @@ async function getCompanySchool(companyId, schoolId) {
   return rows[0] ?? null;
 }
 
-module.exports = { listCompanySchools, getCompanySchool };
+// Driver version of getCompanySchool: only schools of students on the driver's own
+// not-ended assignments (the driver access rule, see driverScope in middleware/authorize.js).
+async function getDriverSchool(companyId, driverId, schoolId) {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT s.id, s.name, s.address, s.zip_code, s.state, s.phone, s.hours, s.website
+       FROM schools s
+       JOIN students st ON st.school_id = s.id
+       JOIN assignments a ON a.student_id = st.id
+      WHERE a.company_id = $1 AND a.driver_user_id = $2 AND s.id = $3
+        AND ${assignmentNotEndedSql('a')}`,
+    [companyId, driverId, schoolId],
+  );
+  return rows[0] ?? null;
+}
+
+module.exports = { listCompanySchools, getCompanySchool, getDriverSchool };

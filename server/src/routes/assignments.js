@@ -4,7 +4,7 @@
 const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
-const { requireOperable, requireRole, ownerScope, denyRoles } = require('../middleware/authorize');
+const { requireOperable, requireRole, ownerScope, denyRoles, driverScope } = require('../middleware/authorize');
 const { HttpError, mapMissingRefError } = require('../errors');
 const { assertValidTime } = require('../validate');
 const { upsertOverride, listOverrides, deleteOverride } = require('../services/schedule');
@@ -52,14 +52,15 @@ router.post('/', companyAdmin, async (req, res, next) => {
   } catch (e) { next(mapFkError(e)); }
 });
 
+// Driver: own assignments that have not ended (driverScope); an ended one reads as 404.
 router.get('/', async (req, res, next) => {
-  try { res.json(await req.db.findMany('assignments', { owner: ownerScope(req, 'assignments'), orderBy: 'start_date' })); }
+  try { res.json(await req.db.findMany('assignments', { ...driverScope(req, 'id'), orderBy: 'start_date' })); }
   catch (e) { next(e); }
 });
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const row = await req.db.findById('assignments', req.params.id, { owner: ownerScope(req, 'assignments') });
+    const row = await req.db.findById('assignments', req.params.id, driverScope(req, 'id') ?? {});
     if (!row) throw new HttpError(404, 'assignment not found');
     res.json(row);
   } catch (e) { next(e); }

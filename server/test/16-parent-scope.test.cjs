@@ -44,6 +44,9 @@ async function main() {
     const mine = await ins("INSERT INTO students(company_id,school_id,full_name) VALUES($1,$2,'My Child') RETURNING id", [C.id, S.id]);
     const other = await ins("INSERT INTO students(company_id,school_id,full_name,street_address) VALUES($1,$2,'Other Family Child','9 Private Ln') RETURNING id", [C.id, S.id]);
     await ins('INSERT INTO parent_students(parent_user_id,student_id,company_id) VALUES($1,$2,$3) RETURNING id', [P.id, mine.id, C.id]);
+    // The driver drives "My Child" (a driver reads only students on their own assignments).
+    const van = await ins("INSERT INTO vans(company_id,license_plate,brand,model,year) VALUES($1,'V-1','Ford','Transit',2022) RETURNING id", [C.id]);
+    await ins("INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date) VALUES($1,$2,$3,$4,'2020-01-01') RETURNING id", [C.id, mine.id, D.id, van.id]);
 
     server = createApp().listen(5600);
     const tP = await login('parent@co.com');
@@ -70,8 +73,8 @@ async function main() {
     check(aStudents.status === 200 && aStudents.body.length === 2, 'company admin still lists all company students');
     eq('driver GET /sessions -> 200', (await api('GET', '/sessions', tD)).status, 200);
     eq('driver GET /vans -> 200', (await api('GET', '/vans', tD)).status, 200);
-    eq('driver GET /students/:id -> 200', (await api('GET', `/students/${mine.id}`, tD)).status, 200);
-    void D;
+    eq("driver GET /students/:id (own assignment's student) -> 200", (await api('GET', `/students/${mine.id}`, tD)).status, 200);
+    eq('driver GET /students/:id (not on their assignments) -> 404', (await api('GET', `/students/${other.id}`, tD)).status, 404);
   } finally {
     if (server) server.close();
     try { await pool.end(); } catch { /* already ended */ }

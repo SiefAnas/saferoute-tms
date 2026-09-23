@@ -39,7 +39,7 @@ async function main() {
     const B = await ins("INSERT INTO companies(name,claim_status,claimed_at) VALUES('Co B','claimed',now()) RETURNING id");
     await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,email_verified_at) VALUES('a@co.com',$1,'Admin A','company_admin',$2,now()) RETURNING id", [hash, A.id]);
     await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,email_verified_at) VALUES('b@co.com',$1,'Admin B','company_admin',$2,now()) RETURNING id", [hash, B.id]);
-    await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,email_verified_at) VALUES('d@co.com',$1,'Driver A','driver',$2,now()) RETURNING id", [hash, A.id]);
+    const driverA = await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,email_verified_at) VALUES('d@co.com',$1,'Driver A','driver',$2,now()) RETURNING id", [hash, A.id]);
 
     server = createApp().listen(5500);
     const tA = await login('a@co.com');
@@ -77,8 +77,13 @@ async function main() {
 
     r = await api('GET', `/vans/${v2.id}`, tA);
     eq('GET /vans/:id returns number', r.body?.number, '07');
+    // A driver reads only vans on their own not-ended assignments (access-scope rule).
+    const S = await ins("INSERT INTO schools(name,claim_status,claimed_at) VALUES('School','claimed',now()) RETURNING id");
+    const kid = await ins("INSERT INTO students(company_id,school_id,full_name) VALUES($1,$2,'Kid') RETURNING id", [A.id, S.id]);
+    await ins("INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date) VALUES($1,$2,$3,$4,'2020-01-01') RETURNING id", [A.id, kid.id, driverA.id, v2.id]);
     r = await api('GET', '/vans', tD);
-    check(r.status === 200 && r.body.some((v) => v.number === '07'), 'driver in the same company can read the number');
+    check(r.status === 200 && r.body.some((v) => v.number === '07'), "driver can read the number of their own assignment's van");
+    check(r.status === 200 && !r.body.some((v) => v.id === v1.id), "driver's van list leaves out vans not on their assignments");
 
     r = await api('POST', '/vans', tB, { ...van, license_plate: 'VN-B1', number: '07' });
     eq('another company can reuse the same number', r.status, 201);

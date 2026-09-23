@@ -20,11 +20,13 @@ const { notifyCompanyAndSchoolAdmins } = require('./notifications');
 
 const CHANGE_TYPES = ['left_early', 'staying_later'];
 
-function readScope(req) {
+// `column` is the student id column of the table being read: 'student_id' on
+// schedule_changes, 'id' on students.
+function readScope(req, column = 'student_id') {
   // Same least-privilege pattern as trips.js: school_staff only sees changes for students
   // granted to them; school_admin (and any future full-school-scope role) sees the whole school.
   if (req.auth.role === 'school_staff') {
-    return { ownerIn: { column: 'student_id', table: 'staff_student_access', refColumn: 'student_id', match: { staff_user_id: req.auth.userId } } };
+    return { ownerIn: { column, table: 'staff_student_access', refColumn: 'student_id', match: { staff_user_id: req.auth.userId } } };
   }
   return {};
 }
@@ -44,7 +46,8 @@ async function logScheduleChange(req, studentId, { change_type, note } = {}) {
   }
   // students is dual-tenant (company_id + school_id) — a school-tenant req.db read already
   // works here with no special-casing.
-  const student = await req.db.findById('students', studentId);
+  // school_staff may only log changes for students granted to them (404 otherwise).
+  const student = await req.db.findById('students', studentId, readScope(req, 'id'));
   if (!student) throw new HttpError(404, 'student not found');
 
   // req.db.insert stamps the caller's own tenant column (school_id, since school_staff/

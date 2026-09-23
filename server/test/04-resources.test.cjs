@@ -189,7 +189,10 @@ async function main() {
       const schoolDetail = await api('GET', `/schools/${S.id}`, adminA);
       (schoolDetail.status === 200 && schoolDetail.body.phone === '555-3333') ? ok('company_admin GET /schools/:id sees full detail incl. phone') : bad(`schools/:id: ${schoolDetail.status}`);
       const schoolDetailDriver = await api('GET', `/schools/${S.id}`, driverATokenEarly2);
-      schoolDetailDriver.status === 200 ? ok('driver GET /schools/:id sees a school their company has a student at') : bad(`driver schools/:id: ${schoolDetailDriver.status}`);
+      // Access-scope rule: a driver reaches a school only through their own not-ended
+      // assignments. Driver A has none yet, so this is 404 (the 200 case is checked below,
+      // right after driver A gets an assignment at School S).
+      eq("driver GET /schools/:id with no assignment there -> 404", schoolDetailDriver.status, 404);
       eq('admin B GET /schools/:id (no relationship) -> 404', (await api('GET', `/schools/${S.id}`, adminB)).status, 404);
 
       console.log('\n--- Sessions (driver shifts) ---');
@@ -214,6 +217,7 @@ async function main() {
       );
       const drvAsg = await api('GET', '/assignments', driverA);
       drvAsg.body.length === 1 ? ok('driver sees own assignment (owner sub-scope)') : bad(`driver assignments ${drvAsg.body.length}`);
+      eq("driver GET /schools/:id of their assigned student's school -> 200", (await api('GET', `/schools/${S.id}`, driverA)).status, 200);
       (await api('GET', '/assignments', adminB)).body.length === 0 ? ok('admin B sees no Company A assignments (isolation)') : bad('assignment leaked');
       eq('delete assignment -> 204', (await api('DELETE', `/assignments/${asg.body.id}`, adminA)).status, 204);
 

@@ -46,6 +46,12 @@ async function main() {
     const stu1 = await ins("INSERT INTO students(company_id,school_id,full_name) VALUES($1,$2,'Kid 1') RETURNING id", [A.id, S.id]);
     const stu2 = await ins("INSERT INTO students(company_id,school_id,full_name) VALUES($1,$2,'Kid 2') RETURNING id", [A.id, S.id]);
     const stuB = await ins("INSERT INTO students(company_id,school_id,full_name) VALUES($1,$2,'Kid B') RETURNING id", [B.id, S.id]);
+    // Driver A's route: students 1 and 2 (a driver may only log trips for students on their own
+    // assignment that runs today, see the access-scope rules).
+    const vanA = await ins("INSERT INTO vans(company_id,license_plate,brand,model,year) VALUES($1,'AAA-1','Ford','Transit',2022) RETURNING id", [A.id]);
+    for (const s of [stu1, stu2]) {
+      await ins("INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date) VALUES($1,$2,$3,$4,'2020-01-01') RETURNING id", [A.id, s.id, driverA.id, vanA.id]);
+    }
     // staff1 is granted student 1 only.
     await ins('INSERT INTO staff_student_access(staff_user_id,student_id,school_id) VALUES($1,$2,$3) RETURNING id', [staff1.id, stu1.id, S.id]);
 
