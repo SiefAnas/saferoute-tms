@@ -1,29 +1,42 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
-import { Card, CardHeader } from '../../components/Card'
 import { Button } from '../../components/Button'
-import { Input } from '../../components/Input'
+import { Field, Input } from '../../components/Input'
+import { PasswordField } from '../../components/PasswordField'
 import { Modal } from '../../components/Modal'
 import { ContactLink } from '../../components/ContactLink'
-import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter'
-import type { PublicUser, Student, StaffAccessGrant } from '../../types/api'
+import { EditAccountModal } from '../../components/EditAccountModal'
+import { Drawer, DetailRows, DrawerSection } from '../../components/Drawer'
+import { EmptyState } from '../../components/EmptyState'
+import { StatusBadge } from '../../components/StatusBadge'
+import { NameCell, NoMatches, PageIntro, SearchField, StatCard, StatRow, TableCard, TableRow, matches } from '../../components/Records'
+import { useToast } from '../../components/Toast'
+import { PageTopBar } from '../../layouts/TopBar'
+import type { PublicUser, School, Student, StaffAccessGrant } from '../../types/api'
 
-// School Admin — Staff & Access (§7.3): create/invite School Staff, and grant/revoke
-// which staff member can see which students (static assignment, no date range — §6).
+const TEMPLATE = '1.8fr 1.2fr 1.8fr 1fr'
+
+// School Admin — Staff & access (design 5a records template): school staff accounts and which
+// students each one can see (a static grant, no date range, §6). Staff only see the students
+// they're granted; the grant checklist lives in each staff member's details drawer.
 export function StaffAccessPage() {
   const queryClient = useQueryClient()
+  const toast = useToast()
 
   const staffQuery = useQuery({ queryKey: ['users', 'school_staff'], queryFn: () => api.get<PublicUser[]>('/users?role=school_staff') })
   const studentsQuery = useQuery({ queryKey: ['students'], queryFn: () => api.get<Student[]>('/students') })
   const grantsQuery = useQuery({ queryKey: ['staff-access'], queryFn: () => api.get<StaffAccessGrant[]>('/staff-access') })
+  const schoolQuery = useQuery({ queryKey: ['school-me'], queryFn: () => api.get<School>('/schools/me') })
 
-  const [selectedStaffId, setSelectedStaffId] = useState('')
+  const [q, setQ] = useState('')
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [editUser, setEditUser] = useState<PublicUser | null>(null)
 
+  // ---- Add staff ----
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const createStaff = useMutation({
@@ -33,8 +46,9 @@ export function StaffAccessPage() {
       setFullName('')
       setEmail('')
       setPassword('')
-      setSelectedStaffId(staff.id)
       setShowAddModal(false)
+      toast.show(`${staff.full_name} added. Choose which students they can see.`)
+      setDetailId(staff.id) // straight into their access checklist
     },
     onError: (err) => setCreateError(err instanceof ApiError ? err.message : 'Could not create staff account.'),
   })
@@ -45,13 +59,155 @@ export function StaffAccessPage() {
     createStaff.mutate()
   }
 
-  const grantsForSelected = useMemo(
-    () => new Map((grantsQuery.data ?? []).filter((g) => g.staff_user_id === selectedStaffId).map((g) => [g.student_id, g.id])),
-    [grantsQuery.data, selectedStaffId],
+  const studentsFor = useMemo(() => {
+    const byId = new Map((studentsQuery.data ?? []).map((s) => [s.id, s]))
+    const map = new Map<string, Student[]>()
+    for (const g of grantsQuery.data ?? []) {
+      const s = byId.get(g.student_id)
+      if (!s) continue
+      if (!map.has(g.staff_user_id)) map.set(g.staff_user_id, [])
+      map.get(g.staff_user_id)!.push(s)
+    }
+    return (staffId: string) => map.get(staffId) ?? []
+  }, [studentsQuery.data, grantsQuery.data])
+
+  const staff = staffQuery.data ?? []
+  const withAccess = staff.filter((s) => studentsFor(s.id).length > 0)
+  const noAccess = staff.filter((s) => s.is_active && studentsFor(s.id).length === 0)
+  const visible = staff.filter((s) => matches(q, s.full_name, s.email))
+  const detail = staff.find((s) => s.id === detailId) ?? null
+  const totalStudents = studentsQuery.data?.length ?? 0
+
+  const canSee = (s: PublicUser) => {
+    const list = studentsFor(s.id)
+    if (list.length === 0) return 'No students'
+    if (totalStudents && list.length === totalStudents) return `All ${totalStudents} students`
+    return list.length <= 3 ? list.map((x) => x.full_name).join(', ') : `${list.length} students`
+  }
+  const statusOf = (s: PublicUser) =>
+    !s.is_active ? (
+      <StatusBadge tone="alert" label="Deactivated" />
+    ) : studentsFor(s.id).length === 0 ? (
+      <StatusBadge tone="caution" label="No access" />
+    ) : (
+      <StatusBadge tone="success" label="Active" />
+    )
+
+  return (
+    <div className="flex flex-col gap-5">
+      <PageTopBar title="Staff & access">
+        <SearchField value={q} onChange={setQ} placeholder="Search staff" />
+        <Button onClick={() => setShowAddModal(true)}>
+          <span className="material-symbols-outlined !text-[18px]">person_add</span>
+          Add staff
+        </Button>
+      </PageTopBar>
+
+      <PageIntro>Staff only see the students you grant them.</PageIntro>
+
+      <StatRow>
+        <StatCard label="Staff accounts" value={staff.length} sub={schoolQuery.data?.name ?? ' '} />
+        <StatCard label="With student access" value={withAccess.length} tone={withAccess.length ? 'success' : 'default'} sub={`of ${staff.length} staff`} />
+        <StatCard
+          label="No access yet"
+          value={noAccess.length}
+          tone={noAccess.length ? 'caution' : 'default'}
+          sub={noAccess.length ? noAccess.map((s) => s.full_name).join(', ') : 'Everyone can see their students'}
+        />
+      </StatRow>
+
+      <TableCard template={TEMPLATE} columns={[{ label: 'Staff' }, { label: 'Role' }, { label: 'Can see' }, { label: 'Status' }]}>
+        {staffQuery.isLoading ? (
+          <p className="border-t border-divider px-5 py-4 text-[14px] text-muted">Loading…</p>
+        ) : staff.length === 0 ? (
+          <EmptyState
+            icon="badge"
+            title="No staff yet"
+            body="Add front-office staff so they can confirm pickups and drop-offs for the students you choose."
+            action={<Button onClick={() => setShowAddModal(true)}>Add staff</Button>}
+          />
+        ) : visible.length === 0 ? (
+          <NoMatches q={q} hint="Search looks at staff names and emails." onClear={() => setQ('')} />
+        ) : (
+          visible.map((s) => (
+            <TableRow key={s.id} template={TEMPLATE} selected={detailId === s.id} onClick={() => setDetailId(s.id)}>
+              <NameCell name={s.full_name} sub={s.email} />
+              <span className="text-ink-sub">School staff</span>
+              <span className="truncate text-ink-sub">{canSee(s)}</span>
+              <span>{statusOf(s)}</span>
+            </TableRow>
+          ))
+        )}
+      </TableCard>
+
+      {detail && (
+        <Drawer
+          eyebrow="DETAILS"
+          title={detail.full_name}
+          subtitle={detail.email}
+          onClose={() => setDetailId(null)}
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditUser(detail)}>
+                <span className="material-symbols-outlined !text-[18px]">edit</span>
+                Edit
+              </Button>
+              <Button onClick={() => setDetailId(null)}>Done</Button>
+            </div>
+          }
+        >
+          <DetailRows
+            rows={[
+              { k: 'Status', v: statusOf(detail) },
+              { k: 'Email', v: <ContactLink type="email" value={detail.email} /> },
+              { k: 'Phone', v: <ContactLink type="phone" value={detail.phone} /> },
+              { k: 'Can see', v: canSee(detail) },
+            ]}
+          />
+          <AccessChecklist staffId={detail.id} students={studentsQuery.data ?? []} grants={grantsQuery.data ?? []} />
+        </Drawer>
+      )}
+
+      {showAddModal && (
+        <Modal title="Add staff" onClose={() => setShowAddModal(false)}>
+          <form className="flex flex-col gap-3" onSubmit={handleCreateStaff}>
+            <Field label="Full name">
+              <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </Field>
+            <Field label="Email (used to log in)">
+              <Input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+            <PasswordField label="Password" required value={password} onChange={setPassword} />
+            {createError && (
+              <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">
+                {createError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createStaff.isPending}>
+                {createStaff.isPending ? 'Creating…' : 'Add staff'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {editUser && <EditAccountModal user={editUser} invalidateKey={['users', 'school_staff']} onClose={() => setEditUser(null)} />}
+      {toast.node}
+    </div>
   )
+}
+
+function AccessChecklist({ staffId, students, grants }: { staffId: string; students: Student[]; grants: StaffAccessGrant[] }) {
+  const queryClient = useQueryClient()
+  const [filter, setFilter] = useState('')
+  const grantsForStaff = useMemo(() => new Map(grants.filter((g) => g.staff_user_id === staffId).map((g) => [g.student_id, g.id])), [grants, staffId])
 
   const grant = useMutation({
-    mutationFn: (studentId: string) => api.post<StaffAccessGrant>('/staff-access', { staff_user_id: selectedStaffId, student_id: studentId }),
+    mutationFn: (studentId: string) => api.post<StaffAccessGrant>('/staff-access', { staff_user_id: staffId, student_id: studentId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff-access'] }),
   })
   const revoke = useMutation({
@@ -59,143 +215,41 @@ export function StaffAccessPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff-access'] }),
   })
 
-  function toggleAccess(studentId: string) {
-    const existingGrantId = grantsForSelected.get(studentId)
-    if (existingGrantId) revoke.mutate(existingGrantId)
+  function toggle(studentId: string) {
+    const existing = grantsForStaff.get(studentId)
+    if (existing) revoke.mutate(existing)
     else grant.mutate(studentId)
   }
 
+  const rows = students
+    .filter((s) => matches(filter, s.full_name, s.grade))
+    .sort((a, b) => Number(grantsForStaff.has(b.id)) - Number(grantsForStaff.has(a.id)) || a.full_name.localeCompare(b.full_name))
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-headline-lg text-primary">Staff & Access</h1>
-        <Button type="button" onClick={() => setShowAddModal(true)} className="flex items-center gap-1">
-          <span className="material-symbols-outlined !text-[18px]">person_add</span>
-          Add School Staff
-        </Button>
+    <DrawerSection title="Student access">
+      <Input placeholder="Filter students…" aria-label="Filter students" value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <div className="flex flex-col">
+        {rows.length === 0 ? (
+          <p className="py-2 text-[13px] text-muted">{students.length ? 'No students match.' : 'No students yet.'}</p>
+        ) : (
+          rows.map((s) => (
+            <label key={s.id} className="flex cursor-pointer items-center gap-2.5 border-b border-divider px-1 py-2 text-[14px]">
+              <input
+                type="checkbox"
+                checked={grantsForStaff.has(s.id)}
+                onChange={() => toggle(s.id)}
+                disabled={grant.isPending || revoke.isPending}
+                className="h-4 w-4 accent-amber"
+              />
+              <span className="flex-1 text-ink">
+                {s.full_name}
+                {s.grade && <span className="text-[12px] text-muted"> · Grade {s.grade}</span>}
+              </span>
+              <span className="text-[12px] text-muted">{grantsForStaff.has(s.id) ? 'Can see' : 'No access'}</span>
+            </label>
+          ))
+        )}
       </div>
-
-      <div className="grid grid-cols-12 gap-5">
-        <Card className="col-span-12 p-5 lg:col-span-4">
-          <h2 className="mb-3 text-title-lg text-primary">Staff</h2>
-          <ul className="flex flex-col gap-1">
-            {(staffQuery.data ?? []).map((s) => (
-              <li key={s.id}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedStaffId(s.id)}
-                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelectedStaffId(s.id)}
-                  className={`w-full cursor-pointer rounded-lg px-3 py-2 text-left text-body-md transition-colors ${
-                    selectedStaffId === s.id ? 'bg-primary-fixed text-on-primary-fixed-variant' : 'hover:bg-surface-container'
-                  }`}
-                >
-                  {s.full_name}
-                  <span className="ml-2 text-label-md text-on-surface-variant" onClick={(e) => e.stopPropagation()}>
-                    <ContactLink type="email" value={s.email} />
-                  </span>
-                </div>
-              </li>
-            ))}
-            {staffQuery.data?.length === 0 && <p className="px-3 text-body-md text-on-surface-variant">No staff yet.</p>}
-          </ul>
-        </Card>
-
-        <Card className="col-span-12 flex flex-col overflow-hidden lg:col-span-8">
-          <CardHeader>
-            <h2 className="text-title-lg text-primary">
-              {selectedStaffId
-                ? `Student access for ${staffQuery.data?.find((s) => s.id === selectedStaffId)?.full_name ?? ''}`
-                : 'Select a staff member'}
-            </h2>
-          </CardHeader>
-          {!selectedStaffId ? (
-            <p className="p-6 text-body-md text-on-surface-variant">Choose a staff member on the left to manage their student access.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="border-b border-outline-variant bg-surface-container-low">
-                  <tr>
-                    <th className="px-6 py-2 text-label-md text-secondary uppercase">Student</th>
-                    <th className="px-6 py-2 text-label-md text-secondary uppercase">Grade</th>
-                    <th className="px-6 py-2 text-label-md text-secondary uppercase">Access</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline-variant">
-                  {(studentsQuery.data ?? []).map((s) => {
-                    const hasAccess = grantsForSelected.has(s.id)
-                    return (
-                      <tr key={s.id} className="hover:bg-surface-container-low">
-                        <td className="px-6 py-3 text-body-md font-medium">{s.full_name}</td>
-                        <td className="px-6 py-3 text-data-mono text-secondary">{s.grade ?? '-'}</td>
-                        <td className="px-6 py-3">
-                          <label className="flex cursor-pointer items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={hasAccess}
-                              onChange={() => toggleAccess(s.id)}
-                              disabled={grant.isPending || revoke.isPending}
-                              className="h-5 w-5 rounded border-outline text-primary focus:ring-primary-container"
-                            />
-                            <span className="text-label-md text-on-surface-variant">{hasAccess ? 'Granted' : 'No access'}</span>
-                          </label>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {showAddModal && (
-        <Modal title="Add School Staff" onClose={() => setShowAddModal(false)}>
-          <form className="flex flex-col gap-3" onSubmit={handleCreateStaff}>
-            <Input required placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            <Input required type="email" placeholder="Email address (used to log in)" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <div className="flex flex-col gap-2">
-              <div className="relative flex items-center">
-                <Input
-                  required
-                  type={showPassword ? 'text' : 'password'}
-                  minLength={8}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pr-12"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-4 text-outline hover:text-secondary"
-                >
-                  <span className="material-symbols-outlined">{showPassword ? 'visibility_off' : 'visibility'}</span>
-                </button>
-              </div>
-              <p className="text-label-md text-on-surface-variant">
-                At least 8 characters, with an uppercase letter, a lowercase letter, a number, and a special character.
-              </p>
-              <PasswordStrengthMeter password={password} />
-            </div>
-            <div className="flex gap-2">
-              <Button type="submit" disabled={createStaff.isPending} className="flex-1">
-                {createStaff.isPending ? 'Creating…' : 'Add Staff Member'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>
-                Cancel
-              </Button>
-            </div>
-            {createError && (
-              <p role="alert" className="rounded-lg bg-error-container px-3 py-2 text-body-md text-on-error-container">
-                {createError}
-              </p>
-            )}
-          </form>
-        </Modal>
-      )}
-    </div>
+    </DrawerSection>
   )
 }
