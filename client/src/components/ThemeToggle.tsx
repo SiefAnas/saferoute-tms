@@ -15,7 +15,7 @@ export function ThemeToggle({ variant }: { variant: 'sidebar' | 'mobile' }) {
         onClick={toggle}
         aria-label={label}
         title={label}
-        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-row bg-sidebar-chip text-white hover:opacity-85"
+        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-row bg-sidebar-chip text-sidebar-strong hover:opacity-85"
       >
         <span className="material-symbols-outlined !text-[18px]">{icon}</span>
       </button>

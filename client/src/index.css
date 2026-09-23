@@ -72,6 +72,8 @@
   --color-sidebar-icon: #8b97a8;
   --color-sidebar-label: #6f7b8c;
   --color-sidebar-chip: #323c4a;
+  --color-sidebar-strong: #ffffff; /* names on the slate sidebar */
+  --color-sidebar-hover: rgba(255, 255, 255, 0.05);
   --color-topbar: #ffffff;
   --color-table-head: #f7f9fb;
   --color-hero: #1e2632; /* live-status panels: slate with amber figures */

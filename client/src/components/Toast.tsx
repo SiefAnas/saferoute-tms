@@ -22,7 +22,7 @@ export function useToast(durationMs = 2600) {
   const node = message ? (
     <div
       role="status"
-      className="fixed bottom-6 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-m bg-toast px-4 py-3 text-[14px] font-medium text-white shadow-toast"
+      className="fixed bottom-6 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-m bg-toast px-4 py-3 text-[14px] font-medium text-hero-ink shadow-toast"
     >
       <span className="material-symbols-outlined !text-[20px] text-toast-icon">check_circle</span>
       {message}

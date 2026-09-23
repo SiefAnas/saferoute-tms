@@ -43,7 +43,7 @@ export function Drawer({
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-row bg-sidebar-chip text-white hover:opacity-85"
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-row bg-sidebar-chip text-sidebar-strong hover:opacity-85"
             >
               <span className="material-symbols-outlined !text-[20px]">close</span>
             </button>
