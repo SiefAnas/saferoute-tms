@@ -2,7 +2,8 @@
 //   API_BASE=http://localhost:4000 node scripts/e2e-roles.mjs
 // Signs up its own throwaway companies/school ("MVP Test ..." names, @example.test emails) and
 // walks every role's main flow: company admin setup, driver check-in/trip/check-out, parent view,
-// school admin confirm, school staff scoping, cross-company isolation. It writes real rows to
+// school admin confirm, school staff scoping, driver scoping (a driver only reaches students,
+// vans and schools on their own not-ended assignments), cross-company isolation. It writes real rows to
 // whatever database that API uses and does not clean them up (trips/sessions have no delete).
 const BASE = process.env.API_BASE || 'http://localhost:4000'
 const PW = 'Secret123!'
@@ -107,6 +108,53 @@ async function main() {
   check(trip.status === 201 && trip.body.status === 'pending', 'log pickup -> pending trip', trip)
   const trips = await api('GET', '/trips', D)
   check(trips.body.some((t) => t.id === trip.body.id), 'trip in driver\'s list')
+
+  console.log('\n--- Driver scope (only own, not-ended assignments) ---')
+  const mkStudent = async (label) => {
+    const r = await api('POST', '/students', A, {
+      full_name: `MVP Test Student ${label} ${stamp}`, grade: '3', age: 8, parent_name: 'MVP Test Parent', parent_phone: '555-0101',
+      street_address: '3 Test St', city: 'Springfield', state: 'IL', zip_code: '62704', notes: 'None', school_id: willow.id,
+    })
+    check(r.status === 201, `create student ${label} -> 201`, r)
+    created.push(`student "MVP Test Student ${label} ${stamp}" (${r.body?.id})`)
+    return r.body
+  }
+  const drv2Email = `mvp-driver2-${stamp}@example.test`
+  const drv2 = await api('POST', '/users', A, { role: 'driver', fullName: `MVP Test Driver Two ${stamp}`, email: drv2Email, phone: '555-0110', address: '1 Test St', licenseNumber: 'T124', password: PW })
+  check(drv2.status === 201, 'create second driver -> 201', drv2)
+  created.push(`driver ${drv2Email} (${drv2.body?.id})`)
+  const van2 = await api('POST', '/vans', A, { license_plate: `MVP2-${stamp}`, brand: 'Ford', model: 'Transit', year: 2022, color: 'White' })
+  check(van2.status === 201, 'create second van -> 201', van2)
+  created.push(`van MVP2-${stamp} (${van2.body?.id})`)
+  const stuOther = await mkStudent('Other Driver')
+  const stuEnded = await mkStudent('Ended')
+  const stuFuture = await mkStudent('Future')
+  const asgOther = await api('POST', '/assignments', A, { student_id: stuOther.id, driver_user_id: drv2.body.id, van_id: van2.body.id, start_date: today, shift_period: 'both' })
+  check(asgOther.status === 201, "assignment for driver two's student -> 201", asgOther)
+  const asgEnded = await api('POST', '/assignments', A, { student_id: stuEnded.id, driver_user_id: drv.body.id, van_id: van.body.id, start_date: '2020-01-01', end_date: '2020-12-31', shift_period: 'both' })
+  check(asgEnded.status === 201, 'ended assignment for driver one -> 201', asgEnded)
+  const asgFuture = await api('POST', '/assignments', A, { student_id: stuFuture.id, driver_user_id: drv.body.id, van_id: van.body.id, start_date: '2099-01-01', shift_period: 'both' })
+  check(asgFuture.status === 201, 'future assignment for driver one -> 201', asgFuture)
+  for (const a of [asgOther, asgEnded, asgFuture]) created.push(`assignment ${a.body?.id}`)
+
+  const dStudents = await api('GET', '/students', D)
+  const dIds = (dStudents.body ?? []).map((s) => s.id).sort()
+  check(JSON.stringify(dIds) === JSON.stringify([stu.body.id, stuFuture.id].sort()), 'driver GET /students = own active + future students only', dStudents.body?.map((s) => s.full_name))
+  check((await api('GET', `/students/${stuOther.id}`, D)).status === 404, "driver can't read another driver's student (404)")
+  check((await api('GET', `/students/${stuEnded.id}`, D)).status === 404, "driver can't read an ended assignment's student (404)")
+  check((await api('GET', `/students/${stuFuture.id}`, D)).status === 200, "driver can read a future assignment's student")
+  const dVans = await api('GET', '/vans', D)
+  check(dVans.status === 200 && dVans.body.every((v) => v.id === van.body.id), 'driver GET /vans = only their own van', dVans.body?.map((v) => v.license_plate))
+  check((await api('GET', `/vans/${van2.body.id}`, D)).status === 404, "driver can't read another driver's van (404)")
+  check((await api('GET', `/schools/${willow.id}`, D)).status === 200, "driver can read their student's school")
+  const dAsg = await api('GET', '/assignments', D)
+  check(dAsg.status === 200 && !dAsg.body.some((a) => a.id === asgEnded.body.id), 'driver GET /assignments leaves out the ended one')
+  check((await api('POST', '/trips', D, { student_id: stuOther.id, trip_type: 'pickup', shift_period: 'morning' })).status === 404, "driver can't log a trip for another driver's student (404)")
+  check((await api('POST', '/trips', D, { student_id: stuEnded.id, trip_type: 'pickup', shift_period: 'morning' })).status === 404, "driver can't log a trip for an ended assignment's student (404)")
+  check((await api('POST', '/trips', D, { student_id: stuFuture.id, trip_type: 'pickup', shift_period: 'morning' })).status === 409, "driver can't log a trip for a student who isn't on today's run (409)")
+  check((await api('POST', `/schedule/${asgOther.body.id}/no-show`, D, { shift_period: 'morning' })).status === 404, "driver can't report a no-show on another driver's assignment (404)")
+  const D2 = (await login(drv2Email)).token
+  check((await api('GET', `/students/${stu.body.id}`, D2)).status === 404, "driver two can't read driver one's student (404)")
 
   console.log('\n--- Parent ---')
   const parEmail = `mvp-parent-${stamp}@example.test`
