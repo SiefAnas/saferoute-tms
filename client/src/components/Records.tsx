@@ -258,3 +258,35 @@ export function FilterChip({ active, onClick, children }: { active: boolean; onC
     </button>
   )
 }
+
+// Case-insensitive "does any of these fields contain the search text".
+export function matches(q: string, ...fields: (string | null | undefined)[]) {
+  const needle = q.trim().toLowerCase()
+  if (!needle) return true
+  return fields.some((f) => f?.toLowerCase().includes(needle))
+}
+
+// Search empty state (5a): icon tile, 'No matches for "{q}"', a hint and "Clear search".
+export function NoMatches({ q, hint, onClear }: { q: string; hint: string; onClear: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-3 border-t border-divider px-6 py-9 text-center">
+      <span className="flex h-12 w-12 items-center justify-center rounded-[12px] bg-neutral-bg text-neutral-fg">
+        <span className="material-symbols-outlined !text-[24px]">search_off</span>
+      </span>
+      <p className="text-[15px] font-semibold text-ink">No matches for &ldquo;{q}&rdquo;</p>
+      <p className="max-w-sm text-[13px] text-muted">{hint}</p>
+      <button
+        type="button"
+        onClick={onClear}
+        className="h-8 cursor-pointer rounded-[7px] border border-outline bg-outline-bg px-3 text-[13px] font-medium text-ink hover:bg-surface-2"
+      >
+        Clear search
+      </button>
+    </div>
+  )
+}
+
+// One-line page description under the top bar.
+export function PageIntro({ children }: { children: ReactNode }) {
+  return <p className="text-[14px] text-muted">{children}</p>
+}
