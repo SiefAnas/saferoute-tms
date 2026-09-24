@@ -6,6 +6,10 @@ import { EmptyState } from '../../components/EmptyState'
 import { SectionHeader } from '../../components/mobile'
 import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
 import { clockTime, useTodaySchedule, useTodaysTrips } from './driverData'
+import { MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
+import { StatCard, StatRow, TableCard, TableRow } from '../../components/Records'
+import { PageTopBar } from '../../layouts/TopBar'
+import { formatWeekdayDate } from '../../lib/format'
 
 interface Row {
   key: string
@@ -62,6 +66,52 @@ export function DriverTripsPage() {
     }
     return out.sort((a, b) => b.sortKey.localeCompare(a.sortKey))
   }, [today, scheduleQuery.data])
+
+  const wide = useMediaQuery(MD_QUERY)
+  if (wide) {
+    // Desktop: the admin records style. Stat cards for today, then a table of every trip.
+    const template = '110px minmax(200px,1fr) minmax(160px,1fr) 180px'
+    const confirmed = rows.filter((r) => r.label === 'Confirmed').length
+    const waiting = rows.filter((r) => r.label === 'Awaiting school').length
+    const noShows = rows.filter((r) => r.tone === 'alert').length
+    return (
+      <div className="flex flex-col gap-5">
+        <PageTopBar title="Today's trips" subtitle={formatWeekdayDate()} />
+        <StatRow template="1fr 1fr 1fr">
+          <StatCard label="Confirmed by the school" value={confirmed} tone={confirmed ? 'success' : 'default'} />
+          <StatCard label="Awaiting the school" value={waiting} tone={waiting ? 'caution' : 'default'} />
+          <StatCard label="No-shows" value={noShows} tone={noShows ? 'alert' : 'default'} />
+        </StatRow>
+        {tripsQuery.isLoading ? (
+          <p className="text-[14px] text-muted">Loading…</p>
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon="receipt_long"
+            title="No trips yet today"
+            body="Each pickup and drop-off you log lands here and waits for the school to confirm it."
+            action={
+              <Button variant="outline" size="sm" onClick={() => navigate('/driver')}>
+                Go to today's students
+              </Button>
+            }
+          />
+        ) : (
+          <TableCard title="Trips" hint={`${rows.length} today`} template={template} minWidth={640} columns={[{ label: 'Time' }, { label: 'Student' }, { label: 'What' }, { label: 'Status' }]}>
+            {rows.map((r) => (
+              <TableRow key={r.key} template={template}>
+                <span className="text-[13px] text-ink-sub tabular">{r.time}</span>
+                <span className="truncate font-semibold text-ink">{r.name}</span>
+                <span className="text-[13px] text-muted">{r.kind}</span>
+                <span>
+                  <StatusBadge tone={r.tone} label={r.label} />
+                </span>
+              </TableRow>
+            ))}
+          </TableCard>
+        )}
+      </div>
+    )
+  }
 
   return (
     <>

@@ -5,6 +5,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { useComingSoon } from './ComingSoon'
 import { useAuth } from '../lib/auth'
 import { MD_QUERY, useMediaQuery } from '../lib/useMediaQuery'
+import { TopBarContext, type TopBarSlots } from '../layouts/TopBar'
 
 // Building blocks for the driver (3a) and parent (5b) shells. On phones everything sits inside a
 // `.mobile-app` root, so the shared color roles resolve to the mobile palette; on wider screens
@@ -102,6 +103,11 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
   const slotRef = useCallback((el: HTMLDivElement | null) => setThumbSlot(el), [])
   const openComingSoon = useComingSoon()
   const { user } = useAuth()
+  // Same top-bar slots as the admin shell (layouts/TopBar.tsx): a page can set its own title and
+  // actions with <PageTopBar>; otherwise the bar shows the greeting and the date line.
+  const [slots, setSlots] = useState<TopBarSlots>({ title: null, actions: null })
+  const titleRef = useCallback((el: HTMLDivElement | null) => setSlots((s) => (s.title === el ? s : { ...s, title: el })), [])
+  const actionsRef = useCallback((el: HTMLDivElement | null) => setSlots((s) => (s.actions === el ? s : { ...s, actions: el })), [])
   const itemClass = (active: boolean) =>
     `flex h-[38px] w-full cursor-pointer items-center gap-3 rounded-btn px-2.5 text-[14px] transition-colors ${
       active ? 'bg-amber font-semibold text-on-amber' : 'text-sidebar-ink hover:bg-sidebar-hover'
@@ -159,20 +165,27 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
         </div>
       </aside>
 
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="flex min-h-16 shrink-0 flex-col justify-center gap-0.5 border-b border-line bg-topbar px-7 py-2">
-          <h1 className="text-page-title text-ink">{title}</h1>
-          <span className="text-[13px] text-muted">{sub}</span>
-        </div>
-        <div className="flex-1 overflow-y-auto px-3 py-3">
-          <div className="mx-auto max-w-[1200px] pb-4">
-            <ThumbSlotContext.Provider value={thumbSlot}>
-              <Suspense fallback={<p className="px-5 pt-6 text-[14px] text-muted">Loading…</p>}>{children}</Suspense>
-            </ThumbSlotContext.Provider>
+      <TopBarContext.Provider value={slots}>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-topbar px-7 py-2">
+            <div ref={titleRef} className="flex min-w-0 items-center [&:has([data-page-title])>[data-default-title]]:hidden">
+              <div data-default-title className="flex min-w-0 flex-col gap-0.5">
+                <h1 className="truncate text-page-title text-ink">{title}</h1>
+                <span className="truncate text-[13px] text-muted">{sub}</span>
+              </div>
+            </div>
+            <div ref={actionsRef} className="flex flex-wrap items-center gap-2" />
           </div>
-        </div>
-        <div ref={slotRef} className="shrink-0 empty:hidden" />
-      </main>
+          <div className="flex-1 overflow-y-auto px-7 py-6">
+            <div className="mx-auto max-w-[1440px]">
+              <ThumbSlotContext.Provider value={thumbSlot}>
+                <Suspense fallback={<p className="text-[14px] text-muted">Loading…</p>}>{children}</Suspense>
+              </ThumbSlotContext.Provider>
+            </div>
+          </div>
+          <div ref={slotRef} className="shrink-0 empty:hidden" />
+        </main>
+      </TopBarContext.Provider>
     </div>
   )
 }

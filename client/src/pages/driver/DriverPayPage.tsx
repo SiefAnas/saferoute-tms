@@ -7,6 +7,10 @@ import { formatMoney, formatRate } from '../../lib/format'
 import { EmptyState } from '../../components/EmptyState'
 import { SectionHeader } from '../../components/mobile'
 import { useDriverSessions } from './driverData'
+import { MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
+import { HeroStat, StatCard, StatRow } from '../../components/Records'
+import { Card, CardHeader, CardTitle } from '../../components/Card'
+import { PageTopBar } from '../../layouts/TopBar'
 import type { PaySummary } from '../../types/api'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -16,6 +20,7 @@ const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 export function DriverPayPage() {
   const { user } = useAuth()
   const { sessions } = useDriverSessions()
+  const wide = useMediaQuery(MD_QUERY)
   const now = new Date()
   const { from, to } = useMemo(() => {
     const d = new Date()
@@ -48,7 +53,70 @@ export function DriverPayPage() {
   const noRate = payQuery.error instanceof ApiError && payQuery.error.status === 404
   const hours = p ? (p.worked_minutes / 60).toFixed(p.worked_minutes % 60 === 0 ? 0 : 2) : ''
 
-  // Wide desktops: the pay card and the calendar sit side by side.
+  const calendar = (
+    <>
+    <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-faint">
+      {WEEKDAYS.map((w, i) => (
+        <span key={i}>{w}</span>
+      ))}
+    </div>
+    <div className="grid grid-cols-7 gap-1">
+      {Array.from({ length: lead }, (_, i) => (
+        <span key={`b${i}`} />
+      ))}
+      {Array.from({ length: daysInMonth }, (_, i) => {
+        const day = i + 1
+        const key = localISODate(new Date(year, month, day))
+        const cls =
+          key === todayKey
+            ? 'bg-cal-today text-on-cal-today'
+            : worked.has(key)
+              ? 'bg-cal-worked text-on-cal-worked'
+              : 'text-cal-off'
+        return (
+          <span
+            key={key}
+            aria-label={`${day}${worked.has(key) ? ', worked' : ''}${key === todayKey ? ', today' : ''}`}
+            className={`flex aspect-square items-center justify-center rounded-[6px] text-[12px] font-medium ${cls}`}
+          >
+            {day}
+          </span>
+        )
+      })}
+    </div>
+    </>
+  )
+
+  // Desktop (md and up): admin-style stat cards, then the calendar in a card.
+  if (wide) {
+    return (
+      <div className="flex flex-col gap-5">
+        <PageTopBar title="Pay" subtitle={`${monthName} so far`} />
+        {payQuery.isLoading ? (
+          <p className="text-[14px] text-muted">Loading…</p>
+        ) : noRate ? (
+          <EmptyState icon="payments" title="No pay rate yet" body="Your company hasn't set your pay rate. Ask the office to add it." />
+        ) : p ? (
+          <StatRow template="1.3fr 1fr 1fr 1fr">
+            <HeroStat label="This month so far" value={formatMoney(p.total_pay_cents)} sub={p.adjustments_cents !== 0 ? `${p.adjustments_cents > 0 ? '+' : ''}${formatMoney(p.adjustments_cents)} adjustments included` : 'No adjustments this month'} />
+            <StatCard label="Days worked" value={p.worked_days} />
+            <StatCard label="Hours" value={hours} />
+            <StatCard label="Your rate" value={formatRate(p.rate_cents, p.rate_type)} />
+          </StatRow>
+        ) : (
+          <p className="text-[14px] text-muted">Couldn't load your pay right now.</p>
+        )}
+        <Card className="max-w-[560px]">
+          <CardHeader>
+            <CardTitle>Days worked · {monthName}</CardTitle>
+          </CardHeader>
+          <div className="flex flex-col gap-2 px-5 py-4">{calendar}</div>
+        </Card>
+      </div>
+    )
+  }
+
+  // Phones: the approved mobile layout.
   return (
     <>
       <SectionHeader title="Pay" aside={monthName} />
@@ -79,35 +147,7 @@ export function DriverPayPage() {
 
       <div className="mx-4 mt-3 flex flex-col gap-2 rounded-m border border-line bg-surface px-4 py-3.5 shadow-card lg:mt-0 lg:max-w-[440px]">
         <span className="text-[13px] font-medium text-ink">Days worked</span>
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-faint">
-          {WEEKDAYS.map((w, i) => (
-            <span key={i}>{w}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {Array.from({ length: lead }, (_, i) => (
-            <span key={`b${i}`} />
-          ))}
-          {Array.from({ length: daysInMonth }, (_, i) => {
-            const day = i + 1
-            const key = localISODate(new Date(year, month, day))
-            const cls =
-              key === todayKey
-                ? 'bg-cal-today text-on-cal-today'
-                : worked.has(key)
-                  ? 'bg-cal-worked text-on-cal-worked'
-                  : 'text-cal-off'
-            return (
-              <span
-                key={key}
-                aria-label={`${day}${worked.has(key) ? ', worked' : ''}${key === todayKey ? ', today' : ''}`}
-                className={`flex aspect-square items-center justify-center rounded-[6px] text-[12px] font-medium ${cls}`}
-              >
-                {day}
-              </span>
-            )
-          })}
-        </div>
+        {calendar}
       </div>
       </div>
     </>

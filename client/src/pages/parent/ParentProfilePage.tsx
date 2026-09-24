@@ -3,6 +3,10 @@ import { api } from '../../lib/api'
 import { SectionHeader } from '../../components/mobile'
 import { AddressText } from '../../components/AddressText'
 import { ThemeChooser } from '../../components/ThemeChooser'
+import { Card, CardHeader, CardTitle } from '../../components/Card'
+import { DetailRows } from '../../components/Drawer'
+import { PageTopBar } from '../../layouts/TopBar'
+import { MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import type { ParentProfile, ParentStudentDetail, Student } from '../../types/api'
 
 // Parent app, Profile tab (design 5b): read-only. Self-service edit for parents is
@@ -30,6 +34,38 @@ export function ParentProfilePage() {
     { label: 'Home address', value: p?.address },
     { label: 'Transport company', value: company?.name },
   ]
+
+  const wide = useMediaQuery(MD_QUERY)
+  if (wide) {
+    // Desktop: admin-style detail card + appearance card.
+    return (
+      <div className="flex flex-col gap-5">
+        <PageTopBar title="Profile" />
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <Card className="overflow-hidden">
+            <CardHeader>
+              <CardTitle>Your details</CardTitle>
+            </CardHeader>
+            <div className="px-5 pb-2">
+              <DetailRows
+                rows={rows.map((r) => ({
+                  k: r.label,
+                  v: profileQuery.isLoading ? '…' : r.label === 'Home address' && r.value ? <AddressText address={r.value} className="text-[14px] font-medium text-ink" /> : (r.value ?? '—'),
+                }))}
+              />
+              <p className="py-3 text-[13px] text-muted">
+                To change your details, contact {company?.name ?? 'your transportation company'}
+                {company?.phone ? ` at ${company.phone}` : ''}.
+              </p>
+            </div>
+          </Card>
+          <Card className="px-5 py-4">
+            <ThemeChooser />
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="md:max-w-[680px]">

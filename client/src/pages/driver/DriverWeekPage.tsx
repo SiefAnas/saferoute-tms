@@ -4,6 +4,8 @@ import { api } from '../../lib/api'
 import { addDaysISO, localDateOf, localISODate, mondayOf } from '../../lib/localDate'
 import { formatTimeOfDay } from '../../lib/format'
 import { SectionHeader } from '../../components/mobile'
+import { MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
+import { PageTopBar } from '../../layouts/TopBar'
 import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
 import type { ShiftPeriod, TodayScheduleItem, WeekSchedule, WeekScheduleDay } from '../../types/api'
 
@@ -22,6 +24,41 @@ export function DriverWeekPage() {
   const end = addDaysISO(start, 6)
   const range = `${localDateOf(start).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${localDateOf(end).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
   const runs = weekQuery.data?.days.reduce((n, d) => n + d.morning.length + d.afternoon.length, 0) ?? 0
+  const wide = useMediaQuery(MD_QUERY)
+
+  const days = weekQuery.isLoading ? (
+    <p className={wide ? 'text-[14px] text-muted' : 'px-5 text-[14px] text-muted'}>Loading…</p>
+  ) : weekQuery.isError || !weekQuery.data ? (
+    <p className="mx-4 rounded-m bg-alert-bg px-3 py-2 text-[13px] text-alert-fg md:mx-0">Couldn&apos;t load this week. Try again in a moment.</p>
+  ) : (
+    <div className="mx-4 grid grid-cols-1 gap-3 md:mx-0 md:grid-cols-2 md:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
+      {weekQuery.data.days.map((d) => (
+        <DayCard key={d.date} day={d} isToday={d.date === today} />
+      ))}
+    </div>
+  )
+
+  // Desktop: the week navigation lives in the top bar, the days fill the width.
+  if (wide) {
+    return (
+      <div className="flex flex-col gap-5">
+        <PageTopBar title={start === thisWeek ? 'This week' : 'Week'} subtitle={`${range}${weekQuery.data ? ` · ${runs} ${runs === 1 ? 'stop' : 'stops'}` : ''}`}>
+          <WeekButton icon="chevron_left" label="Previous week" onClick={() => setStart(addDaysISO(start, -7))} />
+          {start !== thisWeek && (
+            <button
+              type="button"
+              onClick={() => setStart(thisWeek)}
+              className="h-10 cursor-pointer rounded-m border border-line bg-surface px-3.5 text-[14px] font-medium text-ink"
+            >
+              This week
+            </button>
+          )}
+          <WeekButton icon="chevron_right" label="Next week" onClick={() => setStart(addDaysISO(start, 7))} />
+        </PageTopBar>
+        {days}
+      </div>
+    )
+  }
 
   return (
     <>
@@ -45,17 +82,7 @@ export function DriverWeekPage() {
         )}
       </div>
 
-      {weekQuery.isLoading ? (
-        <p className="px-5 text-[14px] text-muted">Loading…</p>
-      ) : weekQuery.isError || !weekQuery.data ? (
-        <p className="mx-4 rounded-m bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">Couldn&apos;t load this week. Try again in a moment.</p>
-      ) : (
-        <div className="mx-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {weekQuery.data.days.map((d) => (
-            <DayCard key={d.date} day={d} isToday={d.date === today} />
-          ))}
-        </div>
-      )}
+      {days}
     </>
   )
 }
@@ -80,7 +107,7 @@ function DayCard({ day, isToday }: { day: WeekScheduleDay; isToday: boolean }) {
   return (
     <section
       aria-label={date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-      className={`overflow-hidden rounded-m border bg-surface shadow-card ${isToday ? 'border-action' : 'border-line'}`}
+      className={`overflow-hidden rounded-card border bg-surface shadow-card ${isToday ? 'border-action' : 'border-line'}`}
     >
       <div className="flex items-baseline justify-between px-3.5 pt-3 pb-2">
         <span className="text-[15px] font-semibold text-ink">

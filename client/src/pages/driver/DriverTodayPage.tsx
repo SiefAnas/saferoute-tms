@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { getCurrentCoords } from '../../lib/geo'
-import { formatTimeOfDay } from '../../lib/format'
+import { formatTimeOfDay, formatWeekdayDate } from '../../lib/format'
 import { Button } from '../../components/Button'
 import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
 import { ConfirmCard, ThumbBar } from '../../components/mobile'
 import { StudentPanel, StudentSheet, type SheetTarget } from './StudentSheet'
-import { LG_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
+import { LG_QUERY, MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
+import { NameCell, Segmented, StatCard, StatRow, TableCard, TableRow, stop as stopClick } from '../../components/Records'
+import { PageTopBar } from '../../layouts/TopBar'
 import {
   clockTime,
   homeAddress,
@@ -72,6 +74,7 @@ function defaultShift(open: DriverSession | undefined): ShiftPeriod {
 export function DriverTodayPage() {
   const queryClient = useQueryClient()
   const sideBySide = useMediaQuery(LG_QUERY)
+  const wide = useMediaQuery(MD_QUERY)
   const { query: sessionsQuery, openSession, endedToday } = useDriverSessions()
   const scheduleQuery = useTodaySchedule()
   const { today: todaysTrips } = useTodaysTrips()
@@ -190,6 +193,218 @@ export function DriverTodayPage() {
   const noun = shift === 'morning' ? 'pickups' : 'drop-offs'
   const pct = stops.length ? Math.round((handled / stops.length) * 100) : 0
   const busy = checkIn.isPending || checkOut.isPending
+  // Where this stop goes on this shift: morning = home → school, afternoon = school → home.
+  const fromTo = (s: Stop) => {
+    const home = homeAddress(details.get(s.item.student.id))?.line1 ?? 'Home'
+    return shift === 'morning' ? { from: home, to: s.item.school.name } : { from: s.item.school.name, to: home }
+  }
+
+  const dialogs = (
+    <>
+    {confirmEarlyOut && openSession && (
+      <ConfirmCard
+        title={`Check out of ${shift} shift?`}
+        body={`${stops.filter((s) => s.state === 'todo').length} ${stops.filter((s) => s.state === 'todo').length === 1 ? 'student is' : 'students are'} not handled yet. Once you check out you can't come back to this shift today.`}
+        cancelLabel="Stay checked in"
+        confirmLabel="Check out"
+        busy={checkOut.isPending}
+        onCancel={() => setConfirmEarlyOut(false)}
+        onConfirm={() => {
+          checkOut.mutate(openSession.id)
+          setConfirmEarlyOut(false)
+        }}
+      />
+    )}
+
+    {confirmNoShow && (
+      <ConfirmCard
+        title={`Mark ${confirmNoShow.name} as no-show?`}
+        body={`Nobody came out for this ${shift === 'morning' ? 'pickup' : 'drop-off'}. The school and the office are told.`}
+        confirmLabel="Mark no-show"
+        onCancel={() => setConfirmNoShow(null)}
+        onConfirm={() => {
+          markNoShow.mutate({ assignmentId: confirmNoShow.assignmentId, shiftPeriod: shift, name: confirmNoShow.name })
+          setConfirmNoShow(null)
+        }}
+      />
+    )}
+
+    {pendingSwitch && (
+      <ConfirmCard
+        title={`Switch to ${shiftName(pendingSwitch)}?`}
+        body={
+          <>
+            {openSession?.shift_period
+              ? `You're checked into ${shiftName(openSession.shift_period)}.`
+              : "You're checked into a shift that started before the update."}{' '}
+            Checking into {shiftName(pendingSwitch)} checks you out of it, and you won&apos;t be able to go back.
+          </>
+        }
+        confirmLabel="Switch shifts"
+        busy={checkIn.isPending}
+        onCancel={() => setPendingSwitch(null)}
+        onConfirm={() => {
+          checkIn.mutate({ shiftPeriod: pendingSwitch, confirmSwitch: true })
+          setPendingSwitch(null)
+        }}
+      />
+    )}
+
+    {sheet && !sideBySide && <StudentSheet target={sheet} onClose={() => setSheet(null)} />}
+    </>
+  )
+
+  // Desktop (md and up): a website page in the admin style (top bar actions, stat cards, a
+  // record table for the run, the student panel beside it on wide screens). Same data, same
+  // actions and the same dialogs as the phone layout below.
+  if (wide) {
+    const runLabel = `${shiftName(shift)} ${shift === 'morning' ? 'pickups' : 'drop-offs'}`
+    const template = '44px minmax(180px,1.3fr) minmax(220px,2fr) 90px 150px 220px'
+    return (
+      <div className="flex flex-col gap-5">
+        <PageTopBar title="Today" subtitle={formatWeekdayDate()}>
+          <Segmented
+            label="Shift"
+            value={shift}
+            onChange={(p) => setSelected(p)}
+            options={(['morning', 'afternoon'] as const).map((p) => ({ value: p, label: `${shiftName(p)} · ${counts[p]}` }))}
+          />
+          {isOpenHere ? (
+            <Button variant="outline" disabled={busy} onClick={() => (next ? setConfirmEarlyOut(true) : checkOut.mutate(openSession!.id))}>
+              <span className="material-symbols-outlined !text-[18px]">logout</span>
+              {checkOut.isPending ? 'Please wait…' : `Check out of ${shift}`}
+            </Button>
+          ) : !ended ? (
+            <Button disabled={busy} onClick={requestCheckIn}>
+              <span className="material-symbols-outlined !text-[18px]">login</span>
+              {checkIn.isPending ? 'Please wait…' : `Check in to ${shift}`}
+            </Button>
+          ) : null}
+        </PageTopBar>
+
+        {openSession && !openSession.shift_period && (
+          <div className="flex items-center justify-between gap-3 rounded-card bg-caution-bg px-5 py-3 text-[14px] text-caution-fg">
+            You have an open shift from before shifts were split (checked in {clockTime(openSession.check_in_at)}).
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => checkOut.mutate(openSession.id)}>
+              Check out of old shift
+            </Button>
+          </div>
+        )}
+        {actionError && (
+          <p role="alert" className="rounded-row bg-alert-bg px-4 py-2.5 text-[14px] text-alert-fg">
+            {actionError}
+          </p>
+        )}
+        {notice && (
+          <p role="status" className="flex items-center gap-2 rounded-row bg-success-bg px-4 py-2.5 text-[14px] font-medium text-success-fg">
+            <span className="material-symbols-outlined !text-[18px]">check_circle</span>
+            {notice}
+          </p>
+        )}
+
+        <StatRow template="1fr 1fr 1.4fr">
+          <StatCard label={`${shiftName(shift)} shift`} value={pill.label} sub={clock || (ended ? 'View only' : 'Your location is saved with check-in')} tone={isOpenHere ? 'success' : 'default'} />
+          <StatCard label={`${noun[0].toUpperCase()}${noun.slice(1)} handled`} value={`${handled} of ${stops.length}`} sub={`${pct}% done`} />
+          <StatCard
+            label={`Next ${shift === 'morning' ? 'pickup' : 'drop-off'}`}
+            value={next ? next.item.student.name : isOpenHere ? 'All handled' : '—'}
+            sub={next ? `${next.time ? formatTimeOfDay(next.time) : 'No time set'} · ${fromTo(next).from}` : isOpenHere ? 'Check out when you are done' : 'Check in to start'}
+          />
+        </StatRow>
+
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+          {stops.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-card bg-surface px-6 py-10 text-center shadow-card">
+              <span className="material-symbols-outlined !text-[32px] text-muted">route</span>
+              <span className="text-[15px] font-semibold text-ink">No {shift} students today</span>
+              <span className="text-[14px] text-muted">
+                {counts[shift === 'morning' ? 'afternoon' : 'morning'] > 0
+                  ? `You have students on the ${shift === 'morning' ? 'afternoon' : 'morning'} shift.`
+                  : 'No runs for you today. The Week tab shows the days you drive.'}
+              </span>
+            </div>
+          ) : (
+            <TableCard
+              title={runLabel}
+              hint="Select a student for address, parents and notes"
+              template={template}
+              minWidth={900}
+              columns={[{ label: '#' }, { label: 'Student' }, { label: 'From → To' }, { label: 'Time' }, { label: 'Status' }, { label: '', align: 'right' }]}
+            >
+              {stops.map((s, i) => {
+                const isNext = next === s
+                const tone: BadgeTone = isNext ? 'next' : s.state === 'todo' ? 'neutral' : STATE_LABEL[s.state].tone
+                const route = fromTo(s)
+                const canAct = isOpenHere && s.state === 'todo'
+                return (
+                  <TableRow
+                    key={s.item.assignment_id}
+                    template={template}
+                    selected={panelStop === s}
+                    onClick={() => openSheet(s)}
+                    className={s.state === 'skipped' || s.state === 'noshow' ? 'opacity-60' : ''}
+                  >
+                    <span className="text-[13px] font-semibold text-muted tabular">{i + 1}</span>
+                    <NameCell name={s.item.student.name} sub={s.item.student.grade ? `Grade ${s.item.student.grade}` : s.item.school.name} />
+                    <span className="flex min-w-0 items-center gap-1.5 text-[13px]">
+                      <span className="truncate text-ink">{route.from}</span>
+                      <span className="material-symbols-outlined shrink-0 !text-[16px] text-muted">arrow_forward</span>
+                      <span className="truncate text-ink">{route.to}</span>
+                    </span>
+                    <span className={`text-[13px] tabular ${s.timeChanged ? 'font-semibold text-caution-fg' : 'text-ink-sub'}`}>
+                      {s.time ? formatTimeOfDay(s.time) : '—'}
+                    </span>
+                    <span>
+                      {isNext || s.state !== 'todo' ? (
+                        <StatusBadge tone={tone} label={isNext ? 'Up next' : STATE_LABEL[s.state as Exclude<StopState, 'todo'>].label} />
+                      ) : (
+                        <span className="text-[13px] text-muted">To do</span>
+                      )}
+                    </span>
+                    <span className="flex justify-end gap-2" onClick={stopClick}>
+                      {canAct && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={markNoShow.isPending || logTrip.isPending}
+                            onClick={() => {
+                              setActionError(null)
+                              setConfirmNoShow({ assignmentId: s.item.assignment_id, name: s.item.student.name })
+                            }}
+                          >
+                            No-show
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={logTrip.isPending || markNoShow.isPending}
+                            onClick={() => {
+                              setActionError(null)
+                              logTrip.mutate({ studentId: s.item.student.id, shiftPeriod: shift })
+                            }}
+                          >
+                            <span className="material-symbols-outlined !text-[16px]">check</span>
+                            {shift === 'morning' ? 'Picked up' : 'Dropped off'}
+                          </Button>
+                        </>
+                      )}
+                    </span>
+                  </TableRow>
+                )
+              })}
+            </TableCard>
+          )}
+          {panelStop && (
+            <div className="xl:sticky xl:top-0">
+              <StudentPanel key={`${panelStop.item.student.id}-${shift}`} target={targetOf(panelStop)} />
+            </div>
+          )}
+        </div>
+        {dialogs}
+      </div>
+    )
+  }
 
   return (
     <>
@@ -415,56 +630,7 @@ export function DriverTodayPage() {
         )}
       </ThumbBar>
 
-      {confirmEarlyOut && openSession && (
-        <ConfirmCard
-          title={`Check out of ${shift} shift?`}
-          body={`${stops.filter((s) => s.state === 'todo').length} ${stops.filter((s) => s.state === 'todo').length === 1 ? 'student is' : 'students are'} not handled yet. Once you check out you can't come back to this shift today.`}
-          cancelLabel="Stay checked in"
-          confirmLabel="Check out"
-          busy={checkOut.isPending}
-          onCancel={() => setConfirmEarlyOut(false)}
-          onConfirm={() => {
-            checkOut.mutate(openSession.id)
-            setConfirmEarlyOut(false)
-          }}
-        />
-      )}
-
-      {confirmNoShow && (
-        <ConfirmCard
-          title={`Mark ${confirmNoShow.name} as no-show?`}
-          body={`Nobody came out for this ${shift === 'morning' ? 'pickup' : 'drop-off'}. The school and the office are told.`}
-          confirmLabel="Mark no-show"
-          onCancel={() => setConfirmNoShow(null)}
-          onConfirm={() => {
-            markNoShow.mutate({ assignmentId: confirmNoShow.assignmentId, shiftPeriod: shift, name: confirmNoShow.name })
-            setConfirmNoShow(null)
-          }}
-        />
-      )}
-
-      {pendingSwitch && (
-        <ConfirmCard
-          title={`Switch to ${shiftName(pendingSwitch)}?`}
-          body={
-            <>
-              {openSession?.shift_period
-                ? `You're checked into ${shiftName(openSession.shift_period)}.`
-                : "You're checked into a shift that started before the update."}{' '}
-              Checking into {shiftName(pendingSwitch)} checks you out of it, and you won&apos;t be able to go back.
-            </>
-          }
-          confirmLabel="Switch shifts"
-          busy={checkIn.isPending}
-          onCancel={() => setPendingSwitch(null)}
-          onConfirm={() => {
-            checkIn.mutate({ shiftPeriod: pendingSwitch, confirmSwitch: true })
-            setPendingSwitch(null)
-          }}
-        />
-      )}
-
-      {sheet && !sideBySide && <StudentSheet target={sheet} onClose={() => setSheet(null)} />}
+      {dialogs}
     </>
   )
 }
