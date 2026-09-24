@@ -12,6 +12,8 @@ import { LG_QUERY, MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import { FilterChip, StatCard, StatRow } from '../../components/Records'
 import { Card, CardHeader, CardTitle } from '../../components/Card'
 import { PageTopBar } from '../../layouts/TopBar'
+import { DifferentAddressNote, extraAddressSchedule } from '../../components/Route'
+import { AddressText } from '../../components/AddressText'
 import { formatWeekdayDate } from '../../lib/format'
 import type { ParentStudentDetail, ParentTransportEntry, SkipStatus, Student } from '../../types/api'
 
@@ -161,17 +163,43 @@ function ChildView({ student }: { student: Student }) {
   else if (!morning) banner = { tone: 'neutral', icon: 'wb_sunny', text: 'Afternoon ride only' }
   else banner = morning.pickup_time ? { tone: 'neutral', icon: 'schedule', text: `Pickup at ${formatTimeOfDay(morning.pickup_time)}` } : null
 
+  // Today's pickup / drop-off place from the server's route (an extra address replaces home on
+  // its days, e.g. "Grandparents"); highlighted so it doesn't read as the usual routine.
+  const pickupPlace = morning?.route?.morning?.from
+  const dropoffPlace = afternoon?.route?.afternoon?.to
+  const different = [pickupPlace, dropoffPlace].find((p) => p?.kind === 'extra')
   const rows = [
     {
       label: 'Morning pickup',
-      value: d.skip_today ? 'Skipped today' : morning ? `${formatTimeOfDay(morning.pickup_time)} · Home` : noRideToday ? 'No ride today' : 'No ride',
+      value: d.skip_today ? 'Skipped today' : morning ? `${formatTimeOfDay(morning.pickup_time)} · ${pickupPlace?.label ?? 'Home'}` : noRideToday ? 'No ride today' : 'No ride',
+      place: d.skip_today ? undefined : pickupPlace,
     },
     {
       label: 'Arrives at school',
       value: pickupTrip?.status === 'complete' ? `${formatClock(pickupTrip.completed_at ?? pickupTrip.created_at)} · ${d.school.name ?? 'School'}` : (d.school.name ?? '—'),
     },
-    { label: 'Afternoon drop-off', value: afternoon ? `${formatTimeOfDay(afternoon.dropoff_time)} · Home` : noRideToday ? 'No ride today' : 'No ride' },
+    {
+      label: 'Afternoon drop-off',
+      value: afternoon ? `${formatTimeOfDay(afternoon.dropoff_time)} · ${dropoffPlace?.label ?? 'Home'}` : noRideToday ? 'No ride today' : 'No ride',
+      place: dropoffPlace,
+    },
   ]
+
+  const otherAddresses = d.extra_addresses.length > 0 && (
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <CardTitle>Other addresses</CardTitle>
+        <span className="text-[12px] text-muted">Set by {d.company.name ?? 'your transportation company'}</span>
+      </CardHeader>
+      {d.extra_addresses.map((x) => (
+        <div key={x.id} className="flex flex-col gap-0.5 border-t border-divider px-5 py-3 first-of-type:border-t-0">
+          <span className="text-[14px] font-semibold text-ink">{x.label}</span>
+          {x.address && <AddressText address={x.address} />}
+          <span className="text-[12px] text-muted">{extraAddressSchedule(x)}</span>
+        </div>
+      ))}
+    </Card>
+  )
 
   // One driver card per distinct driver (split students can have two).
   const drivers = transport.filter((t, i) => t.driver && transport.findIndex((x) => x.driver?.full_name === t.driver?.full_name) === i)
@@ -187,17 +215,26 @@ function ChildView({ student }: { student: Student }) {
               <span className="truncate text-[13px] text-muted">{[student.grade ? `Grade ${student.grade}` : null, d.school.name].filter(Boolean).join(' · ')}</span>
             </div>
           </div>
-          {banner && (
-            <span className={`flex items-center gap-2 rounded-row px-3 py-2 text-[14px] font-medium ${BANNER[banner.tone]}`}>
-              <span className="material-symbols-outlined !text-[18px]">{banner.icon}</span>
-              {banner.text}
-            </span>
-          )}
+          <div className="flex flex-col items-end gap-2">
+            {banner && (
+              <span className={`flex items-center gap-2 rounded-row px-3 py-2 text-[14px] font-medium ${BANNER[banner.tone]}`}>
+                <span className="material-symbols-outlined !text-[18px]">{banner.icon}</span>
+                {banner.text}
+              </span>
+            )}
+            {different && <DifferentAddressNote place={different} />}
+          </div>
         </Card>
 
         <StatRow template="1fr 1fr 1fr">
           {rows.map((r) => (
-            <StatCard key={r.label} label={r.label} value={<span className="text-[20px]">{r.value}</span>} />
+            <StatCard
+              key={r.label}
+              label={r.label}
+              value={<span className="text-[20px]">{r.value}</span>}
+              sub={r.place?.address ?? undefined}
+              subTone={r.place?.kind === 'extra' ? 'caution' : 'default'}
+            />
           ))}
         </StatRow>
 
@@ -240,6 +277,7 @@ function ChildView({ student }: { student: Student }) {
             )}
           </Card>
           <SkipBar student={student} detail={d} inline />
+          {otherAddresses}
         </div>
       </div>
     )
@@ -258,6 +296,7 @@ function ChildView({ student }: { student: Student }) {
             {banner.text}
           </div>
         )}
+        {different && <DifferentAddressNote place={different} />}
         {/* V2: "Van is X stops away" + live map need live stop progress / GPS. */}
         {transport.length > 0 && (
           <button
@@ -279,10 +318,12 @@ function ChildView({ student }: { student: Student }) {
         {rows.map((r, i) => (
           <div key={r.label} className={`flex items-center justify-between gap-3 px-4 py-2.5 text-[14px] ${i ? 'border-t border-divider' : ''}`}>
             <span className="text-muted">{r.label}</span>
-            <span className="text-right font-medium text-ink tabular">{r.value}</span>
+            <span className={`text-right font-medium tabular ${r.place?.kind === 'extra' ? 'text-caution-fg' : 'text-ink'}`}>{r.value}</span>
           </div>
         ))}
       </div>
+
+      {otherAddresses && <div className="mx-4">{otherAddresses}</div>}
 
       {drivers.length === 0 ? (
         <div className="mx-4 rounded-m border border-line bg-surface px-4 py-3 text-[13px] text-muted">

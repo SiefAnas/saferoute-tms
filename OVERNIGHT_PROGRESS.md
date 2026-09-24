@@ -29,8 +29,18 @@ already merged and live before tonight).
     grid, Pay stat cards + calendar card, parent child detail cards + inline skip card, profile
     detail card. Phone layout unchanged. Checked 390 / 820 / 1440.
 
+- **Job 2 `stops-and-extra-addresses`** (pushed, migration **023**)
+  - Server decides the route per run and day (`services/stops.js`): morning home → school,
+    afternoon school → home; an extra address replaces home on its weekdays / dates / leg.
+    Sent as `route` on `/schedule/today`, `/schedule/week` and the parent detail.
+  - Admin: "Other addresses" on the student drawer (add / edit / remove). Parent: read-only list.
+  - Driver web + mobile Today / Week and the student sheet show From → To; an extra address is
+    highlighted (amber, alt-route icon, "Different address today: Grandparents").
+  - Tests: suite 22 (37 checks), mobile route/weekday tests; checked in the browser on a local DB.
+  - V2 in the roadmap: one-time address, time messages (half days), times per weekday.
+
 ## In progress
-- **Job 2 `stops-and-extra-addresses`**
+- **Job 3 `monitor-role`**
 
 ## Next
 - Job 3 monitor role, Job 4 mobile admin roles.

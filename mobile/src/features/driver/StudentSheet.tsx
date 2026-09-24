@@ -1,8 +1,9 @@
 import { Linking, Pressable, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api'
-import type { SchoolDetail, ShiftPeriod, Student } from '@/api/types'
+import type { RouteLeg, SchoolDetail, ShiftPeriod, Student } from '@/api/types'
 import { AddressText } from '@/components/AddressText'
+import { PlaceLine } from '@/components/Route'
 import { Avatar } from '@/components/Avatar'
 import { CallButton } from '@/components/CallButton'
 import { BottomSheet } from '@/components/Dialogs'
@@ -21,6 +22,8 @@ export interface SheetTarget {
   /** Effective pickup/drop-off time for that shift, "HH:MM:SS". */
   time: string | null
   parentSkipped: boolean
+  /** That day's From → To from the schedule (server-decided, may be an extra address). */
+  leg?: RouteLeg | null
 }
 
 // Student sheet (design 3a): who they are, where they are going on this shift, the office's
@@ -132,7 +135,8 @@ export function StudentSheet({ target, onClose }: { target: SheetTarget; onClose
             <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: colors.ink }} />
           </View>
           <View style={{ flex: 1, gap: 12 }}>
-            {[from, to].map((stop, i) => (
+            {target.leg ? [target.leg.from, target.leg.to].map((place, i) => <PlaceLine key={i} place={place} />) : null}
+            {target.leg ? null : [from, to].map((stop, i) => (
               <View key={i}>
                 <Text size={14} weight="medium">
                   {stop.label}

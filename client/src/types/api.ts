@@ -102,6 +102,7 @@ export interface ParentTransportEntry {
   dropoff_time: string | null
   days_of_week: number[] // ISO weekdays, 1 = Monday ... 7 = Sunday
   runs_today: boolean // false on a day this ride doesn't run (e.g. the weekend)
+  route: StudentRoute // today's From → To per leg
 }
 
 export interface ParentStudentDetail {
@@ -109,6 +110,7 @@ export interface ParentStudentDetail {
   school: { name: string | null }
   company: { name: string | null; phone: string | null }
   transport: ParentTransportEntry[]
+  extra_addresses: ExtraAddress[] // read-only for parents
   skip_today: boolean
   trips_today: Array<{
     trip_type: TripType
@@ -166,6 +168,7 @@ export interface Student {
   updated_at: string
   // Only present on GET /students/:id (merged server-side), not on the list endpoint.
   contacts?: StudentContact[]
+  extra_addresses?: ExtraAddress[] // company admin only (GET /students/:id)
   // Only present when read by school_staff/school_admin (School Hub student list task,
   // 2026-09-02) — every one of the student's currently active assignments, resolved
   // server-side since a school-tenant reader can't reach those company-tenant tables
@@ -274,6 +277,39 @@ export interface ScheduleOverride {
 
 // GET /schedule/today — a driver's active assignments for today, enriched with
 // student/school summaries and today's resolved override (if any).
+// Where a leg starts or ends (services/stops.js on the server). kind 'extra' = an extra address
+// replacing home that day ("Grandparents"): the apps highlight it so it can't pass for routine.
+export interface RoutePlace {
+  kind: 'home' | 'school' | 'extra'
+  label: string
+  address: string | null
+}
+export interface RouteLeg {
+  from: RoutePlace
+  to: RoutePlace
+}
+// Only the legs the assignment covers: morning = home → school, afternoon = school → home.
+export interface StudentRoute {
+  morning: RouteLeg | null
+  afternoon: RouteLeg | null
+}
+
+// An extra address on a student (company admin manages it; parents see it read-only).
+export interface ExtraAddress {
+  id: string
+  student_id: string
+  label: string
+  street_address: string
+  city: string | null
+  state: string | null
+  zip_code: string | null
+  address: string | null // formatted, one line
+  days_of_week: number[]
+  applies_to: 'morning_pickup' | 'afternoon_dropoff' | 'both'
+  start_date: string | null // "YYYY-MM-DD"
+  end_date: string | null
+}
+
 export interface TodayScheduleItem {
   assignment_id: string
   shift_period: AssignmentShiftPeriod
@@ -293,6 +329,7 @@ export interface TodayScheduleItem {
   // reflect an already-reported no-show, for each shift separately.
   parent_skipped: { morning: boolean; afternoon: boolean }
   no_show_reported: { morning: boolean; afternoon: boolean }
+  route: StudentRoute // that day's From → To per leg
 }
 
 // GET /schedule/week?start=YYYY-MM-DD: 7 calendar days, each with the driver's morning and

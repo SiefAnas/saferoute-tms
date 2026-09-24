@@ -19,6 +19,10 @@ Size: **S** = about a day, **M** = a few days, **L** = a week or more / needs a 
 
 | **Open an address in a maps app** | Tapping an address copies it ("Address copied"), web and mobile, driver and parent. | Mobile: an action sheet "Apple Maps / Google Maps / Waze" with `Linking.openURL` (`maps://?q=`, `comgooglemaps://?q=`, `https://www.google.com/maps/search/?api=1&query=`), checking `Linking.canOpenURL` for installed apps (iOS needs `LSApplicationQueriesSchemes` in `app.config.ts`). Web: a "Open in Google Maps" link. Small (about half a day) but needs testing on real iPhone + Android. | S |
 
+| **One-time address for one date** | Extra addresses repeat on weekdays (optionally between dates); a single day works as start = end date on a matching weekday. | A dedicated "just this date" entry (and the parent asking for it), e.g. `student_extra_addresses` with a single `date` column, or reuse `assignment_schedule_overrides` with an address. | S |
+| **Message to the driver about a different time** (half days, early release) | Only the one-day override (time / skip) on an assignment. | A note + time on a date that the driver sees on Today / Week, sent by the company or the school (e.g. "Wednesday early release: pickup 12:30"). | S–M |
+| **Different times per weekday** | One usual pickup / drop-off time per assignment, plus one-day overrides. | Times per weekday on the assignment (e.g. `weekday_times jsonb`), applied in `/schedule/today` and `/schedule/week`. | M |
+
 ## From BACKLOG.md / spec §8 (not in the UI yet)
 
 | Feature | What the user sees now | Backend needed | Size |

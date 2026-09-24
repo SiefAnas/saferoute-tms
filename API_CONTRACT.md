@@ -190,6 +190,24 @@ token, or weak password. `429` rate limited.
 
 ## 3. Driver endpoints
 
+### Stops: where each run starts and ends (`route`)
+Every item from `/schedule/today` and `/schedule/week` (and each `transport` entry in the parent
+detail) has a `route`, decided by the server for that day:
+```json
+"route": {
+  "morning":   { "from": { "kind": "home",   "label": "Home",               "address": "12 Oak St, Boston, MA 02139" },
+                 "to":   { "kind": "school", "label": "Lincoln Elementary", "address": "200 School St, MA 02139" } },
+  "afternoon": { "from": { "kind": "school", "label": "Lincoln Elementary", "address": "200 School St, MA 02139" },
+                 "to":   { "kind": "extra",  "label": "Grandparents",       "address": "5 Pine Rd, Quincy, MA 02169" } }
+}
+```
+- Morning = home → school, afternoon = school → home. Only the legs the assignment covers
+  (a morning-only assignment has `"afternoon": null`).
+- `kind: "extra"`: an **extra address** replaces home that day (its weekdays, optional dates, and
+  the leg it covers: morning pickup, afternoon drop-off or both; newest wins if several apply).
+  **Show it highlighted** ("Different address today: Grandparents"), never like the routine.
+- Apps don't work out addresses themselves: show `route` as sent.
+
 Driver = `role: "driver"`. Every driver call is scoped to the driver's company; rows noted
 "own" are further limited to the driver's own records.
 
@@ -437,6 +455,7 @@ All scoped to the caller's own company or school; another tenant's ids return 40
 | `GET/POST /students`, `GET/PATCH/DELETE /students/:id`, `POST/DELETE /students/:id/contacts[/:contactId]` | |
 | `GET /schools` | id + name of schools the company works with (incl. own placeholders) |
 | `POST /placeholders/school` | `{ name, address }`: add a school that hasn't signed up |
+| `GET/POST /students/:id/addresses`, `PATCH/DELETE /students/:id/addresses/:addressId` | Extra addresses: `{ label, street_address, city?, state?, zip_code?, days_of_week: [1..7], applies_to: 'morning_pickup'\|'afternoon_dropoff'\|'both', start_date?, end_date? }` (dates `YYYY-MM-DD`). `GET /students/:id` includes `extra_addresses` for the company admin only. Parents see them read-only in `/parent/students/:id/detail` (`extra_addresses`). |
 | `GET/POST /assignments`, `GET/PATCH/DELETE /assignments/:id`, `GET/POST /assignments/:id/overrides`, `DELETE /assignments/:id/overrides/:overrideId` | times `HH:MM`, dates `YYYY-MM-DD`, `days_of_week` a non-empty list of 1–7 (1 = Monday; default `[1,2,3,4,5]`). Conflicts only count shared weekdays. |
 | `GET/POST/DELETE /parent-access` | link a parent to a student |
 | `GET /sessions`, `GET /trips` | whole company |

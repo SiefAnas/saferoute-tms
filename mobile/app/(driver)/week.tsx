@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useQueryClient } from '@tanstack/react-query'
 import { Card, Divided, SectionHeader } from '@/components/Card'
+import { DifferentAddressNote, homeEnd, isDifferent, legOf, placeName } from '@/components/Route'
 import { Icon, type IconName } from '@/components/Icon'
 import { Screen } from '@/components/Screen'
 import { ErrorState, Loading } from '@/components/States'
@@ -163,8 +164,11 @@ function Run({ period, items }: { period: ShiftPeriod; items: TodayScheduleItem[
               <Text size={14} weight="medium" numberOfLines={1}>
                 {item.student.name}
               </Text>
+              {isDifferent(legOf(item.route, period)) ? (
+                <DifferentAddressNote compact place={homeEnd(legOf(item.route, period)!, period)} />
+              ) : null}
               <Text size={12} color={colors.muted} numberOfLines={1}>
-                {item.school.name}
+                {placeName(legOf(item.route, period)?.from)} → {placeName(legOf(item.route, period)?.to)}
                 {item.override?.note ? ` · ${item.override.note}` : ''}
               </Text>
             </View>

@@ -10,9 +10,9 @@ import { StudentPanel, StudentSheet, type SheetTarget } from './StudentSheet'
 import { LG_QUERY, MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import { NameCell, Segmented, StatCard, StatRow, TableCard, TableRow, stop as stopClick } from '../../components/Records'
 import { PageTopBar } from '../../layouts/TopBar'
+import { DifferentAddressNote, homeEnd, isDifferent, legOf, placeName } from '../../components/Route'
 import {
   clockTime,
-  homeAddress,
   itemsForShift,
   shiftName,
   tripTypeFor,
@@ -166,6 +166,7 @@ export function DriverTodayPage() {
     period: shift,
     time: s.time,
     parentSkipped: s.parentSkipped,
+    leg: legFor(s),
   })
   const openSheet = (s: Stop) => setSheet(targetOf(s))
   // Side by side: the student picked in the list (on this shift), else the next stop, else the first.
@@ -194,9 +195,12 @@ export function DriverTodayPage() {
   const pct = stops.length ? Math.round((handled / stops.length) * 100) : 0
   const busy = checkIn.isPending || checkOut.isPending
   // Where this stop goes on this shift: morning = home → school, afternoon = school → home.
+  // Where this stop goes on this shift, as the server sent it (route): morning home → school,
+  // afternoon school → home, or an extra address instead of home that day (highlighted).
+  const legFor = (s: Stop) => legOf(s.item.route, shift)
   const fromTo = (s: Stop) => {
-    const home = homeAddress(details.get(s.item.student.id))?.line1 ?? 'Home'
-    return shift === 'morning' ? { from: home, to: s.item.school.name } : { from: s.item.school.name, to: home }
+    const leg = legFor(s)
+    return { from: placeName(leg?.from), to: placeName(leg?.to) }
   }
 
   const dialogs = (
@@ -346,10 +350,13 @@ export function DriverTodayPage() {
                   >
                     <span className="text-[13px] font-semibold text-muted tabular">{i + 1}</span>
                     <NameCell name={s.item.student.name} sub={s.item.student.grade ? `Grade ${s.item.student.grade}` : s.item.school.name} />
-                    <span className="flex min-w-0 items-center gap-1.5 text-[13px]">
-                      <span className="truncate text-ink">{route.from}</span>
-                      <span className="material-symbols-outlined shrink-0 !text-[16px] text-muted">arrow_forward</span>
-                      <span className="truncate text-ink">{route.to}</span>
+                    <span className="flex min-w-0 flex-col items-start gap-1">
+                      {isDifferent(legFor(s)) && <DifferentAddressNote compact place={homeEnd(legFor(s)!, shift)} />}
+                      <span className="flex min-w-0 max-w-full items-center gap-1.5 text-[13px]">
+                        <span className="truncate text-ink">{route.from}</span>
+                        <span className="material-symbols-outlined shrink-0 !text-[16px] text-muted">arrow_forward</span>
+                        <span className="truncate text-ink">{route.to}</span>
+                      </span>
                     </span>
                     <span className={`text-[13px] tabular ${s.timeChanged ? 'font-semibold text-caution-fg' : 'text-ink-sub'}`}>
                       {s.time ? formatTimeOfDay(s.time) : '—'}
@@ -476,10 +483,9 @@ export function DriverTodayPage() {
             const done = s.state === 'awaiting' || s.state === 'confirmed'
             const lead = done ? '✓' : s.state === 'noshow' ? '✕' : String(i + 1)
             const student = details.get(s.item.student.id)
-            const home = homeAddress(student)
-            const sub = [shift === 'morning' ? home?.line1 ?? s.item.school.name : s.item.school.name, s.item.student.grade ? `Grade ${s.item.student.grade}` : null]
-              .filter(Boolean)
-              .join(' · ')
+            const route = fromTo(s)
+            const different = isDifferent(legFor(s))
+            const sub = [`${route.from} → ${route.to}`, s.item.student.grade ? `Grade ${s.item.student.grade}` : null].filter(Boolean).join(' · ')
             return (
               <button
                 key={s.item.assignment_id}
@@ -513,6 +519,7 @@ export function DriverTodayPage() {
                       </span>
                     )}
                   </span>
+                  {different && <DifferentAddressNote compact place={homeEnd(legFor(s)!, shift)} />}
                   <span className="truncate text-[12px] text-muted">{sub}</span>
                 </span>
                 <span className="flex flex-col items-end gap-1">
@@ -577,8 +584,9 @@ export function DriverTodayPage() {
                   <span className="material-symbols-outlined !text-[18px] text-muted">info</span>
                 </span>
               </span>
-              <span className="shrink-0 text-right text-[12px] text-muted">
-                {shift === 'morning' ? homeAddress(details.get(next.item.student.id))?.line1 ?? next.item.school.name : next.item.school.name}
+              <span className="flex shrink-0 flex-col items-end gap-1 text-right text-[12px] text-muted">
+                {isDifferent(legFor(next)) && <DifferentAddressNote compact place={homeEnd(legFor(next)!, shift)} />}
+                {fromTo(next).from}
               </span>
             </button>
             <div className="grid grid-cols-[1fr_2fr] gap-2">

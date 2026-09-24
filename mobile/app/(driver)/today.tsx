@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api'
-import type { DriverSession, ShiftPeriod, Trip } from '@/api/types'
+import type { DriverSession, RouteLeg, ShiftPeriod, Trip } from '@/api/types'
 import { Card, Divided } from '@/components/Card'
 import { ConfirmCard } from '@/components/Dialogs'
+import { DifferentAddressNote, homeEnd, isDifferent, legOf, placeName } from '@/components/Route'
 import { Icon } from '@/components/Icon'
 import { Screen } from '@/components/Screen'
 import { ActionError, EmptyState, ErrorState, Loading, messageFor } from '@/components/States'
@@ -16,7 +17,6 @@ import { getCurrentCoords } from '@/lib/geo'
 import { radius, tone, type ToneName } from '@/theme/tokens'
 import { useColors } from '@/theme/theme'
 import {
-  homeAddress,
   itemsForShift,
   shiftName,
   tripTypeFor,
@@ -165,7 +165,15 @@ export default function TodayScreen() {
       period: shift,
       time: s.time,
       parentSkipped: s.parentSkipped,
+      leg: legOf(s.item.route, shift),
     })
+  // The next stop's pickup / drop-off place for the thumb bar (the extra address, if one applies).
+  const nextPlace = (s: Stop) => {
+    const leg = legOf(s.item.route, shift)
+    if (!leg) return s.item.school.name
+    const end = homeEnd(leg, shift)
+    return end.kind === 'extra' ? `Different address today: ${end.label}` : placeName(shift === 'morning' ? leg.from : leg.to)
+  }
 
   const refreshing =
     sessionsQuery.isFetching || scheduleQuery.isFetching || tripsQuery.isFetching
@@ -225,9 +233,7 @@ export default function TodayScreen() {
                 stop={next}
                 shift={shift}
                 subtitle={
-                  shift === 'morning'
-                    ? (homeAddress(details.get(next.item.student.id))?.line1 ?? next.item.school.name)
-                    : next.item.school.name
+                  nextPlace(next)
                 }
                 busyTrip={logTrip.isPending}
                 busyNoShow={markNoShow.isPending}
@@ -349,7 +355,7 @@ export default function TodayScreen() {
                   index={i}
                   isNext={next === s}
                   shift={shift}
-                  homeLine={homeAddress(details.get(s.item.student.id))?.line1 ?? null}
+                  leg={legOf(s.item.route, shift)}
                   hasNotes={Boolean(details.get(s.item.student.id)?.notes)}
                   onPress={() => openSheet(s)}
                 />
@@ -508,7 +514,7 @@ function StopRow({
   index,
   isNext,
   shift,
-  homeLine,
+  leg,
   hasNotes,
   onPress,
 }: {
@@ -516,7 +522,7 @@ function StopRow({
   index: number
   isNext: boolean
   shift: ShiftPeriod
-  homeLine: string | null
+  leg: RouteLeg | null
   hasNotes: boolean
   onPress: () => void
 }) {
@@ -529,8 +535,10 @@ function StopRow({
   const t = tone(colors, toneName)
   const done = stop.state === 'awaiting' || stop.state === 'confirmed'
   const lead = done ? '✓' : stop.state === 'noshow' ? '✕' : String(index + 1)
+  // Where this stop goes on this shift (server route): home → school, school → home, or an
+  // extra address instead of home that day (highlighted below the name).
   const sub = [
-    shift === 'morning' ? (homeLine ?? stop.item.school.name) : stop.item.school.name,
+    leg ? `${placeName(leg.from)} → ${placeName(leg.to)}` : stop.item.school.name,
     stop.item.student.grade ? `Grade ${stop.item.student.grade}` : null,
   ]
     .filter(Boolean)
@@ -576,6 +584,7 @@ function StopRow({
             </Text>
             {hasNotes ? <Icon name="sticky-note-2" size={15} color={colors.noteIcon} /> : null}
           </View>
+          {leg && isDifferent(leg) ? <DifferentAddressNote compact place={homeEnd(leg, shift)} /> : null}
           <Text size={12} color={colors.muted} numberOfLines={1}>
             {sub}
           </Text>

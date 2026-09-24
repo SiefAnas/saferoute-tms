@@ -6,6 +6,7 @@ import { formatTimeOfDay } from '../../lib/format'
 import { SectionHeader } from '../../components/mobile'
 import { MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import { PageTopBar } from '../../layouts/TopBar'
+import { DifferentAddressNote, homeEnd, isDifferent, legOf, placeName } from '../../components/Route'
 import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
 import type { ShiftPeriod, TodayScheduleItem, WeekSchedule, WeekScheduleDay } from '../../types/api'
 
@@ -152,8 +153,9 @@ function Run({ period, items }: { period: ShiftPeriod; items: TodayScheduleItem[
             </span>
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-[14px] font-medium text-ink">{item.student.name}</span>
+              {isDifferent(legOf(item.route, period)) && <DifferentAddressNote compact place={homeEnd(legOf(item.route, period)!, period)} />}
               <span className="truncate text-[12px] text-muted">
-                {item.school.name}
+                {placeName(legOf(item.route, period)?.from)} → {placeName(legOf(item.route, period)?.to)}
                 {item.override?.note ? ` · ${item.override.note}` : ''}
               </span>
             </span>

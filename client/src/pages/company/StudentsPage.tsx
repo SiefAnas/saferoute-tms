@@ -20,6 +20,7 @@ import { findBestParentMatch } from '../../lib/parentMatch'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import type { CsvColumn } from '../../lib/csv'
 import type { AbsentTodayEntry, Assignment, ParentStudentLink, PublicUser, SchoolSummary, Student, StudentContact, Van } from '../../types/api'
+import { ExtraAddressesPanel } from './ExtraAddressesPanel'
 
 
 interface GuardianRow {
@@ -525,6 +526,7 @@ export function CompanyStudentsPage() {
             ]}
           />
           <ContactsPanel studentId={detail.id} />
+          <ExtraAddressesPanel studentId={detail.id} />
         </Drawer>
       )}
 

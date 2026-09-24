@@ -123,6 +123,37 @@ export interface TodayScheduleItem {
   // Per shift, since a 'both' assignment can have independent morning/afternoon outcomes.
   parent_skipped: { morning: boolean; afternoon: boolean }
   no_show_reported: { morning: boolean; afternoon: boolean }
+  route: StudentRoute // that day's From → To per leg (server-decided)
+}
+
+// Where a leg starts / ends. kind 'extra' = an extra address replacing home that day
+// ("Grandparents"), which the app highlights. API_CONTRACT.md "Stops".
+export interface RoutePlace {
+  kind: 'home' | 'school' | 'extra'
+  label: string
+  address: string | null
+}
+export interface RouteLeg {
+  from: RoutePlace
+  to: RoutePlace
+}
+export interface StudentRoute {
+  morning: RouteLeg | null
+  afternoon: RouteLeg | null
+}
+export interface ExtraAddress {
+  id: string
+  student_id: string
+  label: string
+  street_address: string
+  city: string | null
+  state: string | null
+  zip_code: string | null
+  address: string | null
+  days_of_week: number[]
+  applies_to: 'morning_pickup' | 'afternoon_dropoff' | 'both'
+  start_date: string | null // "YYYY-MM-DD"
+  end_date: string | null
 }
 
 export interface StudentContact {
@@ -218,6 +249,7 @@ export interface ParentTransportEntry {
   dropoff_time: string | null
   days_of_week: number[] // ISO weekdays, 1 = Monday ... 7 = Sunday
   runs_today: boolean // false on a day this ride doesn't run (e.g. the weekend)
+  route: StudentRoute // today's From → To per leg
 }
 
 // GET /parent/students/:id/detail
@@ -227,6 +259,7 @@ export interface ParentStudentDetail {
   company: { name: string | null; phone: string | null }
   // One entry per active assignment — two when morning and afternoon differ.
   transport: ParentTransportEntry[]
+  extra_addresses: ExtraAddress[] // read-only for parents
   skip_today: boolean
   trips_today: {
     trip_type: TripType

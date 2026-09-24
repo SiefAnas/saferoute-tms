@@ -16,6 +16,10 @@ function item(over: Partial<TodayScheduleItem> & { id: string; name: string }): 
     override: null,
     parent_skipped: { morning: false, afternoon: false },
     no_show_reported: { morning: false, afternoon: false },
+    route: {
+      morning: { from: { kind: 'home', label: 'Home', address: '1 Oak St' }, to: { kind: 'school', label: 'Lincoln Elementary', address: null } },
+      afternoon: { from: { kind: 'school', label: 'Lincoln Elementary', address: null }, to: { kind: 'home', label: 'Home', address: '1 Oak St' } },
+    },
     ...over,
   }
 }

@@ -12,7 +12,9 @@ import type {
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import { CallButton } from '@/components/CallButton'
-import { Card, KeyValueRow } from '@/components/Card'
+import { AddressText } from '@/components/AddressText'
+import { Card, Divided, KeyValueRow } from '@/components/Card'
+import { DifferentAddressNote, extraAddressSchedule } from '@/components/Route'
 import { ComingSoonRow, ConfirmCard } from '@/components/Dialogs'
 import { Icon } from '@/components/Icon'
 import { Screen } from '@/components/Screen'
@@ -104,13 +106,18 @@ export function ChildView({ student, chips }: { student: Student; chips: ReactNo
     banner = null
   }
 
+  // Today's pickup / drop-off place from the server's route (an extra address such as
+  // "Grandparents" replaces home on its days and is highlighted).
+  const pickupPlace = morning?.route?.morning?.from
+  const dropoffPlace = afternoon?.route?.afternoon?.to
+  const different = [pickupPlace, dropoffPlace].find((p) => p?.kind === 'extra')
   const rows = [
     {
       label: 'Morning pickup',
       value: d.skip_today
         ? 'Skipped today'
         : morning
-          ? `${formatTimeOfDay(morning.pickup_time)} · Home`
+          ? `${formatTimeOfDay(morning.pickup_time)} · ${pickupPlace?.label ?? 'Home'}`
           : noRideToday
             ? 'No ride today'
             : 'No ride',
@@ -124,7 +131,11 @@ export function ChildView({ student, chips }: { student: Student; chips: ReactNo
     },
     {
       label: 'Afternoon drop-off',
-      value: afternoon ? `${formatTimeOfDay(afternoon.dropoff_time)} · Home` : noRideToday ? 'No ride today' : 'No ride',
+      value: afternoon
+        ? `${formatTimeOfDay(afternoon.dropoff_time)} · ${dropoffPlace?.label ?? 'Home'}`
+        : noRideToday
+          ? 'No ride today'
+          : 'No ride',
     },
   ]
 
@@ -152,6 +163,7 @@ export function ChildView({ student, chips }: { student: Student; chips: ReactNo
             icon={<Icon name={banner.icon} size={18} color={colors.ink} />}
           />
         ) : null}
+        {different ? <DifferentAddressNote place={different} /> : null}
         {transport.length > 0 ? (
           <ComingSoonRow icon="near-me" label="Live location and ETA" feature="Live van tracking" />
         ) : null}
@@ -177,6 +189,29 @@ export function ChildView({ student, chips }: { student: Student; chips: ReactNo
       ) : (
         drivers.map((t, i) => <DriverCard key={i} entry={t} labelShift={drivers.length > 1} />)
       )}
+
+      {d.extra_addresses.length > 0 ? (
+        <Card style={{ marginHorizontal: 16, marginTop: 12 }}>
+          <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
+            <Text size={13} weight="semibold">
+              Other addresses
+            </Text>
+          </View>
+          {d.extra_addresses.map((x, i) => (
+            <Divided key={x.id} first={i === 0}>
+              <View style={{ paddingHorizontal: 16, paddingVertical: 10, gap: 2 }}>
+                <Text size={14} weight="medium">
+                  {x.label}
+                </Text>
+                {x.address ? <AddressText address={x.address} /> : null}
+                <Text size={12} color={colors.muted}>
+                  {extraAddressSchedule(x)}
+                </Text>
+              </View>
+            </Divided>
+          ))}
+        </Card>
+      ) : null}
     </SkipBarScreen>
   )
 }

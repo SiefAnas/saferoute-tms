@@ -4,8 +4,9 @@ import { formatTimeOfDay } from '../../lib/format'
 import { BottomSheet, CallButton } from '../../components/mobile'
 import { Avatar } from '../../components/Records'
 import { AddressText } from '../../components/AddressText'
+import { PlaceLine } from '../../components/Route'
 import { homeAddress, shiftName } from './driverData'
-import type { SchoolDetail, ShiftPeriod, Student } from '../../types/api'
+import type { RouteLeg, SchoolDetail, ShiftPeriod, Student } from '../../types/api'
 
 export interface SheetTarget {
   studentId: string
@@ -13,6 +14,9 @@ export interface SheetTarget {
   period: ShiftPeriod
   time: string | null // effective pickup/drop-off time for that shift, "HH:MM:SS"
   parentSkipped: boolean
+  // That day's From → To from the schedule (server-decided, may be an extra address). When
+  // present the sheet shows it instead of working out home/school itself.
+  leg?: RouteLeg | null
 }
 
 // Student sheet (design 3a): who they are, where they're going on this shift, notes, every
@@ -108,12 +112,14 @@ function StudentBody({ target, d }: { target: SheetTarget; d: StudentData }) {
             <span className="h-2.5 w-2.5 rounded-[2px] bg-ink" />
           </div>
           <div className="flex flex-col gap-3">
-            {[from, to].map((stop, i) => (
-              <div key={i} className="flex flex-col">
-                <span className="text-[14px] font-medium text-ink">{stop.label}</span>
-                {stop.copy ? <AddressText address={stop.copy} /> : <span className="text-[13px] text-muted">{stop.line}</span>}
-              </div>
-            ))}
+            {target.leg
+              ? [target.leg.from, target.leg.to].map((place, i) => <PlaceLine key={i} place={place} />)
+              : [from, to].map((stop, i) => (
+                  <div key={i} className="flex flex-col">
+                    <span className="text-[14px] font-medium text-ink">{stop.label}</span>
+                    {stop.copy ? <AddressText address={stop.copy} /> : <span className="text-[13px] text-muted">{stop.line}</span>}
+                  </div>
+                ))}
           </div>
         </div>
       </div>
