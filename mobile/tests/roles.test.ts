@@ -15,12 +15,13 @@ describe('destinationForRole', () => {
     expect(destinationForRole('monitor')).toBe('/(monitor)/home')
   })
 
-  it.each(['company_admin', 'school_admin', 'school_staff'] as const)(
-    'sends %s to the website explanation screen',
-    (role) => {
-      expect(destinationForRole(role)).toBe('/unsupported')
-    },
-  )
+  it('sends a company admin to the company app', () => {
+    expect(destinationForRole('company_admin')).toBe('/(company)/home')
+  })
+
+  it.each(['school_admin', 'school_staff'] as const)('sends %s to the school app', (role) => {
+    expect(destinationForRole(role)).toBe('/(school)/pickup')
+  })
 
   it('sends an unknown or missing role to the explanation screen, not into an app', () => {
     expect(destinationForRole(null)).toBe('/unsupported')
@@ -31,12 +32,12 @@ describe('destinationForRole', () => {
 })
 
 describe('isMobileRole', () => {
-  it('is true only for driver, monitor and parent', () => {
-    expect(isMobileRole('driver')).toBe(true)
-    expect(isMobileRole('parent')).toBe(true)
-    expect(isMobileRole('monitor')).toBe(true)
-    expect(isMobileRole('company_admin')).toBe(false)
+  it('is true for every known role, false for none or an unknown one', () => {
+    for (const r of ['driver', 'parent', 'monitor', 'company_admin', 'school_admin', 'school_staff'] as const) {
+      expect(isMobileRole(r)).toBe(true)
+    }
     expect(isMobileRole(null)).toBe(false)
+    expect(isMobileRole('dispatcher' as never)).toBe(false)
   })
 })
 

@@ -6,8 +6,8 @@ import { EmptyState } from '@/components/States'
 import { Text } from '@/components/Text'
 import { useColors } from '@/theme/theme'
 
-// company_admin, school_admin and school_staff run the business from the website. Rather than
-// a half-built version of those screens, they get told where to go, and a way out.
+// Only reached by a role this version of the app doesn't know (every current role has its own
+// screens). Rather than someone else's app, they get told where to go, and a way out.
 export default function UnsupportedRoleScreen() {
   const colors = useColors()
   const insets = useSafeAreaInsets()
@@ -27,7 +27,7 @@ export default function UnsupportedRoleScreen() {
       <EmptyState
         icon="desktop-windows"
         title="Please use the SafeRoute website for your account"
-        body="This app is for drivers, monitors and parents. Your account manages schedules, staff and payroll, which all live on the website."
+        body="This version of the app has no screens for your account yet. Everything is on the website, or update the app."
       />
       <View style={{ paddingHorizontal: 16 }}>
         <Button label="Log out" variant="outline" onPress={() => void signOut()} />

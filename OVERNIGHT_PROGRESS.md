@@ -56,10 +56,21 @@ already merged and live before tonight).
     overwrite another company's user's pay rate if they knew the id (the upsert's `ON CONFLICT`
     updated the other company's row). Now 400 "not found in your company". Covered in suite 23.
   - Tests: suite 23 (60 checks), monitor added to access matrix suite 17 (85 checks), mobile
-    helper tests.
+    helper tests. Checked in the browser on a local DB: monitor Today (desktop + phone, check-in
+    works), admin adds a monitor (temporary password shown), assigns them, dashboard card and
+    payroll rows show them.
 
 ## In progress
-- **Job 4 `mobile-admin-roles`**
+- **Job 4 `mobile-admin-roles`** (no migration, mobile only)
+  - Step 1 done (pushed): company admin in the app. Tabs Today / People / Students / More.
+    Today: drivers + monitors on shift (tap to call), drivers with runs today not checked in,
+    absences. People: drivers / monitors / parents with search, details sheet (call, email),
+    add driver or monitor (temporary password shown once, copy button), reset password.
+    Students: search, school, parent (call), home address (tap to copy), rides with the driver
+    (call). More: website links (assignments, fleet, payroll, monitors, parents, profile),
+    appearance, log out. Every other action: "Open on the website".
+  - Step 2 next: school admin / staff (Pickup: confirm arrivals, absences; Students with ride
+    and driver to call; More).
 
 ## Next
 - Job 4 mobile admin roles, then the final report.

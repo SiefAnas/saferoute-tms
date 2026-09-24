@@ -183,6 +183,15 @@ export interface Student {
   updated_at: string
   // Only on GET /students/:id, not on the list endpoint.
   contacts?: StudentContact[]
+  // School admin / staff lists: who takes the student (company, van, driver).
+  transport?: StudentTransport[]
+}
+
+export interface StudentTransport {
+  shift_period: AssignmentShiftPeriod
+  company_name: string | null
+  van: { number: string | null; license_plate: string; brand: string; model: string; color: string | null } | null
+  driver: { full_name: string; phone: string | null } | null
 }
 
 export interface Van {
@@ -228,6 +237,68 @@ export interface MonitorHome {
     check_out_at: string | null
     duration_minutes: number | null
   }[]
+}
+
+// Admin screens (mobile-admin-roles)
+// GET /users?role=... (company admin: driver, parent, monitor; school admin: school_staff).
+export interface PublicUser {
+  id: string
+  email: string
+  full_name: string
+  role: Role
+  phone: string | null
+  address: string | null
+  license_number: string | null
+  is_active: boolean
+  email_verified_at: string | null
+  created_by_user_id: string | null
+  must_change_password: boolean
+}
+
+// POST /users: the new account, with its temporary password (shown once).
+export interface CreatedUser extends PublicUser {
+  temporary_password: string
+}
+
+// POST /users/:id/reset-password
+export interface PasswordResetResult {
+  user: PublicUser
+  temporary_password: string
+}
+
+// GET /monitors (company admin)
+export interface Monitor {
+  id: string
+  email: string
+  full_name: string
+  role: 'monitor'
+  phone: string | null
+  is_active: boolean
+  created_by_user_id: string | null
+  must_change_password: boolean
+  assignment: {
+    id: string
+    driver_user_id: string
+    driver_name: string
+    driver_phone: string | null
+    days_of_week: number[]
+    shift_period: AssignmentShiftPeriod
+  } | null
+  open_session: { id: string; shift_period: ShiftPeriod | null; check_in_at: string } | null
+}
+
+// GET /dashboard/absent-today (company admin, school admin, school staff)
+export interface AbsentTodayEntry {
+  student_id: string
+  student_name: string
+  type: 'parent_skipped' | 'driver_no_show'
+  at: string
+}
+
+// GET /schools (company admin): the schools the company works with.
+export interface SchoolSummary {
+  id: string
+  name: string
 }
 
 export interface PaySummary {

@@ -13,6 +13,8 @@ const VERSION = '1.0.0'
 // Production API (API_CONTRACT.md §1: no /api prefix — that's a web-only Vite proxy thing).
 // EXPO_PUBLIC_API_BASE_URL overrides it for local server work without editing this file.
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://saferoute-tms-api.onrender.com'
+// The website, for the admin screens' links to it ("Open on the website").
+const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://saferoute-tms-client.onrender.com'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const config: ExpoConfig = {
@@ -62,6 +64,7 @@ const config: ExpoConfig = {
   experiments: { typedRoutes: true },
   extra: {
     apiBaseUrl: API_BASE_URL,
+    webUrl: WEB_URL,
     appName: APP_NAME,
   },
 }
