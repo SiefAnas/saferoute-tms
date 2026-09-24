@@ -64,9 +64,13 @@ export function ChildView({ student, chips }: { student: Student; chips: ReactNo
   }
 
   const transport = d.transport
-  // A 'both' assignment covers each shift; a split child has one entry per shift.
-  const morning = transport.find((t) => t.shift_period !== 'afternoon')
-  const afternoon = transport.find((t) => t.shift_period !== 'morning')
+  // Today's times come only from rides that run on today's weekday (runs_today); the driver
+  // cards still show every ride. A 'both' assignment covers each shift; a split child has one
+  // entry per shift.
+  const today = transport.filter((t) => t.runs_today !== false)
+  const noRideToday = transport.length > 0 && today.length === 0
+  const morning = today.find((t) => t.shift_period !== 'afternoon')
+  const afternoon = today.find((t) => t.shift_period !== 'morning')
   const pickupTrip = d.trips_today.find((t) => t.trip_type === 'pickup')
   const dropoffTrip = d.trips_today.find((t) => t.trip_type === 'dropoff')
 
@@ -90,6 +94,8 @@ export function ChildView({ student, chips }: { student: Student; chips: ReactNo
     }
   } else if (transport.length === 0) {
     banner = { toneName: 'neutral', icon: 'no-transfer', text: 'No ride set up yet' }
+  } else if (noRideToday) {
+    banner = { toneName: 'neutral', icon: 'event-busy', text: 'No ride today' }
   } else if (!morning) {
     banner = { toneName: 'neutral', icon: 'wb-sunny', text: 'Afternoon ride only' }
   } else if (morning.pickup_time) {
@@ -105,7 +111,9 @@ export function ChildView({ student, chips }: { student: Student; chips: ReactNo
         ? 'Skipped today'
         : morning
           ? `${formatTimeOfDay(morning.pickup_time)} · Home`
-          : 'No ride',
+          : noRideToday
+            ? 'No ride today'
+            : 'No ride',
     },
     {
       label: 'Arrives at school',
@@ -116,7 +124,7 @@ export function ChildView({ student, chips }: { student: Student; chips: ReactNo
     },
     {
       label: 'Afternoon drop-off',
-      value: afternoon ? `${formatTimeOfDay(afternoon.dropoff_time)} · Home` : 'No ride',
+      value: afternoon ? `${formatTimeOfDay(afternoon.dropoff_time)} · Home` : noRideToday ? 'No ride today' : 'No ride',
     },
   ]
 
