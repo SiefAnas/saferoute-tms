@@ -2,6 +2,7 @@ import { Linking, Pressable, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api'
 import type { SchoolDetail, ShiftPeriod, Student } from '@/api/types'
+import { AddressText } from '@/components/AddressText'
 import { Avatar } from '@/components/Avatar'
 import { CallButton } from '@/components/CallButton'
 import { BottomSheet } from '@/components/Dialogs'
@@ -45,11 +46,16 @@ export function StudentSheet({ target, onClose }: { target: SheetTarget; onClose
   const homeStop = {
     label: 'Home',
     line: home ? `${home.line1} · ${home.line2}` : 'No home address on file',
+    copy: home ? `${home.line1}, ${home.line2}` : null,
   }
   const schoolLine = school
     ? [school.address, [school.state, school.zip_code].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
     : ''
-  const schoolStop = { label: school?.name ?? 'School', line: schoolLine || 'No address on file' }
+  const schoolStop = {
+    label: school?.name ?? 'School',
+    line: schoolLine || 'No address on file',
+    copy: schoolLine ? schoolLine.replace(/ · /g, ', ') : null,
+  }
   // Morning runs home → school; the afternoon run is the other way round.
   const [from, to] = target.period === 'morning' ? [homeStop, schoolStop] : [schoolStop, homeStop]
 
@@ -131,9 +137,13 @@ export function StudentSheet({ target, onClose }: { target: SheetTarget; onClose
                 <Text size={14} weight="medium">
                   {stop.label}
                 </Text>
-                <Text size={13} color={colors.muted}>
-                  {stop.line}
-                </Text>
+                {stop.copy ? (
+                  <AddressText address={stop.copy} />
+                ) : (
+                  <Text size={13} color={colors.muted}>
+                    {stop.line}
+                  </Text>
+                )}
               </View>
             ))}
           </View>
@@ -202,11 +212,7 @@ export function StudentSheet({ target, onClose }: { target: SheetTarget; onClose
             <Text size={14} weight="medium">
               {school.name}
             </Text>
-            {schoolLine ? (
-              <Text size={13} color={colors.muted}>
-                {schoolLine}
-              </Text>
-            ) : null}
+            {schoolLine ? <AddressText address={schoolLine.replace(/ · /g, ', ')} /> : null}
             {school.phone || school.hours ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 {school.phone ? (

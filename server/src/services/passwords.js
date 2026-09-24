@@ -13,7 +13,7 @@ const { hashPassword, verifyPassword } = require('../auth/password');
 const { generateToken, hashToken } = require('../auth/tokens');
 const { signJwt } = require('../auth/jwt');
 const { tenantTypeForRole } = require('../db/scoped');
-const { sendMailSafe } = require('../mail/mailer');
+const { sendInBackground } = require('../mail/mailer');
 const { assertValidEmail, assertPasswordStrength } = require('../validate');
 const { appUrl } = require('../config');
 
@@ -95,7 +95,9 @@ async function requestPasswordReset(email) {
         [user.id, hash]
       );
     });
-    await sendMailSafe(
+    // Sent after the response: waiting on SMTP would also make known emails answer slower
+    // than unknown ones, which leaks which emails are registered.
+    sendInBackground(
       {
         to: user.email,
         subject: 'Reset your SafeRoute password',

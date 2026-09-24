@@ -17,6 +17,8 @@ Size: **S** = about a day, **M** = a few days, **L** = a week or more / needs a 
 | **On time / Late driver status** (dashboard) | "On time" / "Late" filter chips open Coming Soon. "On shift / Not in" is the real status. | Planned stop times in route order + a lateness rule (e.g. first trip logged > N min after planned time), computed server-side into a dashboard endpoint. Depends on route order (above). | M |
 | **Dashboard summary endpoint** | (Not visible) Dashboard adds up 9 list endpoints in the browser. | `GET /dashboard/summary?run=morning\|afternoon` returning the stat-row numbers. Needed before fleets get large. | S |
 
+| **Open an address in a maps app** | Tapping an address copies it ("Address copied"), web and mobile, driver and parent. | Mobile: an action sheet "Apple Maps / Google Maps / Waze" with `Linking.openURL` (`maps://?q=`, `comgooglemaps://?q=`, `https://www.google.com/maps/search/?api=1&query=`), checking `Linking.canOpenURL` for installed apps (iOS needs `LSApplicationQueriesSchemes` in `app.config.ts`). Web: a "Open in Google Maps" link. Small (about half a day) but needs testing on real iPhone + Android. | S |
+
 ## From BACKLOG.md / spec §8 (not in the UI yet)
 
 | Feature | What the user sees now | Backend needed | Size |

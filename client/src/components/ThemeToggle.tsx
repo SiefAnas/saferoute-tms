@@ -1,12 +1,16 @@
 import { useTheme } from '../lib/theme'
 
 // Web: a 32px slate square in the sidebar footer. Mobile: a 38px round button in the greeting
-// header (README "Theming").
+// header (README "Theming"). Cycles the saved preference System → Light → Dark; the icon shows
+// the current one (auto / sun / moon) and the tooltip says what a click switches to.
+const ICON = { system: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' } as const
+const NAME = { system: 'System', light: 'Light', dark: 'Dark' } as const
+
 export function ThemeToggle({ variant }: { variant: 'sidebar' | 'mobile' }) {
-  const { theme, toggle } = useTheme()
-  const next = theme === 'dark' ? 'light' : 'dark'
-  const icon = theme === 'dark' ? 'light_mode' : 'dark_mode'
-  const label = `Switch to ${next} mode`
+  const { preference, next, cycle } = useTheme()
+  const toggle = cycle
+  const icon = ICON[preference]
+  const label = `Theme: ${NAME[preference]}. Click for ${NAME[next]}.`
 
   if (variant === 'sidebar') {
     return (

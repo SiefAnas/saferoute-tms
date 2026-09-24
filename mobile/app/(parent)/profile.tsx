@@ -4,10 +4,12 @@ import { api } from '@/api'
 import type { ParentProfile, ParentStudentDetail, Student } from '@/api/types'
 import { useAuth } from '@/auth/auth'
 import { Button } from '@/components/Button'
-import { Card, KeyValueRow, SectionHeader } from '@/components/Card'
+import { AddressText } from '@/components/AddressText'
+import { Card, Divided, KeyValueRow, SectionHeader } from '@/components/Card'
 import { Screen } from '@/components/Screen'
 import { ErrorState, Loading } from '@/components/States'
 import { Text } from '@/components/Text'
+import { ThemeChooser } from '@/components/ThemeChooser'
 import { useColors } from '@/theme/theme'
 
 // Parent app, Profile tab (design 5b): read-only rows plus the note about who can change them.
@@ -49,7 +51,7 @@ export default function ParentProfileScreen() {
         { label: 'Name', value: p.full_name },
         { label: 'Email', value: p.email },
         { label: 'Phone', value: p.phone ?? 'Not on file' },
-        { label: 'Address', value: p.address ?? 'Not on file' },
+        ...(p.address ? [] : [{ label: 'Address', value: 'Not on file' }]),
         { label: 'Transport company', value: company?.name ?? '—' },
       ]
     : []
@@ -67,6 +69,18 @@ export default function ParentProfileScreen() {
             {rows.map((r, i) => (
               <KeyValueRow key={r.label} label={r.label} value={r.value} first={i === 0} />
             ))}
+            {p.address ? (
+              <Divided first={false}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingHorizontal: 14, paddingVertical: 12 }}>
+                  <Text size={14} color={colors.muted}>
+                    Address
+                  </Text>
+                  <View style={{ flexShrink: 1 }}>
+                    <AddressText address={p.address} size={14} color={colors.ink} style={{ textAlign: 'right' }} />
+                  </View>
+                </View>
+              </Divided>
+            ) : null}
           </Card>
           <Text
             size={12}
@@ -78,6 +92,10 @@ export default function ParentProfileScreen() {
           </Text>
         </>
       )}
+
+      <View style={{ marginHorizontal: 16, marginTop: 24 }}>
+        <ThemeChooser />
+      </View>
 
       <View style={{ marginHorizontal: 16, marginTop: 24 }}>
         <Button label="Log out" variant="outline" onPress={() => void signOut()} />

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api'
@@ -8,7 +8,7 @@ import { ConfirmCard } from '@/components/Dialogs'
 import { Icon } from '@/components/Icon'
 import { Screen } from '@/components/Screen'
 import { ActionError, EmptyState, ErrorState, Loading, messageFor } from '@/components/States'
-import { StatusBadge } from '@/components/StatusBadge'
+import { Banner, StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/Button'
 import { Text } from '@/components/Text'
 import { formatClock, formatTimeOfDay } from '@/lib/format'
@@ -52,6 +52,14 @@ export default function TodayScreen() {
   const [confirmEarlyOut, setConfirmEarlyOut] = useState(false)
   const [sheet, setSheet] = useState<SheetTarget | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  // No-show: confirm first, then mark it and stay on this screen with a short "marked" note.
+  const [confirmNoShow, setConfirmNoShow] = useState<{ assignmentId: string; name: string } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(null), 4000)
+    return () => clearTimeout(t)
+  }, [notice])
 
   // Which shift is shown, derived rather than stored: the driver's explicit choice wins,
   // otherwise the shift they are checked into, otherwise the one matching the time of day on
@@ -123,14 +131,16 @@ export default function TodayScreen() {
   // The server notifies the school and the company admins; there is nothing to do locally
   // beyond refreshing the schedule, which carries the no_show_reported flags.
   const markNoShow = useMutation({
-    mutationFn: (vars: { assignmentId: string; shiftPeriod: ShiftPeriod }) =>
+    mutationFn: (vars: { assignmentId: string; shiftPeriod: ShiftPeriod; name: string }) =>
       api.post<{ reported: boolean }>(`/schedule/${vars.assignmentId}/no-show`, {
         shift_period: vars.shiftPeriod,
       }),
-    // Seen live: the API saved the no-show and then answered 500 (its notification email
-    // failed, see MOBILE_BACKEND_NEEDS.md). Reloading after any outcome shows the real state.
+    onSuccess: (_res, vars) => setNotice(`${vars.name} marked as no-show`),
+    // Seen live: the API saved the no-show and then took minutes to answer while it waited on
+    // email (fixed on the server: emails now go out after the response). Reloading after any
+    // outcome shows the real state.
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['schedule-today'] }),
-    onError: fail('Could not report the no-show.'),
+    onError: fail('Could not mark the no-show.'),
   })
 
   function refresh() {
@@ -209,6 +219,7 @@ export default function TodayScreen() {
         thumbBar={
           <>
             {actionError ? <ActionError message={actionError} /> : null}
+            {notice ? <Banner label={notice} toneName="success" /> : null}
             {isOpenHere && next ? (
               <NextStopActions
                 stop={next}
@@ -223,7 +234,7 @@ export default function TodayScreen() {
                 onOpenSheet={() => openSheet(next)}
                 onNoShow={() => {
                   setActionError(null)
-                  markNoShow.mutate({ assignmentId: next.item.assignment_id, shiftPeriod: shift })
+                  setConfirmNoShow({ assignmentId: next.item.assignment_id, name: next.item.student.name })
                 }}
                 onLogTrip={() => {
                   setActionError(null)
@@ -396,6 +407,21 @@ export default function TodayScreen() {
           onConfirm={() => {
             checkIn.mutate({ shiftPeriod: pendingSwitch, confirmSwitch: true })
             setPendingSwitch(null)
+          }}
+        />
+      ) : null}
+
+      {confirmNoShow ? (
+        <ConfirmCard
+          title={`Mark ${confirmNoShow.name} as no-show?`}
+          body={`Nobody came out for this ${shift === 'morning' ? 'pickup' : 'drop-off'}. The school and the office are told.`}
+          cancelLabel="Cancel"
+          confirmLabel="Mark no-show"
+          destructive
+          onCancel={() => setConfirmNoShow(null)}
+          onConfirm={() => {
+            markNoShow.mutate({ assignmentId: confirmNoShow.assignmentId, shiftPeriod: shift, name: confirmNoShow.name })
+            setConfirmNoShow(null)
           }}
         />
       ) : null}
@@ -626,10 +652,10 @@ function NextStopActions({
           label="No-show"
           variant="danger"
           busy={busyNoShow}
-          busyLabel="Reporting…"
+          busyLabel="Saving…"
           disabled={busyTrip}
           onPress={onNoShow}
-          accessibilityHint="Reports that nobody came out for this stop. The school and the office are told."
+          accessibilityHint="Marks that nobody came out for this stop, after you confirm. The school and the office are told."
           style={{ flex: 1 }}
         />
         <Button

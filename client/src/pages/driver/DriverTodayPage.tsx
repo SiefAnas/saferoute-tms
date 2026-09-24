@@ -84,6 +84,14 @@ export function DriverTodayPage() {
   const [confirmEarlyOut, setConfirmEarlyOut] = useState(false)
   const [sheet, setSheet] = useState<SheetTarget | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  // No-show: confirm first, then mark it and stay on this screen with a short "marked" note.
+  const [confirmNoShow, setConfirmNoShow] = useState<{ assignmentId: string; name: string } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(null), 4000)
+    return () => clearTimeout(t)
+  }, [notice])
 
   // Once sessions load, land on the shift the driver is checked into.
   useEffect(() => {
@@ -136,10 +144,11 @@ export function DriverTodayPage() {
 
   // Notifies the school + company admin server-side (services/schedule.js markNoShow).
   const markNoShow = useMutation({
-    mutationFn: (vars: { assignmentId: string; shiftPeriod: ShiftPeriod }) =>
+    mutationFn: (vars: { assignmentId: string; shiftPeriod: ShiftPeriod; name: string }) =>
       api.post<{ reported: boolean }>(`/schedule/${vars.assignmentId}/no-show`, { shift_period: vars.shiftPeriod }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schedule-today'] }),
-    onError: fail('Could not report the no-show.'),
+    onSuccess: (_res, vars) => setNotice(`${vars.name} marked as no-show`),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['schedule-today'] }),
+    onError: fail('Could not mark the no-show.'),
   })
 
   function requestCheckIn() {
@@ -334,6 +343,12 @@ export function DriverTodayPage() {
             {actionError}
           </p>
         )}
+        {notice && (
+          <p role="status" className="flex items-center gap-2 rounded-row bg-success-bg px-3 py-2 text-[13px] font-medium text-success-fg">
+            <span className="material-symbols-outlined !text-[18px]">check_circle</span>
+            {notice}
+          </p>
+        )}
         {isOpenHere && next ? (
           <>
             <button type="button" onClick={() => openSheet(next)} className="flex cursor-pointer items-end justify-between gap-2.5 text-left">
@@ -359,10 +374,10 @@ export function DriverTodayPage() {
                 disabled={markNoShow.isPending || logTrip.isPending}
                 onClick={() => {
                   setActionError(null)
-                  markNoShow.mutate({ assignmentId: next.item.assignment_id, shiftPeriod: shift })
+                  setConfirmNoShow({ assignmentId: next.item.assignment_id, name: next.item.student.name })
                 }}
               >
-                {markNoShow.isPending ? 'Reporting…' : 'No-show'}
+                {markNoShow.isPending ? 'Saving…' : 'No-show'}
               </Button>
               <Button
                 size="lg"
@@ -411,6 +426,19 @@ export function DriverTodayPage() {
           onConfirm={() => {
             checkOut.mutate(openSession.id)
             setConfirmEarlyOut(false)
+          }}
+        />
+      )}
+
+      {confirmNoShow && (
+        <ConfirmCard
+          title={`Mark ${confirmNoShow.name} as no-show?`}
+          body={`Nobody came out for this ${shift === 'morning' ? 'pickup' : 'drop-off'}. The school and the office are told.`}
+          confirmLabel="Mark no-show"
+          onCancel={() => setConfirmNoShow(null)}
+          onConfirm={() => {
+            markNoShow.mutate({ assignmentId: confirmNoShow.assignmentId, shiftPeriod: shift, name: confirmNoShow.name })
+            setConfirmNoShow(null)
           }}
         />
       )}

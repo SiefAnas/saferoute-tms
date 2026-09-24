@@ -210,7 +210,7 @@ async function main() {
       (skipRes.status === 200 && skipRes.body.skipped === true)
         ? ok('skip-pickup for eligible student -> 200, skipped')
         : bad(`skip-pickup: ${skipRes.status} ${JSON.stringify(skipRes.body)}`);
-      const sent = mailer._sent();
+      const sent = (await mailer._drained());
       const sentTo = sent.map((m) => m.to).sort();
       const expectRecipients = ['a1@co.com', 'a2@co.com', 'sa@sch.com', 'driverx-new@co.com'].sort();
       JSON.stringify(sentTo) === JSON.stringify(expectRecipients)

@@ -33,8 +33,8 @@ async function api(method, p, body) {
   try { data = await r.json(); } catch { /* empty body */ }
   return { status: r.status, body: data };
 }
-const tokenFor = (email) => {
-  const m = [...mailer._sent()].reverse().find((x) => x.to === email && /token:/.test(x.text));
+const tokenFor = async (email) => {
+  const m = [...(await mailer._drained())].reverse().find((x) => x.to === email && /token:/.test(x.text));
   return m ? m.text.match(/token:\s*([a-f0-9]+)/)[1] : null;
 };
 
@@ -81,20 +81,20 @@ async function main() {
       );
       const claim = await api('POST', '/signup/school', { claimId: school.id, fullName: 'Claimant', email: 'claimant@x.com', password: PW });
       eq('claim signup -> 201', claim.status, 201);
-      const firstToken = tokenFor('claimant@x.com');
+      const firstToken = await tokenFor('claimant@x.com');
       firstToken ? ok('captured first verification token') : bad('no first token captured');
 
       const resend = await api('POST', '/auth/resend-verification', { email: 'claimant@x.com' });
       eq('resend -> 200 ok', resend.status, 200);
-      const secondToken = tokenFor('claimant@x.com');
+      const secondToken = await tokenFor('claimant@x.com');
       secondToken && secondToken !== firstToken ? ok('resend issued a NEW, distinct token') : bad('resend did not issue a distinct new token');
 
       eq('OLD token (invalidated by resend) -> 400', (await api('POST', '/auth/verify-email', { token: firstToken })).status, 400);
       eq('NEW token -> 200 verified', (await api('POST', '/auth/verify-email', { token: secondToken })).status, 200);
 
-      const sentBefore = mailer._sent().length;
+      const sentBefore = (await mailer._drained()).length;
       eq('resend after already verified -> 200 (no-op)', (await api('POST', '/auth/resend-verification', { email: 'claimant@x.com' })).status, 200);
-      eq('no new mail sent for an already-verified user', mailer._sent().length, sentBefore);
+      eq('no new mail sent for an already-verified user', (await mailer._drained()).length, sentBefore);
 
       console.log('\n--- Defense-in-depth: losing claimant deactivated on takeover ---');
       const school2 = await ins(
@@ -112,7 +112,7 @@ async function main() {
         (await api('POST', '/signup/school', { claimId: school2.id, fullName: 'Winner', email: 'winner@x.com', password: PW })).status,
         201,
       );
-      const winToken = tokenFor('winner@x.com');
+      const winToken = await tokenFor('winner@x.com');
       const verifyWin = await api('POST', '/auth/verify-email', { token: winToken });
       eq('B verifies -> claim finalized', verifyWin.body?.claimFinalized, true);
 

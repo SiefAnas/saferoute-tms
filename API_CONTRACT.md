@@ -300,8 +300,8 @@ day's override, parent skips and no-shows. A `both` assignment is on both runs.
 Notifies the school and company admins. Errors: `409 "check in for that shift before reporting a no-show"`,
 `409` already reported for this shift today, `409 "this assignment is not on your … run today"`
 (starts later / other shift), `404` not your assignment or it has ended.
-The response also has `notified`: the emails that were actually sent. A failed email never
-fails the request (the no-show is saved either way).
+The response also has `notified`: who is being told (company + school admins). The emails go out
+after the response, so the request never waits on email; a failed email is only logged.
 
 ### `GET /students/:id` (driver: own students only)
 Full student record plus extra contacts:
@@ -417,8 +417,8 @@ and the cutoff before pickup time). Two shapes:
 - Non-split child: no body. Split child: `{ "shift_choice": "morning" }` or `{ "shift_choice": "whole_day" }`
   (whole day also cancels the afternoon ride).
 - `200 { "skipped": true, "skips": [...], "notified": ["…emails…"] }`. Notifies the driver(s),
-  the school and the company admins. `notified` lists only emails actually sent; a failed email
-  never fails the request (the skip is saved either way).
+  the school and the company admins. `notified` lists who is being told; the emails go out after the response (a failed email is
+  only logged, the skip is saved either way).
 - Errors: `400` no pickup today / missing `shift_choice` for a split child, `403` too late,
   `409` already skipped.
 

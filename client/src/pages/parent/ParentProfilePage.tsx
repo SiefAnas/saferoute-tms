@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { SectionHeader } from '../../components/mobile'
+import { AddressText } from '../../components/AddressText'
+import { ThemeChooser } from '../../components/ThemeChooser'
 import type { ParentProfile, ParentStudentDetail, Student } from '../../types/api'
 
 // Parent app, Profile tab (design 5b): read-only. Self-service edit for parents is
@@ -36,7 +38,11 @@ export function ParentProfilePage() {
         {rows.map((r, i) => (
           <div key={r.label} className={`flex items-center justify-between gap-3 px-4 py-3 text-[14px] ${i ? 'border-t border-divider' : ''}`}>
             <span className="text-muted">{r.label}</span>
-            <span className="min-w-0 truncate text-right font-medium text-ink">{profileQuery.isLoading ? '…' : (r.value ?? '—')}</span>
+            {r.label === 'Home address' && r.value ? (
+              <AddressText address={r.value} className="min-w-0 text-right text-[14px] font-medium text-ink" />
+            ) : (
+              <span className="min-w-0 truncate text-right font-medium text-ink">{profileQuery.isLoading ? '…' : (r.value ?? '—')}</span>
+            )}
           </div>
         ))}
       </div>
@@ -52,6 +58,9 @@ export function ParentProfilePage() {
         ) : null}
         .
       </p>
+      <div className="mx-4 mt-6">
+        <ThemeChooser />
+      </div>
     </div>
   )
 }

@@ -108,7 +108,7 @@ async function main() {
       (report.status === 200 && report.body.reported === true)
         ? ok('driver reports a no-show -> 200')
         : bad(`report: ${report.status} ${JSON.stringify(report.body)}`);
-      const sentTo = mailer._sent().map((m) => m.to).sort();
+      const sentTo = (await mailer._drained()).map((m) => m.to).sort();
       JSON.stringify(sentTo) === JSON.stringify(['admin@co.com', 'sa@sch.com'])
         ? ok('notified exactly: company admin + school admin')
         : bad(`notified: ${JSON.stringify(sentTo)}`);

@@ -28,8 +28,8 @@ const patch = (p, body, headers = {}) => fetch(`${BASE}${p}`, { method: 'PATCH',
 const get = (p, headers = {}) => fetch(`${BASE}${p}`, { headers });
 const bearer = (t) => ({ authorization: `Bearer ${t}` });
 // grab the raw token the mailer "sent" to an address
-const tokenFor = (email) => {
-  const m = [...mailer._sent()].reverse().find((x) => x.to === email && /token:/.test(x.text));
+const tokenFor = async (email) => {
+  const m = [...(await mailer._drained())].reverse().find((x) => x.to === email && /token:/.test(x.text));
   return m ? m.text.match(/token:\s*([a-f0-9]+)/)[1] : null;
 };
 
@@ -101,13 +101,13 @@ async function main() {
       blocked.status === 403 ? ok('pending user blocked from data route (403)') : bad(`pending user not blocked: ${blocked.status}`);
 
       console.log('\n--- Verify email -> claim finalized + creator notified ---');
-      const rawToken = tokenFor('head@willow.edu');
+      const rawToken = await tokenFor('head@willow.edu');
       rawToken ? ok('verification token was emailed (captured from mailer)') : bad('no token captured');
       const ver = await j(await post('/auth/verify-email', { token: rawToken }));
       (ver.verified && ver.claimFinalized) ? ok('verify-email -> claim finalized') : bad(`verify result: ${JSON.stringify(ver)}`);
       const st2 = (await pool.query('SELECT claim_status, claimed_by_user_id FROM schools WHERE id=$1', [claimId])).rows[0];
       st2.claim_status === 'claimed' ? ok('placeholder now claimed') : bad(`status=${st2.claim_status}`);
-      mailer._sent().some((m) => m.to === 'partner@x.com' && /claimed/i.test(m.subject))
+      (await mailer._drained()).some((m) => m.to === 'partner@x.com' && /claimed/i.test(m.subject))
         ? ok('placeholder creator notified of the claim') : bad('creator not notified');
 
       console.log('\n--- [#4] Creator LOSES edit rights once claimed ---');
@@ -178,7 +178,7 @@ async function main() {
       // Claimant B takes over the expired pending claim and verifies.
       const bClaim = await post('/signup/school', { claimId: p2.id, fullName: 'Claimant B', email: 'b@maple.edu', password: PW });
       bClaim.status === 201 ? ok('B takes over expired pending claim -> 201') : bad(`takeover failed: ${bClaim.status}`);
-      await post('/auth/verify-email', { token: tokenFor('b@maple.edu') });
+      await post('/auth/verify-email', { token: await tokenFor('b@maple.edu') });
       // A (never verified, still attached to the now-claimed org) must NOT get operate-rights.
       // Since the defense-in-depth fix (BACKLOG), the losing claimant is deactivated outright
       // on finalize, so login itself now fails (401) rather than succeeding and being blocked

@@ -3,7 +3,7 @@
 // second feature (driver no-show) needed the exact same "notify company + school admins"
 // recipient logic that the parent Skip Pickup feature already had.
 const pool = require('../db/pool');
-const { sendMailSafe } = require('../mail/mailer');
+const { sendInBackground } = require('../mail/mailer');
 
 // Notifies every active company_admin of `companyId` and every active school_admin of
 // `schoolId` (both raw pool — narrow, deliberate cross-tenant reads, same precedent as
@@ -19,9 +19,11 @@ const { sendMailSafe } = require('../mail/mailer');
 // notified, no error, just missing recipients. Explicit companyId makes this correct
 // regardless of the caller's own tenant type.
 //
-// Never throws: every caller has already saved its row, so a failed recipient lookup or a
-// failed send is logged (event type + error, no PII) and the request still succeeds. Each
-// recipient is sent independently; returns only the recipients that were actually sent to.
+// Never throws and never waits for email: every caller has already saved its row. The
+// recipients are looked up now (a quick query) and each email is sent in the background, after
+// the response, so a slow or blocked SMTP server can't hold up a no-show or a skip (it did, live,
+// for minutes). A failed lookup or send is logged (event type + error, no PII). Returns the
+// recipients the notice is being sent to.
 async function notifyCompanyAndSchoolAdmins(companyId, schoolId, { subject, text, extraRecipients = [], event = 'notification' }) {
   let recipients;
   try {
@@ -37,8 +39,8 @@ async function notifyCompanyAndSchoolAdmins(companyId, schoolId, { subject, text
     return [];
   }
 
-  const sent = await Promise.all(recipients.map((to) => sendMailSafe({ to, subject, text }, event)));
-  return recipients.filter((_, i) => sent[i]);
+  for (const to of recipients) sendInBackground({ to, subject, text }, event);
+  return recipients;
 }
 
 module.exports = { notifyCompanyAndSchoolAdmins };

@@ -35,8 +35,8 @@ async function api(method, p, token, body) {
 }
 const login = (email, password) => api('POST', '/auth/login', null, { email, password });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const tokenFromMail = () => {
-  const m = mailer._sent().at(-1);
+const tokenFromMail = async () => {
+  const m = (await mailer._drained()).at(-1);
   return m ? /token=([0-9a-f]+)/.exec(m.text)?.[1] : undefined;
 };
 
@@ -110,12 +110,12 @@ async function main() {
       eq('known email -> 200 {ok:true}', JSON.stringify([known.status, known.body]), JSON.stringify([200, { ok: true }]));
       eq('unknown email -> the exact same response', JSON.stringify([unknown.status, unknown.body]), JSON.stringify([known.status, known.body]));
       eq('inactive account -> the exact same response', JSON.stringify([inactive.status, inactive.body]), JSON.stringify([known.status, known.body]));
-      const sent = mailer._sent();
+      const sent = (await mailer._drained());
       (sent.length === 1 && sent[0].to === 'new@a.com' && /reset-password\?token=[0-9a-f]{64}/.test(sent[0].text))
         ? ok('exactly one email, to the real account, with a reset link')
         : bad(`sent: ${JSON.stringify(sent.map((m) => m.to))}`);
       const stored = (await pool.query('SELECT token_hash FROM password_reset_tokens')).rows.map((r) => r.token_hash);
-      const raw1 = tokenFromMail();
+      const raw1 = await tokenFromMail();
       eq('only a hash is stored, never the raw token', stored.includes(raw1), false);
       eq('missing email -> 400', (await api('POST', '/auth/forgot-password', null, {})).status, 400);
 
@@ -131,15 +131,15 @@ async function main() {
 
       mailer._reset();
       await api('POST', '/auth/forgot-password', null, { email: 'new@a.com' });
-      const rawExpired = tokenFromMail();
+      const rawExpired = await tokenFromMail();
       await pool.query("UPDATE password_reset_tokens SET expires_at = now() - interval '1 minute' WHERE used_at IS NULL");
       eq('expired token -> 400', (await api('POST', '/auth/reset-password', null, { token: rawExpired, newPassword: 'Expired1!x' })).status, 400);
 
       mailer._reset();
       await api('POST', '/auth/forgot-password', null, { email: 'new@a.com' });
-      const rawOlder = tokenFromMail();
+      const rawOlder = await tokenFromMail();
       await api('POST', '/auth/forgot-password', null, { email: 'new@a.com' });
-      const rawNewest = tokenFromMail();
+      const rawNewest = await tokenFromMail();
       eq('an older link stops working once a newer one is sent -> 400', (await api('POST', '/auth/reset-password', null, { token: rawOlder, newPassword: 'Older1!xyz' })).status, 400);
       eq('the newest link works -> 200', (await api('POST', '/auth/reset-password', null, { token: rawNewest, newPassword: 'Newest1!xyz' })).status, 200);
 

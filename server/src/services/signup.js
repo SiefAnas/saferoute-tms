@@ -6,7 +6,7 @@ const { withTx } = require('../db/tx');
 const { hashPassword } = require('../auth/password');
 const { generateToken, hashToken } = require('../auth/tokens');
 const { signJwt } = require('../auth/jwt');
-const { sendMailSafe } = require('../mail/mailer');
+const { sendInBackground } = require('../mail/mailer');
 const { HttpError } = require('../errors');
 const {
   assertValidEmail,
@@ -115,8 +115,8 @@ async function signupClaim(kind, claimId, { fullName, email, password }) {
     return { user, raw, orgName: locked.rows[0].name };
   });
 
-  // The claim is saved; if this send fails the user can use "resend verification".
-  await sendMailSafe({
+  // The claim is saved; sent after the response. If it fails the user can use "resend verification".
+  sendInBackground({
     to: email,
     subject: 'Verify your email to finish claiming ' + result.orgName,
     text:
@@ -197,7 +197,7 @@ async function verifyEmail(rawToken) {
   if (claimedOrg && claimedOrg.created_by_user_id) {
     const creator = (await pool.query('SELECT email FROM users WHERE id = $1', [claimedOrg.created_by_user_id])).rows[0];
     if (creator) {
-      await sendMailSafe({
+      sendInBackground({
         to: creator.email,
         subject: `A placeholder you created was claimed: ${claimedOrg.name}`,
         text: `The organization "${claimedOrg.name}" you added on SafeRoute has been claimed by its owner. You no longer have edit rights on its core details.`,
@@ -237,7 +237,7 @@ async function resendVerification(email) {
     return newRaw;
   });
 
-  await sendMailSafe({ to: user.email, subject: 'Your SafeRoute verification link', text: `token: ${raw}\nExpires in 24 hours.` }, 'resend_verification');
+  sendInBackground({ to: user.email, subject: 'Your SafeRoute verification link', text: `token: ${raw}\nExpires in 24 hours.` }, 'resend_verification');
   return { ok: true };
 }
 

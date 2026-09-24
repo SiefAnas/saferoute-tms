@@ -1,7 +1,9 @@
 // A failed notification email must never fail the request (bug found by the mobile session:
 // no-show and skip-pickup saved their row, then answered 500 because the SMTP send threw).
 // With the mailer forced to throw, every action still answers its normal success response,
-// the row is saved, `notified` is empty, and the error log carries no email address.
+// the row is saved, and the error log carries no email address. Emails go out after the response
+// (a slow SMTP server made the live no-show hang for minutes), so a slow mailer doesn't slow the
+// request either; `notified` lists who is being told.
 const PG_PORT = 5468;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
 process.env.JWT_SECRET = 'test-secret-18';
@@ -93,7 +95,7 @@ async function main() {
       const noShow = await api('POST', `/schedule/${asgNoShow.id}/no-show`, drv, { shift_period: 'morning' });
       eq('no-show -> 200 even though every send throws', noShow.status, 200);
       eq('no-show response reported: true', noShow.body?.reported, true);
-      eq('no-show notified: [] (nobody was actually sent to)', JSON.stringify(noShow.body?.notified), '[]');
+      eq('no-show notified lists who is being told (company + school admin)', JSON.stringify([...(noShow.body?.notified ?? [])].sort()), JSON.stringify(['admin@co.com', 'sa@sch.com']));
       const noShowRows = (await pool.query('SELECT count(*)::int AS n FROM pickup_no_shows WHERE student_id = $1', [stuNoShow.id])).rows[0].n;
       eq('no-show row is saved', noShowRows, 1);
 
@@ -101,7 +103,7 @@ async function main() {
       const skip = await api('POST', `/parent/students/${stuSkip.id}/skip-pickup`, par, {});
       eq('skip-pickup -> 200 even though every send throws', skip.status, 200);
       eq('skip-pickup response skipped: true', skip.body?.skipped, true);
-      eq('skip-pickup notified: []', JSON.stringify(skip.body?.notified), '[]');
+      (skip.body?.notified ?? []).includes('driver@co.com') ? ok('skip-pickup notified includes the driver') : bad(`skip notified: ${JSON.stringify(skip.body?.notified)}`);
       const skipRows = (await pool.query('SELECT count(*)::int AS n FROM pickup_skips WHERE student_id = $1', [stuSkip.id])).rows[0].n;
       eq('skip row is saved', skipRows, 1);
 
@@ -112,6 +114,7 @@ async function main() {
       eq('schedule change row is saved', changeRows, 1);
 
       console.log('\n--- the failure is logged without PII ---');
+      await mailer._drained(); // the sends (and their failures) happen after the response
       const mailLogs = errorLines.filter((l) => l.includes('[mail] send failed'));
       mailLogs.length > 0 ? ok(`failures were logged (${mailLogs.length} lines)`) : bad('no [mail] failure log lines');
       mailLogs.some((l) => l.includes('event=no_show')) ? ok('log names the event type (no_show)') : bad('no event=no_show line');
@@ -121,6 +124,19 @@ async function main() {
 
       console.log('\n--- mailer working again: notifications go out normally ---');
       mailer._failWith(null);
+
+      console.log('\n--- a slow mailer does not slow the request ---');
+      mailer._slowBy(3000);
+      const stuSlow = await mkStudent('Kid Slow');
+      await api('POST', '/assignments', admin, {
+        student_id: stuSlow.id, driver_user_id: driver.id, van_id: van.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'afternoon',
+      });
+      const t0 = Date.now();
+      const slow = await api('POST', `/schedule-changes/students/${stuSlow.id}`, sa, { change_type: 'left_early' });
+      const took = Date.now() - t0;
+      (slow.status === 201 && took < 1500) ? ok(`answered in ${took} ms while each email takes 3 s`) : bad(`slow: ${slow.status} in ${took} ms`);
+      await mailer._drained();
+      mailer._slowBy(0);
       mailer._reset();
       const stuOk = await mkStudent('Kid Ok');
       await api('POST', '/assignments', admin, {

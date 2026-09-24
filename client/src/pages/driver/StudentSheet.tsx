@@ -3,6 +3,7 @@ import { api } from '../../lib/api'
 import { formatTimeOfDay } from '../../lib/format'
 import { BottomSheet, CallButton } from '../../components/mobile'
 import { Avatar } from '../../components/Records'
+import { AddressText } from '../../components/AddressText'
 import { homeAddress, shiftName } from './driverData'
 import type { SchoolDetail, ShiftPeriod, Student } from '../../types/api'
 
@@ -53,9 +54,17 @@ function useStudentData(target: SheetTarget) {
   const s = studentQuery.data
   const school = schoolQuery.data
   const home = homeAddress(s)
-  const homeStop = { label: 'Home', line: home ? `${home.line1} · ${home.line2}` : 'No home address on file' }
+  const homeStop = {
+    label: 'Home',
+    line: home ? `${home.line1} · ${home.line2}` : 'No home address on file',
+    copy: home ? `${home.line1}, ${home.line2}` : null,
+  }
   const schoolLine = school ? [school.address, [school.state, school.zip_code].filter(Boolean).join(' ')].filter(Boolean).join(' · ') : ''
-  const schoolStop = { label: school?.name ?? 'School', line: schoolLine || 'No address on file' }
+  const schoolStop = {
+    label: school?.name ?? 'School',
+    line: schoolLine || 'No address on file',
+    copy: schoolLine ? schoolLine.replace(/ · /g, ', ') : null,
+  }
   const [from, to] = target.period === 'morning' ? [homeStop, schoolStop] : [schoolStop, homeStop]
   const meta = s ? [s.grade ? `Grade ${s.grade}` : null, s.age != null ? `Age ${s.age}` : null].filter(Boolean).join(' · ') : ''
   return { s, school, schoolLine, from, to, meta }
@@ -102,7 +111,7 @@ function StudentBody({ target, d }: { target: SheetTarget; d: StudentData }) {
             {[from, to].map((stop, i) => (
               <div key={i} className="flex flex-col">
                 <span className="text-[14px] font-medium text-ink">{stop.label}</span>
-                <span className="text-[13px] text-muted">{stop.line}</span>
+                {stop.copy ? <AddressText address={stop.copy} /> : <span className="text-[13px] text-muted">{stop.line}</span>}
               </div>
             ))}
           </div>
@@ -143,7 +152,7 @@ function StudentBody({ target, d }: { target: SheetTarget; d: StudentData }) {
         {school ? (
           <div className="flex flex-col gap-[3px] text-[13px]">
             <span className="text-[14px] font-medium text-ink">{school.name}</span>
-            {schoolLine && <span className="text-muted">{schoolLine}</span>}
+            {schoolLine && <AddressText address={schoolLine.replace(/ · /g, ', ')} />}
             {(school.phone || school.hours) && (
               <span className="text-muted">
                 {school.phone ? (

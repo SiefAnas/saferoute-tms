@@ -127,7 +127,7 @@ async function main() {
       (staying.status === 201 && staying.body.change_type === 'staying_later' && staying.body.skipped_assignment_id === asg.id)
         ? ok('staying_later logs a change and cancels the scheduled pickup, same as left_early')
         : bad(`staying_later: ${staying.status} ${JSON.stringify(staying.body)}`);
-      const sentToStaying = mailer._sent().map((m) => m.to).sort();
+      const sentToStaying = (await mailer._drained()).map((m) => m.to).sort();
       const expectedRecipients = ['admin@co.com', 'sa@sch.com', 'drv@co.com', 'parent@co.com'].sort();
       (JSON.stringify(sentToStaying) === JSON.stringify(expectedRecipients))
         ? ok('staying_later notifies company_admin + school_admin + assigned driver + linked parent (exactly)')
@@ -151,7 +151,7 @@ async function main() {
       (overrideAfterLeftEarly.rows[0]?.skip === true && overrideAfterLeftEarly.rows[0]?.company_id === A.id)
         ? ok('left_early sets today\'s assignment_schedule_overrides.skip = true, correct company_id (cross-tenant write)')
         : bad(`override after left_early: ${JSON.stringify(overrideAfterLeftEarly.rows)}`);
-      const sentToLeftEarly = mailer._sent().map((m) => m.to).sort();
+      const sentToLeftEarly = (await mailer._drained()).map((m) => m.to).sort();
       eq('left_early also notifies all 4 recipients', JSON.stringify(sentToLeftEarly), JSON.stringify(expectedRecipients));
       // Driver's own schedule view should now reflect the skip for today.
       const driverSchedule = (await api('GET', '/schedule/today', driverTok)).body;

@@ -1,10 +1,11 @@
 import { useSyncExternalStore } from 'react'
 
-// Light/dark theme. The choice lives on <html data-theme="…"> (index.css keys every color
-// variable off it) and is remembered in localStorage. With nothing saved it follows the OS
-// setting. index.html runs the same read before React loads so the page never flashes the
-// wrong theme.
+// Light/dark theme. The applied theme lives on <html data-theme="…"> (index.css keys every color
+// variable off it). The user's preference is System (follow the OS), Light or Dark, remembered in
+// localStorage; nothing saved means System. index.html runs the same read before React loads so
+// the page never flashes the wrong theme (it treats anything but light/dark as System).
 export type Theme = 'light' | 'dark'
+export type ThemePreference = 'system' | 'light' | 'dark'
 
 export const THEME_KEY = 'saferoute-theme'
 
@@ -33,6 +34,10 @@ function apply(theme: Theme) {
   listeners.forEach((l) => l())
 }
 
+function readPreference(): ThemePreference {
+  return readSaved() ?? 'system'
+}
+
 export function initTheme() {
   apply(readSaved() ?? systemTheme())
   // Keep following the OS until the user picks a theme themselves.
@@ -41,13 +46,13 @@ export function initTheme() {
   })
 }
 
-export function setTheme(theme: Theme) {
+export function setThemePreference(pref: ThemePreference) {
   try {
-    localStorage.setItem(THEME_KEY, theme)
+    localStorage.setItem(THEME_KEY, pref)
   } catch {
     // Private mode etc.: the theme still switches for this page view.
   }
-  apply(theme)
+  apply(pref === 'system' ? systemTheme() : pref)
 }
 
 function subscribe(listener: () => void) {
@@ -55,7 +60,17 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener)
 }
 
+const NEXT: Record<ThemePreference, ThemePreference> = { system: 'light', light: 'dark', dark: 'system' }
+
 export function useTheme() {
   const theme = useSyncExternalStore(subscribe, current, () => 'light' as Theme)
-  return { theme, toggle: () => setTheme(theme === 'dark' ? 'light' : 'dark') }
+  const preference = useSyncExternalStore(subscribe, readPreference, () => 'system' as ThemePreference)
+  return {
+    theme,
+    preference,
+    setPreference: setThemePreference,
+    // The header/sidebar button: System → Light → Dark → System.
+    cycle: () => setThemePreference(NEXT[preference]),
+    next: NEXT[preference],
+  }
 }

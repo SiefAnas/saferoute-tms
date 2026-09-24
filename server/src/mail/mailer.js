@@ -21,14 +21,21 @@ function getSmtpTransport() {
       auth: process.env.SMTP_USER
         ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
         : undefined,
+      // Fail fast instead of nodemailer's 2-minute defaults: a blocked or unreachable SMTP host
+      // (seen live on Render, 2026-09-23) otherwise keeps each send hanging for minutes.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     });
   }
   return smtpTransport;
 }
 
 let forcedFailure = null;
+let forcedDelayMs = 0;
 
 async function sendMail({ to, subject, text }) {
+  if (forcedDelayMs) await new Promise((r) => setTimeout(r, forcedDelayMs));
   if (forcedFailure) throw forcedFailure;
   const useSmtp = process.env.NODE_ENV !== 'test' && !!process.env.SMTP_HOST;
 
@@ -65,9 +72,27 @@ async function sendMailSafe(message, event) {
   }
 }
 
+// Sends that must never hold up a request (no-show, skip, schedule change, reset links...):
+// started now, finished after the response. Failures are logged by sendMailSafe. Pending sends
+// are tracked only so tests can wait for them (_drained).
+const pending = new Set();
+function sendInBackground(message, event) {
+  const p = sendMailSafe(message, event).finally(() => pending.delete(p));
+  pending.add(p);
+}
+
 // Test hooks
+// Waits for every background send to finish, then returns what was "sent" (dev transport).
+async function _drained() {
+  while (pending.size) await Promise.allSettled([...pending]);
+  return sentMessages;
+}
 function _failWith(err) {
   forcedFailure = err ?? null;
+}
+// Makes every send take `ms` (a slow or blocked SMTP server).
+function _slowBy(ms) {
+  forcedDelayMs = ms;
 }
 function _sent() {
   return sentMessages;
@@ -76,4 +101,4 @@ function _reset() {
   sentMessages.length = 0;
 }
 
-module.exports = { sendMail, sendMailSafe, _sent, _reset, _failWith };
+module.exports = { sendMail, sendMailSafe, sendInBackground, _sent, _drained, _reset, _failWith, _slowBy };

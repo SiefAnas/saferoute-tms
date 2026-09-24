@@ -2,20 +2,31 @@ import { Pressable, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '@/auth/auth'
 import { firstName, formatWeekdayDate, greeting } from '@/lib/format'
-import { useColors } from '@/theme/theme'
+import { THEME_CYCLE, useColors, useTheme } from '@/theme/theme'
 import { Icon } from './Icon'
 import { Text } from './Text'
 
 // The header the design puts on every tab: a greeting that changes with the time of day, then
 // today's date plus whatever context that app has (the driver's van).
 //
-// The design's top-right button is a light/dark toggle. This app follows the phone's own
-// light/dark setting instead, so that slot holds Log out — which the driver app otherwise has
-// nowhere to live, since its four tabs are Today / Trips / Week / Pay.
+// Top right: the theme button (cycles System → Light → Dark, saved on the phone) and Log out,
+// which the driver app otherwise has nowhere to live (its tabs are Today / Trips / Week / Pay).
 export function AppHeader({ subtitle }: { subtitle?: string | null }) {
   const colors = useColors()
   const insets = useSafeAreaInsets()
   const { user, signOut } = useAuth()
+  const { preference, setPreference } = useTheme()
+  const theme = THEME_CYCLE[preference]
+  const roundButton = ({ pressed }: { pressed: boolean }) => ({
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: pressed ? colors.surface2 : colors.surface,
+  })
 
   const line = [formatWeekdayDate(), subtitle].filter(Boolean).join(' · ')
 
@@ -41,21 +52,15 @@ export function AppHeader({ subtitle }: { subtitle?: string | null }) {
         </Text>
       </View>
       <Pressable
-        onPress={() => void signOut()}
+        onPress={() => setPreference(theme.next)}
         accessibilityRole="button"
-        accessibilityLabel="Log out"
+        accessibilityLabel={`Theme: ${theme.label}. Tap for ${THEME_CYCLE[theme.next].label}.`}
         hitSlop={8}
-        style={({ pressed }) => ({
-          width: 38,
-          height: 38,
-          borderRadius: 19,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderWidth: 1,
-          borderColor: colors.line,
-          backgroundColor: pressed ? colors.surface2 : colors.surface,
-        })}
+        style={roundButton}
       >
+        <Icon name={theme.icon} size={18} color={colors.ink} />
+      </Pressable>
+      <Pressable onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel="Log out" hitSlop={8} style={roundButton}>
         <Icon name="logout" size={18} color={colors.ink} />
       </Pressable>
     </View>

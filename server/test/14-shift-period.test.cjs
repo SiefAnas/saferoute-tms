@@ -400,7 +400,7 @@ async function main() {
       (morningSkip.status === 200 && morningSkip.body.skipped === true && morningSkip.body.skips.length === 1)
         ? ok('morning-only skip -> 200, one skip row inserted')
         : bad(`morning skip: ${morningSkip.status} ${JSON.stringify(morningSkip.body)}`);
-      const sentMorning = mailer._sent().map((m) => m.to).sort();
+      const sentMorning = (await mailer._drained()).map((m) => m.to).sort();
       (sentMorning.includes('d7@co.com') && !sentMorning.includes('d8@co.com'))
         ? ok('morning-only skip notifies the morning driver only, not the afternoon driver')
         : bad(`notified: ${JSON.stringify(sentMorning)}`);
@@ -415,7 +415,7 @@ async function main() {
       (wholeDaySkip.status === 200 && wholeDaySkip.body.skips.length === 1)
         ? ok('whole-day skip after morning already done -> 200, only inserts the missing afternoon leg')
         : bad(`whole day skip: ${wholeDaySkip.status} ${JSON.stringify(wholeDaySkip.body)}`);
-      const sentWhole = mailer._sent().map((m) => m.to).sort();
+      const sentWhole = (await mailer._drained()).map((m) => m.to).sort();
       sentWhole.includes('d8@co.com')
         ? ok('whole-day skip notifies the afternoon driver too, not just whichever was skipped first')
         : bad(`notified: ${JSON.stringify(sentWhole)}`);
