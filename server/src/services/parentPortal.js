@@ -17,6 +17,7 @@ const pool = require('../db/pool');
 const { HttpError } = require('../errors');
 const { notifyCompanyAndSchoolAdmins } = require('./notifications');
 const { assignmentRunsOnSql } = require('../db/scoped');
+const { routeJoinsSql, ROUTE_COLUMNS, route, listExtraAddresses } = require('./stops');
 
 function readScope(req) {
   // Every parent read is narrowed to their own linked students — same ownerIn pattern
@@ -123,12 +124,16 @@ async function getStudentDetail(req, studentId) {
             COALESCE(o.skip, false) AS schedule_skip,
             v.license_plate, v.brand, v.model, v.year, v.color, v.number AS van_number,
             u.full_name AS driver_name, u.phone AS driver_phone,
-            c.name AS company_name, c.phone AS company_phone
+            c.name AS company_name, c.phone AS company_phone,
+            ${ROUTE_COLUMNS}
        FROM assignments a
        JOIN vans v ON v.id = a.van_id
        JOIN users u ON u.id = a.driver_user_id
        JOIN companies c ON c.id = a.company_id
+       JOIN students st ON st.id = a.student_id
+       JOIN schools sc ON sc.id = st.school_id
        LEFT JOIN assignment_schedule_overrides o ON o.assignment_id = a.id AND o.override_date = CURRENT_DATE
+       ${routeJoinsSql('CURRENT_DATE')}
       WHERE a.student_id = $1 AND a.company_id = $2
         AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
       ORDER BY a.shift_period, a.created_at DESC`,
@@ -179,7 +184,10 @@ async function getStudentDetail(req, studentId) {
       dropoff_time: a.dropoff_time,
       days_of_week: a.days_of_week, // ISO weekdays, 1 = Monday ... 7 = Sunday
       runs_today: a.runs_today, // false on a day this ride doesn't run (e.g. the weekend)
+      route: route(a), // today's From → To per leg, with an extra address when one applies
     })),
+    // The child's extra addresses (read-only for parents): label, address, weekdays, leg, dates.
+    extra_addresses: await listExtraAddresses(req.auth.tenantId, studentId),
     skip_today: allShiftsSkipped,
     trips_today: trips,
   };

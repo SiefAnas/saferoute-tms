@@ -6,6 +6,7 @@ const pool = require('../db/pool');
 const { HttpError } = require('../errors');
 const { notifyCompanyAndSchoolAdmins } = require('./notifications');
 const { assignmentNotEndedSql, assignmentRunsOnSql } = require('../db/scoped');
+const { routeJoinsSql, ROUTE_COLUMNS, route } = require('./stops');
 const { driverScope } = require('../middleware/authorize');
 
 // Raw pool query (not req.db): "active today" is a date-range condition req.db's
@@ -42,12 +43,13 @@ function scheduleItemColumns(day) {
 
 async function getTodaySchedule(req) {
   const { rows } = await pool.query(
-    `SELECT ${scheduleItemColumns('CURRENT_DATE')}
+    `SELECT ${scheduleItemColumns('CURRENT_DATE')}, ${ROUTE_COLUMNS}
        FROM assignments a
        JOIN students st ON st.id = a.student_id
        JOIN schools sc ON sc.id = st.school_id
        LEFT JOIN assignment_schedule_overrides o
               ON o.assignment_id = a.id AND o.override_date = CURRENT_DATE
+       ${routeJoinsSql('CURRENT_DATE')}
       WHERE a.driver_user_id = $1
         AND a.company_id = $2
         AND a.start_date <= CURRENT_DATE
@@ -72,6 +74,9 @@ function toScheduleItem(r) {
       : null,
     parent_skipped: { morning: r.parent_skipped_morning, afternoon: r.parent_skipped_afternoon },
     no_show_reported: { morning: r.no_show_morning, afternoon: r.no_show_afternoon },
+    // Where each leg starts and ends that day (services/stops.js): morning home → school,
+    // afternoon school → home, with an extra address instead of home when one applies.
+    route: route(r),
   };
 }
 
@@ -102,7 +107,7 @@ async function getWeekSchedule(req, start) {
     [start]
   );
   const { rows } = await pool.query(
-    `SELECT d.day::text AS date, ${scheduleItemColumns('d.day')}
+    `SELECT d.day::text AS date, ${scheduleItemColumns('d.day')}, ${ROUTE_COLUMNS}
        FROM (SELECT g::date AS day FROM generate_series($3::date, $3::date + 6, interval '1 day') AS g) d
        JOIN assignments a
          ON a.driver_user_id = $1
@@ -115,6 +120,7 @@ async function getWeekSchedule(req, start) {
        JOIN schools sc ON sc.id = st.school_id
        LEFT JOIN assignment_schedule_overrides o
               ON o.assignment_id = a.id AND o.override_date = d.day
+       ${routeJoinsSql('d.day')}
       ORDER BY d.day, st.full_name`,
     [req.auth.userId, req.auth.tenantId, start]
   );

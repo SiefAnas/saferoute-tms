@@ -10,6 +10,7 @@ const { requireOperable, requireRole, denyRoles, driverScope } = require('../mid
 const { HttpError, mapMissingRefError } = require('../errors');
 const { assertValidZip, assertValidState } = require('../validate');
 const pool = require('../db/pool');
+const { listExtraAddresses, createExtraAddress, updateExtraAddress, deleteExtraAddress } = require('../services/stops');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent'));
@@ -126,7 +127,10 @@ router.get('/:id', async (req, res, next) => {
     const row = await req.db.findById('students', req.params.id, readScope(req));
     if (!row) throw new HttpError(404, 'student not found');
     const contacts = await req.db.findMany('student_contacts', { where: { student_id: row.id }, orderBy: 'name' });
-    res.json({ ...row, contacts });
+    // Extra addresses (e.g. "Fridays: Grandparents") are managed by the company admin; a driver
+    // sees the one that applies in their schedule's `route`, not the whole list.
+    const extra = req.auth.role === 'company_admin' ? { extra_addresses: await listExtraAddresses(req.auth.tenantId, row.id) } : {};
+    res.json({ ...row, contacts, ...extra });
   } catch (e) { next(e); }
 });
 
@@ -177,6 +181,43 @@ router.delete('/:id/contacts/:contactId', companyAdmin, async (req, res, next) =
       owner: { column: 'student_id', value: req.params.id },
     });
     if (!row) throw new HttpError(404, 'contact not found');
+    res.status(204).end();
+  } catch (e) { next(e); }
+});
+
+// Extra addresses (company_admin): a different pickup / drop-off address on some weekdays.
+// See services/stops.js. The student must be in the admin's company (404 otherwise).
+async function assertCompanyStudent(req) {
+  const student = await req.db.findById('students', req.params.id);
+  if (!student) throw new HttpError(404, 'student not found');
+  return student;
+}
+
+router.get('/:id/addresses', companyAdmin, async (req, res, next) => {
+  try {
+    await assertCompanyStudent(req);
+    res.json(await listExtraAddresses(req.auth.tenantId, req.params.id));
+  } catch (e) { next(e); }
+});
+
+router.post('/:id/addresses', companyAdmin, async (req, res, next) => {
+  try {
+    await assertCompanyStudent(req);
+    res.status(201).json(await createExtraAddress(req.auth.tenantId, req.params.id, req.body || {}));
+  } catch (e) { next(e); }
+});
+
+router.patch('/:id/addresses/:addressId', companyAdmin, async (req, res, next) => {
+  try {
+    await assertCompanyStudent(req);
+    res.json(await updateExtraAddress(req.auth.tenantId, req.params.id, req.params.addressId, req.body || {}));
+  } catch (e) { next(e); }
+});
+
+router.delete('/:id/addresses/:addressId', companyAdmin, async (req, res, next) => {
+  try {
+    await assertCompanyStudent(req);
+    await deleteExtraAddress(req.auth.tenantId, req.params.id, req.params.addressId);
     res.status(204).end();
   } catch (e) { next(e); }
 });
