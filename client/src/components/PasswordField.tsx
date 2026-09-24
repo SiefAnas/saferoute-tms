@@ -3,7 +3,7 @@ import { Field, FIELD_CLASS } from './Input'
 import { PasswordStrengthMeter } from './PasswordStrengthMeter'
 
 // Password input with a show/hide toggle, the rules line and the strength meter. Used wherever
-// an admin sets a password for an account they manage.
+// someone chooses a new password (first-login set password, reset password).
 export function PasswordField({
   label,
   value,

@@ -5,7 +5,7 @@ import { isToday, formatDuration, formatRate } from '../../lib/format'
 import { currentAssignmentBy, vanLabel, vanShort } from '../../lib/fleet'
 import { Button } from '../../components/Button'
 import { Field, Input } from '../../components/Input'
-import { PasswordField } from '../../components/PasswordField'
+import { TemporaryPasswordDialog } from '../../components/TemporaryPasswordDialog'
 import { StatusBadge } from '../../components/StatusBadge'
 import { EditAccountModal } from '../../components/EditAccountModal'
 import { CsvImportExport } from '../../components/CsvImportExport'
@@ -17,7 +17,7 @@ import { NameCell, NoMatches, PageIntro, SearchField, StatCard, StatRow, TableCa
 import { useToast } from '../../components/Toast'
 import { PageTopBar } from '../../layouts/TopBar'
 import type { CsvColumn } from '../../lib/csv'
-import type { Assignment, DriverSession, PayRule, PublicUser, Van } from '../../types/api'
+import type { Assignment, CreatedUser, DriverSession, PayRule, PublicUser, Van } from '../../types/api'
 
 const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
   { key: 'full_name', header: 'Full Name' },
@@ -25,10 +25,6 @@ const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
   { key: 'phone', header: 'Phone' },
   { key: 'address', header: 'Address' },
   { key: 'license_number', header: 'License Number' },
-  // Never exported — we don't store/return plaintext passwords. Present in the template
-  // so a row for a NEW driver has somewhere to put one; left blank on an existing driver's
-  // row leaves their password unchanged on re-import.
-  { key: 'password', header: 'Password', value: () => '' },
   { key: 'is_active', header: 'Active', value: (d) => (d.is_active ? 'true' : 'false') },
 ]
 
@@ -63,31 +59,29 @@ export function DriversPage() {
   const [driverPhone, setDriverPhone] = useState('')
   const [driverAddress, setDriverAddress] = useState('')
   const [driverLicense, setDriverLicense] = useState('')
-  const [driverPassword, setDriverPassword] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
+  const [created, setCreated] = useState<CreatedUser | null>(null)
 
   const addDriver = useMutation({
     mutationFn: () =>
-      // The password set here is real and permanent — the driver signs in with it directly,
-      // no forced first-login change (none exists anywhere in this app).
-      api.post<PublicUser>('/users', {
+      // No password here: the server makes a temporary one (shown once, below) and the driver
+      // sets their own at first sign-in.
+      api.post<CreatedUser>('/users', {
         role: 'driver',
         fullName: driverName,
         email: driverEmail,
         phone: driverPhone || undefined,
         address: driverAddress || undefined,
         licenseNumber: driverLicense || undefined,
-        password: driverPassword,
       }),
     onSuccess: (driver) => {
       queryClient.invalidateQueries({ queryKey: ['users', 'driver'] })
-      toast.show(`${driver.full_name} can now sign in with the password you set`)
+      setCreated(driver)
       setDriverName('')
       setDriverEmail('')
       setDriverPhone('')
       setDriverAddress('')
       setDriverLicense('')
-      setDriverPassword('')
       setShowAddModal(false)
     },
     onError: (err) => setAddError(err instanceof ApiError ? err.message : 'Could not create driver account.'),
@@ -102,8 +96,8 @@ export function DriversPage() {
   // CSV import (2026-08-28): upsert by email, per the task's own matching rule for "people".
   // Existing driver -> PATCH /users/:id (naturally enforces creator-only edit — a row for a
   // driver this admin didn't create fails with that same 403 message, not a silent bypass).
-  // No match -> POST /users, requires Full Name + Password (a brand-new account needs a
-  // real password to log in with, same as the one-by-one Add Driver form).
+  // No match -> POST /users, requires Full Name. The server makes a temporary password, shown
+  // in that row's result so the admin can hand it over (a Password column is ignored).
   async function handleImportRow(row: Record<string, string>) {
     const email = row['Email']?.trim()
     if (!email) return { ok: false, message: 'Email is required' }
@@ -111,7 +105,6 @@ export function DriversPage() {
     const phone = row['Phone']?.trim()
     const address = row['Address']?.trim()
     const license = row['License Number']?.trim()
-    const password = row['Password']?.trim()
     const activeRaw = row['Active']?.trim().toLowerCase()
 
     const existing = (driversQuery.data ?? []).find((d) => d.email.toLowerCase() === email.toLowerCase())
@@ -122,18 +115,16 @@ export function DriversPage() {
         if (phone) patch.phone = phone
         if (address) patch.address = address
         if (license) patch.license_number = license
-        if (password) patch.password = password
         if (activeRaw) patch.is_active = ['true', '1', 'yes'].includes(activeRaw)
         if (Object.keys(patch).length === 0) return { ok: true, message: 'No changes' }
         await api.patch(`/users/${existing.id}`, patch)
         return { ok: true, message: 'Updated' }
       }
       if (!fullName) return { ok: false, message: 'Full Name is required for a new driver' }
-      if (!password) return { ok: false, message: 'Password is required for a new driver' }
-      await api.post('/users', {
-        role: 'driver', fullName, email, phone: phone || undefined, address: address || undefined, licenseNumber: license || undefined, password,
+      const made = await api.post<CreatedUser>('/users', {
+        role: 'driver', fullName, email, phone: phone || undefined, address: address || undefined, licenseNumber: license || undefined,
       })
-      return { ok: true, message: 'Created' }
+      return { ok: true, message: `Created · temporary password ${made.temporary_password}` }
     } catch (err) {
       return { ok: false, message: err instanceof ApiError ? err.message : 'Import failed' }
     }
@@ -280,17 +271,19 @@ export function DriversPage() {
               <Field label="Email (used to log in)">
                 <Input required type="email" value={driverEmail} onChange={(e) => setDriverEmail(e.target.value)} />
               </Field>
-              <Field label="Phone">
-                <Input required type="tel" placeholder="555-123-4567" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
+              <Field label="Phone (optional)">
+                <Input type="tel" placeholder="555-123-4567" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
               </Field>
             </div>
-            <Field label="Home address">
-              <Input required placeholder="Street, city, state, zip" value={driverAddress} onChange={(e) => setDriverAddress(e.target.value)} />
+            <Field label="Home address (optional)">
+              <Input placeholder="Street, city, state, zip" value={driverAddress} onChange={(e) => setDriverAddress(e.target.value)} />
             </Field>
-            <Field label="Driver license number">
-              <Input required value={driverLicense} onChange={(e) => setDriverLicense(e.target.value)} />
+            <Field label="Driver license number (optional)">
+              <Input value={driverLicense} onChange={(e) => setDriverLicense(e.target.value)} />
             </Field>
-            <PasswordField label="Password" required value={driverPassword} onChange={setDriverPassword} />
+            <p className="text-[13px] text-muted">
+              SafeRoute makes a temporary password for you to give the driver. They choose their own the first time they sign in.
+            </p>
             {addError && (
               <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">
                 {addError}
@@ -309,6 +302,9 @@ export function DriversPage() {
       )}
 
       {editUser && <EditAccountModal user={editUser} invalidateKey={['users', 'driver']} onClose={() => setEditUser(null)} />}
+      {created && (
+        <TemporaryPasswordDialog name={created.full_name} email={created.email} password={created.temporary_password} onClose={() => setCreated(null)} />
+      )}
       {toast.node}
     </div>
   )

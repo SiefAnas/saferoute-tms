@@ -19,7 +19,7 @@ async function main() {
     await client.connect();
     try {
       const applied = (await client.query('SELECT count(*)::int AS n FROM pgmigrations')).rows[0].n;
-      eq('pgmigrations records 20 applied migrations', applied, 20);
+      eq('pgmigrations records 21 applied migrations', applied, 21);
       const tables = (await client.query(
         "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name<>'pgmigrations' ORDER BY 1"
       )).rows.map((r) => r.table_name);

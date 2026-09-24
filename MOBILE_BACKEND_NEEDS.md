@@ -30,7 +30,7 @@ the mobile work.
 | ~~Driver: Week tab~~ | **Done** (branch `v2-week-ui`): the tab calls `GET /schedule/week?start=YYYY-MM-DD` (Monday) and shows the real week. |
 | Driver: Pay → "Paid in {month}" | Payment history ledger + `GET /payroll/payments?from&to` (own driver) |
 | Parent: live location and ETA / "van is X stops away" | Route order per driver + current stop; live location pings + ETA service |
-| Login: forgot password | `POST /auth/forgot-password` + `/auth/reset-password` (needs working email) |
+| ~~Login: forgot password~~ | **Done** (branch `auth-accounts`): the app's "Forgot password?" screen calls `POST /auth/forgot-password`; the emailed link opens the website to set the new password. First-login "Choose your password" screen too. Email delivery needs the Render SMTP vars. |
 | Push notifications (not in the app at all yet) | Device token table + FCM/APNs sender |
 
 ## Nice to have for the app

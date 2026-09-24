@@ -8,6 +8,7 @@ import { ParentLayout } from './layouts/ParentLayout'
 import { LoginPage } from './pages/login/LoginPage'
 import { RegisterPage } from './pages/register/RegisterPage'
 import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
+import { ForgotPasswordPage, ResetPasswordPage, SetPasswordPage } from './pages/login/PasswordPages'
 import { DriverLayout } from './layouts/DriverLayout'
 
 // Each role's screens load on demand, so a driver's phone never downloads the admin pages.
@@ -79,6 +80,9 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/set-password" element={<SetPasswordPage />} />
 
         <Route element={<ProtectedRoute roles={['driver']} />}>
           <Route element={<DriverLayout />}>

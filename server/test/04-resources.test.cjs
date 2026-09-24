@@ -4,7 +4,7 @@ process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/
 process.env.JWT_SECRET = 'test-secret-04';
 process.env.NODE_ENV = 'test';
 
-const { createRecorder, startEmbeddedPostgres, runMigrateUp } = require('./lib/testkit.cjs');
+const { createRecorder, startEmbeddedPostgres, runMigrateUp, activateAccount } = require('./lib/testkit.cjs');
 const createApp = require('../src/app.js');
 const pool = require('../src/db/pool.js');
 const { hashPassword } = require('../src/auth/password.js');
@@ -58,12 +58,14 @@ async function main() {
       const mk = await api('POST', '/users', adminA, { role: 'driver', email: 'drvA@co.com', fullName: 'Driver A', password: PW, ...driverBasics });
       (mk.status === 201 && mk.body.email_verified_at) ? ok('company_admin creates driver, email_verified stamped (invariant)') : bad(`user create: ${mk.status} ${JSON.stringify(mk.body)}`);
       const driverAId = mk.body.id;
+      await activateAccount(BASE, 'drvA@co.com', mk.body.temporary_password, PW);
       eq('company_admin creating a school_staff -> 403 (cross-side role)', (await api('POST', '/users', adminA, { role: 'school_staff', email: 'x@x.com', fullName: 'x', password: PW })).status, 403);
       eq('school_admin creating a driver -> 403 (cross-side role, reverse direction, BACKLOG #3)', (await api('POST', '/users', schoolAdmin, { role: 'driver', email: 'y@y.com', fullName: 'y', password: PW, ...driverBasics })).status, 403);
-      eq('driver create missing phone -> 400 (now required)', (await api('POST', '/users', adminA, { role: 'driver', email: 'nophone@co.com', fullName: 'No Phone', password: PW, address: '1 St', licenseNumber: 'D1' })).status, 400);
+      eq('driver create with only name + email -> 201 (phone/address/license optional, auth-accounts)', (await api('POST', '/users', adminA, { role: 'driver', email: 'nophone@co.com', fullName: 'No Phone' })).status, 201);
       eq('duplicate email -> 409', (await api('POST', '/users', adminA, { role: 'driver', email: 'drvA@co.com', fullName: 'dup', password: PW, ...driverBasics })).status, 409);
       const drvB = await api('POST', '/users', adminB, { role: 'driver', email: 'drvB@co.com', fullName: 'Driver B', password: PW, ...driverBasics });
       const driverBId = drvB.body.id;
+      await activateAccount(BASE, 'drvB@co.com', drvB.body.temporary_password, PW);
       const listA = await api('GET', '/users', adminA);
       listA.body.every((u) => u.email !== 'drvB@co.com') ? ok('admin A user list excludes Company B users (isolation)') : bad('admin A saw a Company B user');
       eq('admin A GET Company B user by id -> 404 (no cross-tenant)', (await api('GET', `/users/${driverBId}`, adminA)).status, 404);

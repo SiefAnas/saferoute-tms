@@ -10,9 +10,11 @@
 // ASSUMPTION, flagged for confirmation: this is a real behavior change from before (both
 // were previously self-creatable); no existing test asserted the old behavior, so nothing
 // broke, but worth double-checking this was the intent.
+const pool = require('../db/pool');
 const { hashPassword } = require('../auth/password');
 const { HttpError } = require('../errors');
-const { assertValidEmail, assertPasswordStrength, assertMaxLength } = require('../validate');
+const { assertValidEmail, assertMaxLength } = require('../validate');
+const { generateTempPassword, setPassword } = require('./passwords');
 
 // Which roles a given admin role may create (same tenant side).
 const CREATABLE = {
@@ -20,30 +22,25 @@ const CREATABLE = {
   school_admin: ['school_staff'],
 };
 
+// Auth-accounts (2026-09-23): the admin no longer types a password. The server generates a
+// temporary one, returns it ONCE in this response (`temporary_password`) for the admin to hand
+// over, and flags the account must_change_password: the user sets their own at first login.
+// A `password` in the body is ignored. Drivers now need only name + email (phone, address and
+// license are optional), per the 3 Bees onboarding request.
 async function createUser(req, body = {}) {
-  const { email, password, fullName, role, phone, address, licenseNumber } = body;
+  const { email, fullName, role, phone, address, licenseNumber } = body;
   const allowed = CREATABLE[req.auth.role];
   if (!allowed) throw new HttpError(403, 'your role cannot create users');
-  if (!email || !password || !fullName || !role) {
-    throw new HttpError(400, 'email, password, fullName and role are required');
+  if (!email || !fullName || !role) {
+    throw new HttpError(400, 'email, fullName and role are required');
   }
   assertValidEmail(email);
-  assertPasswordStrength(password);
   assertMaxLength(fullName, 200, 'fullName');
   assertMaxLength(phone, 30, 'phone');
   assertMaxLength(address, 300, 'address');
   assertMaxLength(licenseNumber, 50, 'licenseNumber');
   if (!allowed.includes(role)) {
     throw new HttpError(403, `a ${req.auth.role} cannot create a ${role}`);
-  }
-  // Phone/address/license used to be optional for a driver account — no longer (§7 item 6):
-  // the Add Driver form collects all three and now marks them required, so enforce the same
-  // here rather than leaving it a client-only rule. school_staff creation doesn't collect
-  // these fields at all, so this stays scoped to driver/parent.
-  if (role === 'driver') {
-    if (!phone) throw new HttpError(400, 'phone is required for a driver account');
-    if (!address) throw new HttpError(400, 'address is required for a driver account');
-    if (!licenseNumber) throw new HttpError(400, 'licenseNumber is required for a driver account');
   }
   // Parent phone/address (added for the parent<->student auto-match suggestion task,
   // 2026-09-01): the Add Parent form now collects both, and the match logic works far better
@@ -53,11 +50,8 @@ async function createUser(req, body = {}) {
     if (!address) throw new HttpError(400, 'address is required for a parent account');
   }
 
-  // Passwords set here are real, permanent passwords the admin chooses — not a temporary
-  // value forcing a first-login reset. No such forced-change mechanism exists anywhere in
-  // this app (checked: no must_change_password-style flag on users, no reset-on-first-login
-  // code path); the account can just log in with whatever's set here.
-  const password_hash = await hashPassword(password);
+  const temporaryPassword = generateTempPassword();
+  const password_hash = await hashPassword(temporaryPassword);
   try {
     // req.db stamps the caller's tenant column (company_id or school_id); the DB CHECK
     // guarantees role matches that column. email_verified_at stamped now (admin-vouched).
@@ -73,8 +67,9 @@ async function createUser(req, body = {}) {
       license_number: licenseNumber ?? null,
       email_verified_at: new Date().toISOString(),
       created_by_user_id: req.auth.userId,
+      must_change_password: true,
     });
-    return publicUser(row);
+    return { ...publicUser(row), temporary_password: temporaryPassword };
   } catch (err) {
     if (err.code === '23505') throw new HttpError(409, 'email already registered');
     throw err;
@@ -108,9 +103,7 @@ async function getUser(req, id) {
 async function updateUser(req, id, body = {}) {
   const existing = await req.db.findById('users', id);
   if (!existing) throw new HttpError(404, 'user not found');
-  if (existing.created_by_user_id && existing.created_by_user_id !== req.auth.userId) {
-    throw new HttpError(403, 'only the admin who created this account can edit it');
-  }
+  assertCanManage(req, existing);
 
   const patch = {};
   for (const key of ['full_name', 'phone', 'is_active', 'address', 'license_number']) {
@@ -120,9 +113,10 @@ async function updateUser(req, id, body = {}) {
     assertValidEmail(body.email);
     patch.email = body.email;
   }
+  // Admins no longer set passwords directly: POST /users/:id/reset-password gives a temporary
+  // one the user must replace, so the admin never knows the password the user keeps.
   if (body.password !== undefined) {
-    assertPasswordStrength(body.password);
-    patch.password_hash = await hashPassword(body.password);
+    throw new HttpError(400, 'passwords can no longer be set here; use reset password to give the user a temporary one');
   }
   if (Object.keys(patch).length === 0) throw new HttpError(400, 'nothing to update');
   assertMaxLength(patch.full_name, 200, 'full_name');
@@ -140,6 +134,30 @@ async function updateUser(req, id, body = {}) {
   }
 }
 
+// Creator-only rule shared by edit and password reset (see updateUser above for the
+// grandfathering of accounts with no creator).
+function assertCanManage(req, target) {
+  if (target.created_by_user_id && target.created_by_user_id !== req.auth.userId) {
+    throw new HttpError(403, 'only the admin who created this account can edit it');
+  }
+}
+
+// Admin reset (for when email isn't working): a new temporary password, returned once, never
+// the old one. The user must set their own at next login, and every existing session of theirs
+// is signed out. Only for roles this admin can create (not other admins, not themselves), only
+// in their own tenant (another tenant's id reads as 404), only by the creating admin.
+async function adminResetPassword(req, id) {
+  const target = await req.db.findById('users', id);
+  if (!target) throw new HttpError(404, 'user not found');
+  if (target.id === req.auth.userId || !(CREATABLE[req.auth.role] ?? []).includes(target.role)) {
+    throw new HttpError(403, 'you cannot reset the password of this account');
+  }
+  assertCanManage(req, target);
+  const temporaryPassword = generateTempPassword();
+  await setPassword(pool, target.id, temporaryPassword, { mustChange: true });
+  return { user: publicUser({ ...target, must_change_password: true }), temporary_password: temporaryPassword };
+}
+
 // Never leak password_hash.
 function publicUser(u) {
   return {
@@ -153,7 +171,8 @@ function publicUser(u) {
     is_active: u.is_active,
     email_verified_at: u.email_verified_at,
     created_by_user_id: u.created_by_user_id ?? null,
+    must_change_password: Boolean(u.must_change_password),
   };
 }
 
-module.exports = { createUser, listUsers, getUser, updateUser };
+module.exports = { createUser, listUsers, getUser, updateUser, adminResetPassword };

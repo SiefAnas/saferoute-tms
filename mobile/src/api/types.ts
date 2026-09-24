@@ -13,6 +13,10 @@ export interface AuthUser {
   role: Role
   tenantType: TenantType
   tenantId: string
+  // True while the account is on a temporary password (new, or reset by the admin): the app
+  // must send the user to "set your password" first; the API refuses everything else
+  // (403 PASSWORD_CHANGE_REQUIRED) until they do. API_CONTRACT.md "Auth".
+  must_change_password?: boolean
 }
 
 export interface LoginResponse {

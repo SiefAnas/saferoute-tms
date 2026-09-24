@@ -21,7 +21,7 @@ Size: **S** = about a day, **M** = a few days, **L** = a week or more / needs a 
 
 | Feature | What the user sees now | Backend needed | Size |
 |---|---|---|---|
-| **Forgot password / password reset** | Login shows a "Forgot password?" panel that tells drivers/parents/staff to contact their admin (static message, no reset). | `password_reset_tokens` table (hashed token, expiry), `POST /auth/forgot-password`, `POST /auth/reset-password`, email via the existing mailer (needs Render SMTP vars). | M |
+| **Forgot password / password reset** | **Built on branch `auth-accounts`** (web + mobile): forgot / reset pages, temporary passwords with a forced first-login change, admin reset. | Done. Delivering the reset email still needs the Render SMTP vars (admin reset works without email). | Done |
 | **Self-service profile edit** (parent/driver/staff) | Parent Profile tab is read-only with "contact your company". | `PATCH /me` for own phone/address/password (with current-password check). Today only the creating admin can edit via `PATCH /users/:id`. | S |
 | **Parent form edit for multiple guardians** | Add Student supports several guardians; Edit Student edits only the primary one (others via the Contacts panel). | None (frontend), or a batch `PUT /students/:id/contacts`. | S |
 | **CSV import updates students** | Student CSV import is add-only (no reliable natural key). | A stable student key (e.g. `external_id` / school student number) + upsert by it. | S |

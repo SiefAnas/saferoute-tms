@@ -121,10 +121,14 @@ Response `200`:
   "token": "eyJhbGciOiJIUzI1NiIs...",
   "user": {
     "id": "83acb1ae-…", "email": "driver@company.com", "full_name": "Luis Ortega",
-    "role": "driver", "tenantType": "company", "tenantId": "3f1c…"
+    "role": "driver", "tenantType": "company", "tenantId": "3f1c…",
+    "must_change_password": false
   }
 }
 ```
+- `must_change_password: true` = the account is on a temporary password (new, or reset by the
+  admin). Send the user to "set your password" (`POST /auth/change-password`) before anything
+  else: every other endpoint answers `403 {"error":…, "code":"PASSWORD_CHANGE_REQUIRED"}`.
 - `role`: `driver | parent | company_admin | school_admin | school_staff`.
   `tenantType`: `company` (driver, parent, company_admin) or `school`.
 - Errors: `400` missing fields, `401 {"error":"invalid credentials"}` (wrong email/password or
@@ -136,27 +140,51 @@ Response `200`:
 - **No refresh token.** When any call returns `401`, clear the token and show login.
 - The server re-reads the user on every request, so deactivating an account or changing its
   role takes effect immediately (next call returns 401/403).
+- **A password change or reset signs out every older token** (`401 "your password was changed,
+  please log in again"`). `POST /auth/change-password` returns a new token to keep going.
 - Web client stores it in `localStorage` (`saferoute_token`, `saferoute_user`). Mobile: use
   the platform's secure storage (Keychain / EncryptedSharedPreferences).
 
 ### `GET /auth/me`
-Response `200`: `{ "user": { "userId", "role", "tenantType", "tenantId", "orgClaimStatus", "emailVerifiedAt" } }`
-(note: different shape from login's `user`).
+Response `200`: `{ "user": { "userId", "role", "tenantType", "tenantId", "orgClaimStatus", "emailVerifiedAt", "mustChangePassword" } }`
+(note: different shape from login's `user`). Works while a password change is pending.
 
 ### Logout
 Client-side only: delete the stored token. There is no server logout / revocation endpoint.
 
-### Password reset
-**Does not exist.** Drivers, parents and school staff get their password from the admin who
-created their account; only that admin can change it (`PATCH /users/:id`). The web login shows
-a static "contact your administrator" message. See `V2_ROADMAP.md`.
+### Passwords: all rules
+New passwords must be at least 8 characters with an uppercase letter, a lowercase letter, a
+number and a special character (`400` otherwise).
+
+### `POST /auth/change-password` (logged in, also while a change is pending)
+Body `{ "currentPassword": "…", "newPassword": "…" }`. For the first-login change,
+`currentPassword` is the temporary password. `200` → same shape as login (`token` + `user` with
+`must_change_password: false`); store the new token, older ones stop working. `400` wrong
+current password, weak new password, or new = current.
+
+### `POST /auth/forgot-password` (public)
+Body `{ "email": "…" }`. **Always `200 {"ok": true}`**, whether or not the email has an account
+(never reveals which emails exist). If it does and the account is active, the server emails a
+link `<website>/reset-password?token=…`: single use, expires after **60 minutes**, and only the
+newest link works. Needs SMTP on the server to actually deliver (not set on Render yet).
+`400` missing/invalid email. `429` rate limited (5 per 15 minutes per IP, shared with reset).
+
+### `POST /auth/reset-password` (public)
+Body `{ "token": "…", "newPassword": "…" }` (the website's reset page sends this). `200
+{"ok": true}`; every existing session of that user is signed out. `400` wrong, used or expired
+token, or weak password. `429` rate limited.
 
 ### How accounts are created
 - Company admins and school admins sign up themselves (`POST /signup/company|school`).
-- **Drivers and parents are created by a company admin** (`POST /users`), who sets the real,
-  permanent password. There is no driver/parent self-registration and no forced first-login
-  password change.
-- School staff are created by their school admin.
+- **Drivers and parents are created by a company admin, school staff by a school admin**
+  (`POST /users`). The admin doesn't choose a password: the response has a
+  `temporary_password` (shown once, e.g. `Kp7x-Qm4r-Tz9w`) to hand over, and the account has
+  `must_change_password: true` until the user sets their own. Drivers need only name + email.
+- `POST /users/:id/reset-password` (the admin who created the account): a new temporary
+  password, returned once (`{ user, temporary_password }`); the old one and every session stop
+  working. For when email isn't available. `403` another admin's account, the admin
+  themselves, or another admin; `404` another company/school's user.
+- `PATCH /users/:id` no longer takes `password` (`400`).
 
 ---
 
@@ -396,7 +424,7 @@ All scoped to the caller's own company or school; another tenant's ids return 40
 | Method + path | Notes |
 |---|---|
 | `GET/PATCH /companies/me` | PATCH: `name, address, zip_code, state, phone, email, city` (email/city optional, blank clears) |
-| `GET /users?role=driver\|parent` · `POST /users` · `GET/PATCH /users/:id` | POST body `{ role: 'driver'\|'parent', fullName, email, password, phone, address, licenseNumber (driver) }`. PATCH only by the admin who created the account. |
+| `GET /users?role=driver\|parent` · `POST /users` · `GET/PATCH /users/:id` · `POST /users/:id/reset-password` | POST body `{ role: 'driver'\|'parent', fullName, email, phone, address, licenseNumber }` (driver: only name + email required; parent: phone + address required). Response adds `temporary_password` (once). PATCH / reset only by the admin who created the account. |
 | `GET/POST /vans`, `GET/PATCH/DELETE /vans/:id` | POST requires `license_plate, brand, model, year, color`; optional `number` (≤10 chars, unique in the company → 409) |
 | `GET/POST /students`, `GET/PATCH/DELETE /students/:id`, `POST/DELETE /students/:id/contacts[/:contactId]` | |
 | `GET /schools` | id + name of schools the company works with (incl. own placeholders) |
@@ -435,7 +463,7 @@ All scoped to the caller's own company or school; another tenant's ids return 40
   spins services down. Show a loading state rather than failing fast.
 
 ## 7. What the mobile app must NOT do
-- Don't call endpoints that don't exist yet (all V2, see `V2_ROADMAP.md`): no live location / ETA / map endpoints, no payment history, no password reset, no push
+- Don't call endpoints that don't exist yet (all V2, see `V2_ROADMAP.md`): no live location / ETA / map endpoints, no payment history, no push
   registration, no `PATCH /me` self-edit. Show "Coming soon" for those, like the web app.
 - Don't compute "today" from UTC, and don't decide skip eligibility, "already worked this shift"
   or no-show rules client-side: call the endpoint and show its answer/error.

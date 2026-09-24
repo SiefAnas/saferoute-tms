@@ -122,6 +122,16 @@ Same Wi-Fi, or `npx expo start --tunnel`.
 - `npm run typecheck`, `npm run lint`, jest (59) and `expo export --platform android` pass. Not
   tried on a phone.
 
+## Auth update (branch `auth-accounts`, 2026-09-23)
+- Accounts created or reset by an admin now start on a temporary password. The app sends them to
+  a new **Choose your password** screen after sign-in (and on app start with a stored session);
+  the new token replaces the stored one.
+- **Forgot password?** on the login screen opens a screen that requests the reset email. The link
+  opens the website, then the user signs in here.
+- Not tried on a phone (no device); `npm run typecheck`, `npm run lint` and jest (53) pass.
+- Not handled: a `403 PASSWORD_CHANGE_REQUIRED` in the middle of a session. In practice an
+  admin reset also signs the user out (401), so they land on login → Choose your password.
+
 ## Known issues
 - Server: no-show / skip-pickup can answer 500 after saving (see above). The app copes.
 - Placeholder icon and the working name "SafeRoute" / bundle id `com.saferoute.app`: change

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { Button } from '../../components/Button'
 import { Field, Input } from '../../components/Input'
-import { PasswordField } from '../../components/PasswordField'
+import { TemporaryPasswordDialog } from '../../components/TemporaryPasswordDialog'
 import { EditAccountModal } from '../../components/EditAccountModal'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import { ContactLink } from '../../components/ContactLink'
@@ -16,16 +16,13 @@ import { useToast } from '../../components/Toast'
 import { PageTopBar } from '../../layouts/TopBar'
 import { scoreParentMatch, MATCH_THRESHOLD } from '../../lib/parentMatch'
 import type { CsvColumn } from '../../lib/csv'
-import type { AbsentTodayEntry, PublicUser, Student, ParentStudentLink } from '../../types/api'
+import type { AbsentTodayEntry, CreatedUser, PublicUser, Student, ParentStudentLink } from '../../types/api'
 
 const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
   { key: 'full_name', header: 'Full Name' },
   { key: 'email', header: 'Email' },
   { key: 'phone', header: 'Phone' },
   { key: 'address', header: 'Address' },
-  // Never exported (we don't store/return plaintext) — blank on an existing parent's row
-  // leaves their password unchanged on re-import; required for a brand-new row.
-  { key: 'password', header: 'Password', value: () => '' },
   { key: 'is_active', header: 'Active', value: (p) => (p.is_active ? 'true' : 'false') },
 ]
 
@@ -63,7 +60,7 @@ export function ParentsPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
-  const [password, setPassword] = useState('')
+  const [created, setCreated] = useState<CreatedUser | null>(null)
   const [linkStudentIds, setLinkStudentIds] = useState<Set<string>>(new Set())
   const [studentSearch, setStudentSearch] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
@@ -74,7 +71,6 @@ export function ParentsPage() {
     setEmail('')
     setPhone('')
     setAddress('')
-    setPassword('')
     setLinkStudentIds(new Set())
     setStudentSearch('')
     setShowAddModal(false)
@@ -82,7 +78,8 @@ export function ParentsPage() {
 
   const createParent = useMutation({
     mutationFn: async () => {
-      const parent = await api.post<PublicUser>('/users', { role: 'parent', fullName, email, phone, address, password })
+      // No password: the server makes a temporary one (shown once) that the parent replaces.
+      const parent = await api.post<CreatedUser>('/users', { role: 'parent', fullName, email, phone, address })
       for (const studentId of linkStudentIds) {
         await api.post<ParentStudentLink>('/parent-access', { parent_user_id: parent.id, student_id: studentId })
       }
@@ -91,7 +88,7 @@ export function ParentsPage() {
     onSuccess: (parent) => {
       queryClient.invalidateQueries({ queryKey: ['users', 'parent'] })
       if (linkStudentIds.size > 0) queryClient.invalidateQueries({ queryKey: ['parent-access'] })
-      toast.show(`${parent.full_name} can now sign in`)
+      setCreated(parent)
       resetAddForm()
     },
     onError: (err) => setCreateError(err instanceof ApiError ? err.message : 'Could not create parent account.'),
@@ -128,7 +125,6 @@ export function ParentsPage() {
     const fullName = row['Full Name']?.trim()
     const phone = row['Phone']?.trim()
     const address = row['Address']?.trim()
-    const password = row['Password']?.trim()
     const activeRaw = row['Active']?.trim().toLowerCase()
 
     const existing = (parentsQuery.data ?? []).find((p) => p.email.toLowerCase() === email.toLowerCase())
@@ -138,7 +134,6 @@ export function ParentsPage() {
         if (fullName) patch.full_name = fullName
         if (phone) patch.phone = phone
         if (address) patch.address = address
-        if (password) patch.password = password
         if (activeRaw) patch.is_active = ['true', '1', 'yes'].includes(activeRaw)
         if (Object.keys(patch).length === 0) return { ok: true, message: 'No changes' }
         await api.patch(`/users/${existing.id}`, patch)
@@ -147,9 +142,8 @@ export function ParentsPage() {
       if (!fullName) return { ok: false, message: 'Full Name is required for a new parent' }
       if (!phone) return { ok: false, message: 'Phone is required for a new parent' }
       if (!address) return { ok: false, message: 'Address is required for a new parent' }
-      if (!password) return { ok: false, message: 'Password is required for a new parent' }
-      await api.post('/users', { role: 'parent', fullName, email, phone, address, password })
-      return { ok: true, message: 'Created' }
+      const made = await api.post<CreatedUser>('/users', { role: 'parent', fullName, email, phone, address })
+      return { ok: true, message: `Created · temporary password ${made.temporary_password}` }
     } catch (err) {
       return { ok: false, message: err instanceof ApiError ? err.message : 'Import failed' }
     }
@@ -276,7 +270,9 @@ export function ParentsPage() {
             <Field label="Home address">
               <Input required placeholder="Street, city, state, zip" value={address} onChange={(e) => setAddress(e.target.value)} />
             </Field>
-            <PasswordField label="Password" required value={password} onChange={setPassword} />
+            <p className="text-[13px] text-muted">
+              SafeRoute makes a temporary password for you to give the parent. They choose their own the first time they sign in.
+            </p>
 
             <Field label="Link to students (optional, can also be done later)">
               <Input placeholder="Search students…" value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} />
@@ -314,6 +310,9 @@ export function ParentsPage() {
       )}
 
       {editUser && <EditAccountModal user={editUser} invalidateKey={['users', 'parent']} onClose={() => setEditUser(null)} />}
+      {created && (
+        <TemporaryPasswordDialog name={created.full_name} email={created.email} password={created.temporary_password} onClose={() => setCreated(null)} />
+      )}
       {toast.node}
     </div>
   )

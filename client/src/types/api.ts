@@ -12,6 +12,9 @@ export interface AuthUser {
   role: Role
   tenantType: TenantType
   tenantId: string
+  // True while the account is on a temporary password: the user must set their own first
+  // (POST /auth/change-password); every other endpoint answers 403 PASSWORD_CHANGE_REQUIRED.
+  must_change_password?: boolean
 }
 
 export interface LoginResponse {
@@ -54,6 +57,18 @@ export interface PublicUser {
   is_active: boolean
   email_verified_at: string | null
   created_by_user_id: string | null
+  must_change_password: boolean // still on a temporary password
+}
+
+// POST /users: the new account plus its temporary password, returned this one time only.
+export interface CreatedUser extends PublicUser {
+  temporary_password: string
+}
+
+// POST /users/:id/reset-password
+export interface PasswordResetResult {
+  user: PublicUser
+  temporary_password: string
 }
 
 // Which parent can see which student, granted by a company_admin — the company-side

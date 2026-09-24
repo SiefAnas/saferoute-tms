@@ -48,4 +48,12 @@ const verifyLimiter = createLimiter({
   message: 'too many attempts, please try again later',
 });
 
-module.exports = { loginLimiter, signupLimiter, searchLimiter, verifyLimiter };
+// Password reset: "forgot password" sends mail, and the reset form takes guesses at a token.
+// Tighter than the others; RATE_LIMIT_FORCE=1 in tests turns it on.
+const passwordResetLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_RESET_MAX) || 5,
+  message: 'too many password reset attempts, please try again later',
+});
+
+module.exports = { loginLimiter, signupLimiter, searchLimiter, verifyLimiter, passwordResetLimiter };

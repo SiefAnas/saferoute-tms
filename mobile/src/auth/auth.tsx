@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, NetworkError, setAuthToken, setUnauthorizedHandler } from '@/api'
-import type { AuthUser, MeResponse } from '@/api/types'
+import type { AuthUser, LoginResponse, MeResponse } from '@/api/types'
 import { clearSession, loadSession, saveSession } from './storage'
 
 type Status = 'loading' | 'signedOut' | 'signedIn'
@@ -10,6 +10,9 @@ interface AuthValue {
   status: Status
   user: AuthUser | null
   signIn: (email: string, password: string) => Promise<AuthUser>
+  // Set a new password (the first-login change from a temporary password). The server signs
+  // out older tokens and returns a fresh one, which replaces the stored session.
+  changePassword: (currentPassword: string, newPassword: string) => Promise<AuthUser>
   signOut: () => Promise<void>
   // Set when the session ended on its own (expired token, deactivated account) rather than
   // by the user tapping Log out, so the login screen can say why.
@@ -103,6 +106,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [queryClient],
   )
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    const res = await api.post<LoginResponse>('/auth/change-password', { currentPassword, newPassword })
+    setAuthToken(res.token)
+    await saveSession({ token: res.token, user: res.user })
+    setUser(res.user)
+    return res.user
+  }, [])
+
   const signOut = useCallback(() => teardown(null), [teardown])
 
   const value = useMemo<AuthValue>(
@@ -110,11 +121,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       user,
       signIn,
+      changePassword,
       signOut,
       expiredMessage,
       clearExpiredMessage: () => setExpiredMessage(null),
     }),
-    [status, user, signIn, signOut, expiredMessage],
+    [status, user, signIn, changePassword, signOut, expiredMessage],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

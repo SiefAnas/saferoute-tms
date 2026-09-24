@@ -1,11 +1,18 @@
 // Authentication: verify the JWT, then re-load the user from the DB so we honor
 // is_active immediately and treat the DB (not the token) as the source of truth
 // for role/tenant. Attaches req.auth.
+//
+// Two more checks (auth-accounts):
+//  - a token issued before the user's last password change/reset is rejected (401), so
+//    changing a password signs out old sessions;
+//  - an account still on a temporary password (must_change_password) gets 403
+//    PASSWORD_CHANGE_REQUIRED everywhere except the routes mounted with
+//    authenticate.allowPasswordChange (GET /auth/me, POST /auth/change-password).
 const pool = require('../db/pool');
 const { verifyJwt } = require('../auth/jwt');
 const { tenantTypeForRole } = require('../db/scoped');
 
-module.exports = async function authenticate(req, res, next) {
+async function check(req, res, next, allowPasswordChange) {
   try {
     const header = req.headers.authorization || '';
     if (!header.startsWith('Bearer ')) {
@@ -21,6 +28,7 @@ module.exports = async function authenticate(req, res, next) {
 
     const { rows } = await pool.query(
       `SELECT u.id, u.role, u.company_id, u.school_id, u.is_active, u.email_verified_at,
+              u.must_change_password, u.password_changed_at,
               COALESCE(c.claim_status, s.claim_status) AS org_claim_status
          FROM users u
          LEFT JOIN companies c ON c.id = u.company_id
@@ -31,6 +39,12 @@ module.exports = async function authenticate(req, res, next) {
     const user = rows[0];
     if (!user || !user.is_active) {
       return res.status(401).json({ error: 'account inactive or not found' });
+    }
+    if (user.password_changed_at && claims.iat < Math.floor(new Date(user.password_changed_at).getTime() / 1000)) {
+      return res.status(401).json({ error: 'your password was changed, please log in again' });
+    }
+    if (user.must_change_password && !allowPasswordChange) {
+      return res.status(403).json({ error: 'set a new password before continuing', code: 'PASSWORD_CHANGE_REQUIRED' });
     }
 
     const tenantType = tenantTypeForRole(user.role);
@@ -44,9 +58,17 @@ module.exports = async function authenticate(req, res, next) {
       // (pending_claim = signed up but email not yet verified). §5.3.
       orgClaimStatus: user.org_claim_status,
       emailVerifiedAt: user.email_verified_at,
+      mustChangePassword: user.must_change_password,
     };
     next();
   } catch (err) {
     next(err);
   }
-};
+}
+
+function authenticate(req, res, next) {
+  return check(req, res, next, false);
+}
+authenticate.allowPasswordChange = (req, res, next) => check(req, res, next, true);
+
+module.exports = authenticate;

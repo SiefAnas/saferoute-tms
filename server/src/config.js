@@ -27,4 +27,7 @@ module.exports = {
   // Comma-separated list of origins allowed to call the API cross-origin (production
   // frontend/backend split). Empty in dev/test, where requests are same-origin anyway.
   allowedOrigins: (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  // The website's address, for links in emails (password reset). APP_URL if set, else the first
+  // allowed origin (the production frontend), else the local Vite dev server.
+  appUrl: (process.env.APP_URL || (process.env.ALLOWED_ORIGINS || '').split(',')[0].trim() || 'http://localhost:5173').replace(/\/+$/, ''),
 };
