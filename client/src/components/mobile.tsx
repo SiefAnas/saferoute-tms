@@ -1,10 +1,10 @@
 import { createContext, Suspense, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
 import { useComingSoon } from './ComingSoon'
 import { useAuth } from '../lib/auth'
-import { MD_QUERY, useMediaQuery } from '../lib/useMediaQuery'
+import { LG_QUERY, MD_QUERY, useMediaQuery } from '../lib/useMediaQuery'
 import { TopBarContext, type TopBarSlots } from '../layouts/TopBar'
 
 // Building blocks for the driver (3a) and parent (5b) shells. On phones everything sits inside a
@@ -98,7 +98,23 @@ function initials(name: string | undefined) {
 // links. `.web-portal` keeps the web palette and gives the mobile-only roles (shift switch,
 // call button, pay calendar) web values in both themes. The page's action area (ThumbBar)
 // becomes a bar at the bottom of the content.
+//
+// Bug fix (bug-fixes, 2026-09-24): on tablets (md to lg) the 240px sidebar stayed on screen,
+// also while a student / vehicle detail was open, leaving the page ~530px. Below lg the sidebar
+// is now a slide-out menu (menu button in the top bar), closed by default and closed again on
+// navigation, a tap outside or Escape. Wide desktops keep the fixed sidebar.
 function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps) {
+  const desktop = useMediaQuery(LG_QUERY)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const location = useLocation()
+  useEffect(() => setMenuOpen(false), [location.pathname])
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
+  const showSidebar = desktop || menuOpen
   const [thumbSlot, setThumbSlot] = useState<HTMLElement | null>(null)
   const slotRef = useCallback((el: HTMLDivElement | null) => setThumbSlot(el), [])
   const openComingSoon = useComingSoon()
@@ -114,7 +130,12 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
     }`
   return (
     <div className="web-portal flex h-screen bg-bg text-ink">
-      <aside className="flex w-60 shrink-0 flex-col gap-0.5 overflow-y-auto bg-sidebar px-3 py-[18px]">
+      {!desktop && menuOpen && <div className="fixed inset-0 z-40 bg-scrim" onClick={() => setMenuOpen(false)} aria-hidden />}
+      {showSidebar && (
+      <aside
+        aria-label="Menu"
+        className={`flex w-60 shrink-0 flex-col gap-0.5 overflow-y-auto bg-sidebar px-3 py-[18px] ${desktop ? '' : 'fixed inset-y-0 left-0 z-50 shadow-drawer'}`}
+      >
         <div className="flex items-center gap-2.5 px-2 pb-5">
           <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-btn bg-amber">
             <span className="material-symbols-outlined !text-[20px] text-on-amber">local_shipping</span>
@@ -164,11 +185,23 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
           </button>
         </div>
       </aside>
+      )}
 
       <TopBarContext.Provider value={slots}>
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-topbar px-7 py-2">
-            <div ref={titleRef} className="flex min-w-0 items-center [&:has([data-page-title])>[data-default-title]]:hidden">
+            {!desktop && (
+              <button
+                type="button"
+                onClick={() => setMenuOpen(true)}
+                aria-label="Open menu"
+                aria-expanded={menuOpen}
+                className="-ml-2 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-row text-ink hover:bg-surface-2"
+              >
+                <span className="material-symbols-outlined">menu</span>
+              </button>
+            )}
+            <div ref={titleRef} className="flex min-w-0 flex-1 items-center [&:has([data-page-title])>[data-default-title]]:hidden">
               <div data-default-title className="flex min-w-0 flex-col gap-0.5">
                 <h1 className="truncate text-page-title text-ink">{title}</h1>
                 <span className="truncate text-[13px] text-muted">{sub}</span>

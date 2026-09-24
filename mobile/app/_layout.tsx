@@ -80,6 +80,7 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
           <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="reset-password" />
           <Stack.Screen name="set-password" />
           <Stack.Screen name="unsupported" />
           <Stack.Screen name="(driver)" />
