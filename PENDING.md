@@ -6,6 +6,10 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 `API_CONTRACT.md` (for the mobile apps), `NEXT_STEPS.md`, `BACKLOG.md`.
 
 ## Needs Anas
+- **Review `assignment-weekdays`**: days of the week on assignments (default Mon–Fri, existing ones
+  get Mon–Fri), checkboxes on the assignment form, and every "today"/week view uses them. Has
+  migration **022** (adds a column with a default): run `npm run migrate:up` on Neon with the
+  merge. Details in the commit messages and `API_CONTRACT.md`.
 - **`APP_URL` on Render (API service)**: the website address for the reset-password link, e.g.
   `https://saferoute-tms-client.onrender.com`. Without it the link uses the first
   `ALLOWED_ORIGINS` entry, which is the same site today.

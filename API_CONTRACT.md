@@ -287,8 +287,9 @@ day's override, parent skips and no-shows. A `both` assignment is on both runs.
     … 7 days, every day present (empty lists when nothing is scheduled) ]
 }
 ```
-- An assignment is on a day when `start_date <= day <= end_date` (end day included). There is no
-  weekday pattern yet, so weekends appear if the assignment covers them (same as `/schedule/today`).
+- An assignment is on a day when `start_date <= day <= end_date` (end day included) **and** the
+  day is one of its `days_of_week` (default Monday to Friday). Same rule as `/schedule/today`: a
+  driver never gets a run on a day it doesn't happen.
 - Same driver scope as everything else: only the driver's own assignments that have **not ended
   as of today**. A past week doesn't show ended assignments.
 - `date`, `start`, `end` are calendar strings: use them as they are, never through `new Date()`.
@@ -337,8 +338,12 @@ The driver's assignments that are active today or start later (ended ones are le
 ```json
 { "id": "c2a0…", "company_id": "…", "student_id": "7e43…", "driver_user_id": "83ac…", "van_id": "78a2…",
   "start_date": "2026-09-23T00:00:00.000Z", "end_date": null, "shift_period": "both",
-  "pickup_time": "07:10:00", "dropoff_time": "15:20:00", "created_at": "…", "updated_at": "…" }
+  "pickup_time": "07:10:00", "dropoff_time": "15:20:00", "days_of_week": [1, 2, 3, 4, 5],
+  "created_at": "…", "updated_at": "…" }
 ```
+`days_of_week`: the days it runs, ISO weekday numbers (**1 = Monday … 7 = Sunday**), default
+Monday to Friday. `/schedule/today` and `/schedule/week` already leave out days it doesn't run;
+logging a trip or a no-show on such a day answers `409`.
 
 ### `GET /payroll/summary/:driverId?from=YYYY-MM-DD&to=YYYY-MM-DD` (driver: own id only)
 Pay for a range (`to` exclusive). The web app sends the 1st of this month and the 1st of next month.
@@ -376,7 +381,8 @@ The parent's linked children (same fields as the student record in §3, without 
     { "shift_period": "both",
       "van": { "number": "04", "license_plate": "KX-4471", "brand": "Ford", "model": "Transit", "year": 2021, "color": "White" },
       "driver": { "full_name": "Luis Ortega", "phone": "555-0100" },
-      "pickup_time": "07:26:00", "dropoff_time": "15:28:00" }
+      "pickup_time": "07:26:00", "dropoff_time": "15:28:00",
+      "days_of_week": [1, 2, 3, 4, 5], "runs_today": true }
   ],
   "skip_today": false,
   "trips_today": [
@@ -385,6 +391,8 @@ The parent's linked children (same fields as the student record in §3, without 
 }
 ```
 - `transport` has one entry per active assignment (two when morning and afternoon differ).
+  `runs_today: false` = that ride doesn't run on today's weekday: show "No ride today" rather than
+  today's times (the parent can't skip a ride that doesn't run; skip-status says not eligible).
   Times include today's override.
 - Status to show: `skip_today` → skipped; a `dropoff` trip → dropped off; a `pickup` trip with
   `status: complete` → arrived at school; `pending` → dropped at school, waiting for the school.
@@ -429,7 +437,7 @@ All scoped to the caller's own company or school; another tenant's ids return 40
 | `GET/POST /students`, `GET/PATCH/DELETE /students/:id`, `POST/DELETE /students/:id/contacts[/:contactId]` | |
 | `GET /schools` | id + name of schools the company works with (incl. own placeholders) |
 | `POST /placeholders/school` | `{ name, address }`: add a school that hasn't signed up |
-| `GET/POST /assignments`, `GET/PATCH/DELETE /assignments/:id`, `GET/POST /assignments/:id/overrides`, `DELETE /assignments/:id/overrides/:overrideId` | times `HH:MM`, dates `YYYY-MM-DD` |
+| `GET/POST /assignments`, `GET/PATCH/DELETE /assignments/:id`, `GET/POST /assignments/:id/overrides`, `DELETE /assignments/:id/overrides/:overrideId` | times `HH:MM`, dates `YYYY-MM-DD`, `days_of_week` a non-empty list of 1–7 (1 = Monday; default `[1,2,3,4,5]`). Conflicts only count shared weekdays. |
 | `GET/POST/DELETE /parent-access` | link a parent to a student |
 | `GET /sessions`, `GET /trips` | whole company |
 | `GET /payroll/rules`, `PUT /payroll/rules/:driverId`, `POST /payroll/adjustments`, `GET /payroll/unpaid-summary/:driverId`, `POST /payroll/rules/:driverId/mark-paid`, `GET /payroll/summary/company` | |
