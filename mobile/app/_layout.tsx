@@ -67,7 +67,7 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
   useEffect(() => {
     if (status !== 'signedOut') return
     const group = segments[0]
-    if (group === '(driver)' || group === '(parent)' || group === 'unsupported' || group === 'set-password') {
+    if (group === '(driver)' || group === '(parent)' || group === '(monitor)' || group === 'unsupported' || group === 'set-password') {
       router.replace('/login')
     }
   }, [status, segments, router])
@@ -84,6 +84,7 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="unsupported" />
           <Stack.Screen name="(driver)" />
           <Stack.Screen name="(parent)" />
+          <Stack.Screen name="(monitor)" />
         </Stack>
       ) : null}
     </View>
