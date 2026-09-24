@@ -48,7 +48,7 @@ async function main() {
     const van = await ins("INSERT INTO vans(company_id,license_plate,brand,model,year) VALUES($1,'V-1','Ford','Transit',2022) RETURNING id", [A.id]);
     const student = (name) => ins('INSERT INTO students(company_id,school_id,full_name) VALUES($1,$2,$3) RETURNING id', [A.id, S.id, name]);
     const assign = (stu, drv, start, end, shift) => ins(
-      'INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date,end_date,shift_period) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+      "INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date,end_date,shift_period,days_of_week) VALUES($1,$2,$3,$4,$5,$6,$7,'{1,2,3,4,5,6,7}') RETURNING id",
       [A.id, stu.id, drv.id, van.id, start, end, shift]
     );
 

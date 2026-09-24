@@ -17,6 +17,9 @@ const rec = createRecorder('18-mail-failure');
 const { ok, bad, eq } = rec;
 const BASE = 'http://localhost:5000';
 const PW = 'Secret123!';
+// Runs every day, so these checks don't depend on which weekday the tests run on
+// (assignments default to Monday to Friday).
+const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
 
 async function api(method, p, token, body) {
   const opts = { method, headers: {} };
@@ -69,16 +72,16 @@ async function main() {
 
       const stuNoShow = await mkStudent('Kid NoShow');
       const asgNoShow = (await api('POST', '/assignments', admin, {
-        student_id: stuNoShow.id, driver_user_id: driver.id, van_id: van.id, start_date: '2020-01-01', shift_period: 'morning',
+        student_id: stuNoShow.id, driver_user_id: driver.id, van_id: van.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'morning',
       })).body;
       const stuSkip = await mkStudent('Kid Skip');
       await api('POST', '/assignments', admin, {
-        student_id: stuSkip.id, driver_user_id: driver.id, van_id: van.id, start_date: '2020-01-01', pickup_time: soon,
+        student_id: stuSkip.id, driver_user_id: driver.id, van_id: van.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', pickup_time: soon,
       });
       await ins('INSERT INTO parent_students(parent_user_id,student_id,company_id) VALUES($1,$2,$3) RETURNING id', [parent.id, stuSkip.id, A.id]);
       const stuChange = await mkStudent('Kid Change');
       await api('POST', '/assignments', admin, {
-        student_id: stuChange.id, driver_user_id: driver.id, van_id: van.id, start_date: '2020-01-01', shift_period: 'afternoon',
+        student_id: stuChange.id, driver_user_id: driver.id, van_id: van.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'afternoon',
       });
 
       await api('POST', '/sessions/checkin', drv, { shift_period: 'morning' });
@@ -121,7 +124,7 @@ async function main() {
       mailer._reset();
       const stuOk = await mkStudent('Kid Ok');
       await api('POST', '/assignments', admin, {
-        student_id: stuOk.id, driver_user_id: driver.id, van_id: van.id, start_date: '2020-01-01', shift_period: 'afternoon',
+        student_id: stuOk.id, driver_user_id: driver.id, van_id: van.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'afternoon',
       });
       const change2 = await api('POST', `/schedule-changes/students/${stuOk.id}`, sa, { change_type: 'staying_later' });
       eq('schedule change with a working mailer -> 201', change2.status, 201);

@@ -17,6 +17,9 @@ const rec = createRecorder('13-pickup-confirmation');
 const { ok, bad, eq } = rec;
 const BASE = 'http://localhost:5300';
 const PW = 'Secret123!';
+// Runs every day, so these checks don't depend on which weekday the tests run on
+// (assignments default to Monday to Friday).
+const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
 
 async function api(method, p, token, body) {
   const opts = { method, headers: {} };
@@ -61,7 +64,7 @@ async function main() {
         street_address: '5 Elm St', city: 'Boston', state: 'MA', zip_code: '02139', notes: 'None',
       })).body;
       const asg = (await api('POST', '/assignments', adminTok, {
-        student_id: stu.id, driver_user_id: driver.id, van_id: van.id, start_date: '2020-01-01',
+        student_id: stu.id, driver_user_id: driver.id, van_id: van.id, days_of_week: EVERY_DAY, start_date: '2020-01-01',
       })).body;
       await ins('INSERT INTO staff_student_access(staff_user_id,student_id,school_id) VALUES($1,$2,$3) RETURNING id', [staff1.id, stu.id, S.id]);
       await ins('INSERT INTO parent_students(parent_user_id,student_id,company_id,created_by_user_id) VALUES($1,$2,$3,$4) RETURNING id', [parent.id, stu.id, A.id, admin.id]);

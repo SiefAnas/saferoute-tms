@@ -17,6 +17,7 @@
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
 const { notifyCompanyAndSchoolAdmins } = require('./notifications');
+const { assignmentRunsOnSql } = require('../db/scoped');
 
 const CHANGE_TYPES = ['left_early', 'staying_later'];
 
@@ -82,6 +83,7 @@ async function applyPickupSkip(req, student) {
        JOIN students st ON st.id = a.student_id
       WHERE a.student_id = $1 AND st.school_id = $2
         AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+        AND ${assignmentRunsOnSql('a', 'CURRENT_DATE')}
       ORDER BY a.created_at DESC
       LIMIT 1`,
     [student.id, req.auth.tenantId]

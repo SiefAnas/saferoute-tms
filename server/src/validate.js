@@ -61,7 +61,19 @@ function assertValidTime(value, field = 'time') {
   }
 }
 
+// Days of the week an assignment runs: ISO weekdays, 1 = Monday ... 7 = Sunday. Returns a
+// sorted list without duplicates, or undefined when not given (the DB default is Monday to
+// Friday). An empty list is refused: an assignment that never runs is a mistake.
+function normalizeWeekdays(value, field = 'days_of_week') {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0 || !value.every((d) => Number.isInteger(d) && d >= 1 && d <= 7)) {
+    throw new HttpError(400, `${field} must be a non-empty list of weekdays (1 = Monday ... 7 = Sunday)`);
+  }
+  return [...new Set(value)].sort((a, b) => a - b);
+}
+
 module.exports = {
+  normalizeWeekdays,
   assertValidEmail,
   assertPasswordStrength,
   assertValidZip,

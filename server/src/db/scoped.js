@@ -49,6 +49,15 @@ function assignmentNotEndedSql(alias = '') {
   return `(${p}end_date IS NULL OR ${p}end_date >= CURRENT_DATE)`;
 }
 
+// "This assignment runs on that weekday": `day` is a SQL date expression (CURRENT_DATE, a
+// generated week day, a bound $n::date). assignments.days_of_week holds ISO weekdays
+// (1 = Monday ... 7 = Sunday), the same numbering as EXTRACT(ISODOW). The one SQL definition,
+// used wherever a run on a given day matters (schedule, trips, payroll, parent skips).
+function assignmentRunsOnSql(alias, day) {
+  const p = alias ? `${alias}.` : '';
+  return `EXTRACT(ISODOW FROM ${day})::smallint = ANY(${p}days_of_week)`;
+}
+
 const IDENT = /^[a-z_][a-z0-9_]*$/;
 const ident = (s) => {
   if (typeof s !== 'string' || !IDENT.test(s)) throw new ScopeError(`unsafe identifier: ${s}`);
@@ -184,4 +193,4 @@ function createScopedDb(pool, tenant, actor) {
   };
 }
 
-module.exports = { createScopedDb, tenantTypeForRole, scopeColumn, assignmentNotEndedSql, ScopeError, TABLE_SCOPE };
+module.exports = { createScopedDb, tenantTypeForRole, scopeColumn, assignmentNotEndedSql, assignmentRunsOnSql, ScopeError, TABLE_SCOPE };

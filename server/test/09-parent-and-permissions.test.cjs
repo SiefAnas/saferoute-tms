@@ -21,6 +21,9 @@ const rec = createRecorder('09-parent-and-permissions');
 const { ok, bad, eq } = rec;
 const BASE = 'http://localhost:4900';
 const PW = 'Secret123!';
+// Runs every day, so these checks don't depend on which weekday the tests run on
+// (assignments default to Monday to Friday).
+const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
 
 async function api(method, p, token, body) {
   const opts = { method, headers: {} };
@@ -180,10 +183,10 @@ async function main() {
       const today = (await pool.query('SELECT CURRENT_DATE::text AS d')).rows[0].d;
 
       await api('POST', '/assignments', tA1, {
-        student_id: stuEligible.id, driver_user_id: driverXId, van_id: vanA.id, start_date: today, pickup_time: soon,
+        student_id: stuEligible.id, driver_user_id: driverXId, van_id: vanA.id, days_of_week: EVERY_DAY, start_date: today, pickup_time: soon,
       });
       await api('POST', '/assignments', tA1, {
-        student_id: stuIneligible.id, driver_user_id: driverXId, van_id: vanA.id, start_date: today, pickup_time: nowHm,
+        student_id: stuIneligible.id, driver_user_id: driverXId, van_id: vanA.id, days_of_week: EVERY_DAY, start_date: today, pickup_time: nowHm,
       });
 
       const statusElig = await api('GET', `/parent/students/${stuEligible.id}/skip-status`, tParent);

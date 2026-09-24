@@ -19,6 +19,9 @@ const rec = createRecorder('14-shift-period');
 const { ok, bad, eq } = rec;
 const BASE = 'http://localhost:5400';
 const PW = 'Secret123!';
+// Runs every day, so these checks don't depend on which weekday the tests run on
+// (assignments default to Monday to Friday).
+const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
 
 async function api(method, p, token, body) {
   const opts = { method, headers: {} };
@@ -87,11 +90,11 @@ async function main() {
 
       console.log('--- Shift-aware assignment conflicts ---');
       const morningAsg = await api('POST', '/assignments', adminTok, {
-        student_id: stuConflict.id, driver_user_id: d1.id, van_id: van1.id, start_date: '2020-01-01', shift_period: 'morning',
+        student_id: stuConflict.id, driver_user_id: d1.id, van_id: van1.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'morning',
       });
       eq('morning assignment for d1 -> 201', morningAsg.status, 201);
       const afternoonAsg = await api('POST', '/assignments', adminTok, {
-        student_id: stuConflict.id, driver_user_id: d2.id, van_id: van2.id, start_date: '2020-01-01', shift_period: 'afternoon',
+        student_id: stuConflict.id, driver_user_id: d2.id, van_id: van2.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'afternoon',
       });
       (afternoonAsg.status === 201)
         ? ok('non-overlapping afternoon assignment for a DIFFERENT driver, same student -> 201 (no conflict)')
@@ -99,19 +102,19 @@ async function main() {
       eq(
         'a second morning assignment for the same student, different driver -> 409 (shifts overlap)',
         (await api('POST', '/assignments', adminTok, {
-          student_id: stuConflict.id, driver_user_id: d2.id, van_id: van2.id, start_date: '2020-01-01', shift_period: 'morning',
+          student_id: stuConflict.id, driver_user_id: d2.id, van_id: van2.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'morning',
         })).status,
         409
       );
       eq(
         "a 'both' assignment for the same student, different driver -> 409 (both overlaps everything)",
         (await api('POST', '/assignments', adminTok, {
-          student_id: stuConflict.id, driver_user_id: d2.id, van_id: van2.id, start_date: '2020-01-01', shift_period: 'both',
+          student_id: stuConflict.id, driver_user_id: d2.id, van_id: van2.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'both',
         })).status,
         409
       );
       const defaultAsg = await api('POST', '/assignments', adminTok, {
-        student_id: (await makeStudent('Default Shift Kid')).id, driver_user_id: d1.id, van_id: van1.id, start_date: '2020-01-01',
+        student_id: (await makeStudent('Default Shift Kid')).id, driver_user_id: d1.id, van_id: van1.id, days_of_week: EVERY_DAY, start_date: '2020-01-01',
       });
       (defaultAsg.status === 201 && defaultAsg.body.shift_period === 'both')
         ? ok("omitting shift_period on create defaults to 'both' (backward compatible)")
@@ -230,7 +233,7 @@ async function main() {
       eq('set d6 daily rate $100/day -> 200', (await api('PUT', `/payroll/rules/${d6.id}`, adminTok, { rate_type: 'daily', rate_cents: 10000 })).status, 200);
       // d6's only assignment today, so shift completion is unambiguous: exactly stuPay.
       const payAsg = await api('POST', '/assignments', adminTok, {
-        student_id: stuPay.id, driver_user_id: d6.id, van_id: van4.id, start_date: '2020-01-01', shift_period: 'both',
+        student_id: stuPay.id, driver_user_id: d6.id, van_id: van4.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'both',
       });
       eq('assignment for pay-test student -> 201', payAsg.status, 201);
 
@@ -272,7 +275,7 @@ async function main() {
       console.log('\n--- Payroll: a no-show counts as handled, still pays the shift ---');
       eq('set d3 daily rate $100/day -> 200', (await api('PUT', `/payroll/rules/${d3.id}`, adminTok, { rate_type: 'daily', rate_cents: 10000 })).status, 200);
       const d3Asg = await api('POST', '/assignments', adminTok, {
-        student_id: stuNoShow.id, driver_user_id: d3.id, van_id: van3.id, start_date: '2020-01-01', shift_period: 'both',
+        student_id: stuNoShow.id, driver_user_id: d3.id, van_id: van3.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'both',
       });
       const d3CheckIn = await api('POST', '/sessions/checkin', d3Tok, { shift_period: 'morning' });
       const d3NoShow = await api('POST', `/schedule/${d3Asg.body.id}/no-show`, d3Tok, { shift_period: 'morning' });
@@ -336,7 +339,7 @@ async function main() {
       eq(
         'assignment for switch-pay student -> 201',
         (await api('POST', '/assignments', adminTok, {
-          student_id: stuSwitch.id, driver_user_id: d11.id, van_id: van7.id, start_date: '2020-01-01', shift_period: 'both',
+          student_id: stuSwitch.id, driver_user_id: d11.id, van_id: van7.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'both',
         })).status,
         201
       );
@@ -376,10 +379,10 @@ async function main() {
       const soon = (await pool.query("SELECT to_char(now() + interval '65 minutes', 'HH24:MI') AS t")).rows[0].t;
 
       const splitMorningAsg = await api('POST', '/assignments', adminTok, {
-        student_id: stuSplit.id, driver_user_id: d7.id, van_id: van5.id, start_date: '2020-01-01', shift_period: 'morning', pickup_time: soon,
+        student_id: stuSplit.id, driver_user_id: d7.id, van_id: van5.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'morning', pickup_time: soon,
       });
       const splitAfternoonAsg = await api('POST', '/assignments', adminTok, {
-        student_id: stuSplit.id, driver_user_id: d8.id, van_id: van6.id, start_date: '2020-01-01', shift_period: 'afternoon', pickup_time: soon,
+        student_id: stuSplit.id, driver_user_id: d8.id, van_id: van6.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', shift_period: 'afternoon', pickup_time: soon,
       });
       eq('split morning assignment -> 201', splitMorningAsg.status, 201);
       eq('split afternoon assignment -> 201', splitAfternoonAsg.status, 201);
@@ -432,7 +435,7 @@ async function main() {
       const stuSingle = await makeStudent('Single Kid');
       await ins('INSERT INTO parent_students(parent_user_id,student_id,company_id) VALUES($1,$2,$3) RETURNING id', [parent.id, stuSingle.id, A.id]);
       const singleAsg = await api('POST', '/assignments', adminTok, {
-        student_id: stuSingle.id, driver_user_id: d7.id, van_id: van5.id, start_date: '2020-01-01', pickup_time: soon,
+        student_id: stuSingle.id, driver_user_id: d7.id, van_id: van5.id, days_of_week: EVERY_DAY, start_date: '2020-01-01', pickup_time: soon,
       });
       eq('single assignment, shift_period omitted -> 201 (defaults to both)', singleAsg.status, 201);
       const statusSingle = await api('GET', `/parent/students/${stuSingle.id}/skip-status`, parentTok);

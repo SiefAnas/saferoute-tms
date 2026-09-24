@@ -16,6 +16,7 @@
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
 const { notifyCompanyAndSchoolAdmins } = require('./notifications');
+const { assignmentRunsOnSql } = require('../db/scoped');
 
 function readScope(req) {
   // Every parent read is narrowed to their own linked students — same ownerIn pattern
@@ -62,6 +63,7 @@ async function getActiveAssignments(companyId, studentId) {
        LEFT JOIN assignment_schedule_overrides o ON o.assignment_id = a.id AND o.override_date = CURRENT_DATE
       WHERE a.student_id = $1 AND a.company_id = $2
         AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+        AND ${assignmentRunsOnSql('a', 'CURRENT_DATE')}
       ORDER BY a.created_at DESC`,
     [studentId, companyId]
   );
@@ -114,7 +116,8 @@ async function getStudentDetail(req, studentId) {
   const student = await assertLinkedStudent(req, studentId);
 
   const { rows: assignmentRows } = await pool.query(
-    `SELECT a.shift_period,
+    `SELECT a.shift_period, a.days_of_week,
+            ${assignmentRunsOnSql('a', 'CURRENT_DATE')} AS runs_today,
             COALESCE(o.pickup_time, a.pickup_time) AS pickup_time,
             COALESCE(o.dropoff_time, a.dropoff_time) AS dropoff_time,
             COALESCE(o.skip, false) AS schedule_skip,
@@ -143,9 +146,11 @@ async function getStudentDetail(req, studentId) {
     [studentId]
   );
   const skippedShifts = new Set(skipRows.map((r) => r.shift_period));
+  // Only rides that actually run today (weekday) count; on a day with no ride nothing is skipped.
+  const runningToday = assignmentRows.filter((a) => a.runs_today);
   const allShiftsSkipped =
-    assignmentRows.length > 0 &&
-    assignmentRows.every((a) => {
+    runningToday.length > 0 &&
+    runningToday.every((a) => {
       const shift = a.shift_period === 'afternoon' ? 'afternoon' : 'morning';
       return skippedShifts.has(shift) || a.schedule_skip;
     });
@@ -172,6 +177,8 @@ async function getStudentDetail(req, studentId) {
       driver: { full_name: a.driver_name, phone: a.driver_phone },
       pickup_time: a.pickup_time,
       dropoff_time: a.dropoff_time,
+      days_of_week: a.days_of_week, // ISO weekdays, 1 = Monday ... 7 = Sunday
+      runs_today: a.runs_today, // false on a day this ride doesn't run (e.g. the weekend)
     })),
     skip_today: allShiftsSkipped,
     trips_today: trips,

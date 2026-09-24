@@ -79,7 +79,7 @@ async function main() {
     const vB = await van(B.id, 'B-1');
 
     const assign = (company, stu, drv, v, start, end) => ins(
-      'INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date,end_date) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',
+      "INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date,end_date,days_of_week) VALUES($1,$2,$3,$4,$5,$6,'{1,2,3,4,5,6,7}') RETURNING id",
       [company, stu.id, drv.id, v.id, start, end]
     );
     const aMine = await assign(A.id, sMine, dA, vMine, '2020-01-01', null);

@@ -2,6 +2,7 @@
 // and a summary = hours*rate (or days*rate) + adjustments. Money is integer cents throughout.
 const pool = require('../db/pool');
 const { HttpError, mapMissingRefError } = require('../errors');
+const { assignmentRunsOnSql } = require('../db/scoped');
 
 // Upsert the single pay rule for a driver in the caller's company. The composite FK
 // (driver_id, company_id) -> users guarantees the driver belongs to this company, so an
@@ -85,7 +86,8 @@ async function isShiftComplete(req, driverId, workDate, shiftPeriod, sessionIds)
   const { rows: assigned } = await pool.query(
     `SELECT student_id FROM assignments
       WHERE driver_user_id = $1 AND company_id = $2 AND shift_period IN ($3, 'both')
-        AND start_date <= $4 AND (end_date IS NULL OR end_date >= $4)`,
+        AND start_date <= $4 AND (end_date IS NULL OR end_date >= $4)
+        AND ${assignmentRunsOnSql('', '$4::date')}`,
     [driverId, req.auth.tenantId, shiftPeriod, workDate]
   );
   if (assigned.length === 0) return false;

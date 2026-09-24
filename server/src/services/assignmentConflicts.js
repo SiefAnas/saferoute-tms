@@ -26,6 +26,14 @@ function rangesOverlap(aStart, aEnd, bStart, bEnd) {
 // Whether two assignments' shift_period values could ever cover the same shift.
 // 'both' covers everything; 'morning'/'afternoon' only overlap themselves or 'both'.
 // (task: a morning-only driver and an afternoon-only driver can share a student.)
+// Two assignments only meet on days both run. A missing list (older callers) means the DB
+// default, Monday to Friday.
+function daysOverlap(a, b) {
+  const aDays = a ?? [1, 2, 3, 4, 5];
+  const bDays = b ?? [1, 2, 3, 4, 5];
+  return aDays.some((d) => bDays.includes(d));
+}
+
 function shiftsOverlap(a, b) {
   if (a === 'both' || b === 'both') return true;
   return a === b;
@@ -36,6 +44,7 @@ function shiftsOverlap(a, b) {
 function assertNoConflicts(others, candidate) {
   for (const row of others) {
     if (!rangesOverlap(candidate.start_date, candidate.end_date, row.start_date, row.end_date)) continue;
+    if (!daysOverlap(candidate.days_of_week, row.days_of_week)) continue;
     if (row.van_id === candidate.van_id && row.driver_user_id !== candidate.driver_user_id) {
       throw new HttpError(409, 'That van is already assigned to a different driver during this date range.');
     }
@@ -54,4 +63,4 @@ function assertNoConflicts(others, candidate) {
   }
 }
 
-module.exports = { rangesOverlap, shiftsOverlap, assertNoConflicts };
+module.exports = { rangesOverlap, shiftsOverlap, daysOverlap, assertNoConflicts };

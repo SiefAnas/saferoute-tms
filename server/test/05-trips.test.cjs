@@ -50,7 +50,7 @@ async function main() {
     // assignment that runs today, see the access-scope rules).
     const vanA = await ins("INSERT INTO vans(company_id,license_plate,brand,model,year) VALUES($1,'AAA-1','Ford','Transit',2022) RETURNING id", [A.id]);
     for (const s of [stu1, stu2]) {
-      await ins("INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date) VALUES($1,$2,$3,$4,'2020-01-01') RETURNING id", [A.id, s.id, driverA.id, vanA.id]);
+      await ins("INSERT INTO assignments(company_id,student_id,driver_user_id,van_id,start_date,days_of_week) VALUES($1,$2,$3,$4,'2020-01-01','{1,2,3,4,5,6,7}') RETURNING id", [A.id, s.id, driverA.id, vanA.id]);
     }
     // staff1 is granted student 1 only.
     await ins('INSERT INTO staff_student_access(staff_user_id,student_id,school_id) VALUES($1,$2,$3) RETURNING id', [staff1.id, stu1.id, S.id]);

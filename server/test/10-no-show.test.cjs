@@ -17,6 +17,9 @@ const rec = createRecorder('10-no-show');
 const { ok, bad, eq } = rec;
 const BASE = 'http://localhost:5000';
 const PW = 'Secret123!';
+// Runs every day, so these checks don't depend on which weekday the tests run on
+// (assignments default to Monday to Friday).
+const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
 
 async function api(method, p, token, body) {
   const opts = { method, headers: {} };
@@ -68,7 +71,7 @@ async function main() {
         street_address: '5 Elm St', city: 'Boston', state: 'MA', zip_code: '02139', notes: 'None',
       })).body;
       const asg = (await api('POST', '/assignments', admin, {
-        student_id: stu.id, driver_user_id: driver.id, van_id: van.id, start_date: '2020-01-01',
+        student_id: stu.id, driver_user_id: driver.id, van_id: van.id, days_of_week: EVERY_DAY, start_date: '2020-01-01',
       })).body;
 
       console.log('--- no-show requires shift_period ---');

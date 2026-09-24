@@ -5,7 +5,7 @@
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
 const { notifyCompanyAndSchoolAdmins } = require('./notifications');
-const { assignmentNotEndedSql } = require('../db/scoped');
+const { assignmentNotEndedSql, assignmentRunsOnSql } = require('../db/scoped');
 const { driverScope } = require('../middleware/authorize');
 
 // Raw pool query (not req.db): "active today" is a date-range condition req.db's
@@ -52,6 +52,7 @@ async function getTodaySchedule(req) {
         AND a.company_id = $2
         AND a.start_date <= CURRENT_DATE
         AND ${assignmentNotEndedSql('a')}
+        AND ${assignmentRunsOnSql('a', 'CURRENT_DATE')}
       ORDER BY st.full_name`,
     [req.auth.userId, req.auth.tenantId]
   );
@@ -89,8 +90,8 @@ function assertCalendarDate(value, field) {
 // A driver's week (V2, GET /schedule/week?start=YYYY-MM-DD): 7 calendar days from `start`.
 // Each day lists the driver's morning and afternoon runs, built exactly like /schedule/today
 // (same item shape, that day's override, parent skips and no-shows). An assignment is on a day
-// when start_date <= day <= end_date (there is no weekday pattern yet, see V2_ROADMAP
-// "Recurring weekly schedule"); a 'both' assignment is on both runs. Same driver scope as
+// when start_date <= day <= end_date AND the day is one of its days_of_week (Monday to Friday
+// unless the office picked other days); a 'both' assignment is on both runs. Same driver scope as
 // everything else: only the driver's own assignments that have not ended as of today, so a past
 // week never brings back an ended assignment's students. Days are generated in SQL and returned
 // as ::text, never through a JS Date.
@@ -108,6 +109,7 @@ async function getWeekSchedule(req, start) {
         AND a.company_id = $2
         AND a.start_date <= d.day
         AND (a.end_date IS NULL OR a.end_date >= d.day)
+        AND ${assignmentRunsOnSql('a', 'd.day')}
         AND ${assignmentNotEndedSql('a')}
        JOIN students st ON st.id = a.student_id
        JOIN schools sc ON sc.id = st.school_id
@@ -175,8 +177,8 @@ async function markNoShow(req, assignmentId, body = {}) {
   return { reported: true, noShow: inserted.rows[0], notified };
 }
 
-// The driver's own assignment (by id, or for a student) that runs TODAY and covers
-// `shiftPeriod`. Driver writes (log a trip, report a no-show) require one; reads use the wider
+// The driver's own assignment (by id, or for a student) that runs TODAY (date range and
+// weekday) and covers `shiftPeriod`. Driver writes (log a trip, report a no-show) require one; reads use the wider
 // driverScope window, which also includes assignments starting later.
 async function findTodaysAssignment(req, { assignmentId, studentId }, shiftPeriod) {
   const { rows } = await pool.query(
@@ -185,6 +187,7 @@ async function findTodaysAssignment(req, { assignmentId, studentId }, shiftPerio
         AND ${assignmentId ? 'a.id' : 'a.student_id'} = $3
         AND a.start_date <= CURRENT_DATE
         AND ${assignmentNotEndedSql('a')}
+        AND ${assignmentRunsOnSql('a', 'CURRENT_DATE')}
         AND a.shift_period IN ($4, 'both')
       LIMIT 1`,
     [req.auth.userId, req.auth.tenantId, assignmentId ?? studentId, shiftPeriod]
