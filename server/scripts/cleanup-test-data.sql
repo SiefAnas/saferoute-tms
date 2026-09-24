@@ -1,4 +1,6 @@
 -- Remove test data from the production database (2026-09-24).
+-- RUN on production 2026-09-24 (--commit). Deleted: trips 6, schedule_changes 0, assignments 14,
+-- sessions 7, students 15, vans 7, users 27, companies 8, schools 8. Survey afterwards: 0 left.
 -- Test data = companies / schools named "MVP Test …" or "Mobile Test …" (tags muekdz3c,
 -- muelscel, mue67ebv, f5r4u), everything inside them, and every @example.test account.
 -- One transaction: it either all goes, or nothing does. Children first, because trips,

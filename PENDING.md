@@ -12,13 +12,6 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
   Resend HTTP API transport: set `RESEND_API_KEY` on the API service (it wins over SMTP) to send
   over HTTPS instead of SMTP. Sending to anyone but your own Resend address needs a verified
   domain in Resend and `MAIL_FROM` on that domain.
-- **Test data left in Neon** by the MVP-finish checks (all "MVP Test …" / `@example.test`,
-  listed in `MVP_FINISH_REPORT.md`), by the access-scope e2e run on the local API (`…muekdz3c…`,
-  listed in `ACCESS_SCOPE_REPORT.md`) and by the live e2e check after the merge (`…muelscel…`:
-  companies "MVP Test Transport/Other Co muelscel", school "MVP Test Elementary muelscel",
-  placeholder "MVP Test School muelscel", drivers/parent/staff `mvp-*-muelscel@example.test`,
-  vans `MVP-muelscel`/`MVP2-muelscel`, 4 students, 4 assignments, 1 session, 1 trip).
-  Delete when you like; nothing depends on it.
 
 ## Open decisions
 - **Seed accounts in `PROJECT_STATE.md` are stale**: Neon now holds different demo companies
@@ -28,7 +21,9 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 See `V2_ROADMAP.md`. The app shows **Coming soon** for: driver week schedule, live map, parent
 live ETA / "stops away", payment history ("Paid in {month}"), On time / Late status.
 
-## Done (2026-09-24, by Anas)
+## Done (2026-09-24)
+- Test data removed from Neon (`server/scripts/cleanup-test-data.sql`, branch `cleanup`): 27 users,
+  15 students, 8 companies, 8 schools, 7 vans and their runs. Nothing test-named or `@example.test` left.
 - `APP_URL` set on Render (API service): reset-password links point at the live site.
 - SMTP vars (Resend) set on Render.
 - `DATABASE_URL` sslmode updated.
