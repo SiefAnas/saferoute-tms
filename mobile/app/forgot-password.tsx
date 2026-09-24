@@ -9,9 +9,9 @@ import { ActionError, messageFor } from '@/components/States'
 import { Field, inputStyle } from '@/components/Form'
 import { useColors } from '@/theme/theme'
 
-// "Forgot password?": asks the API to email a reset link. The answer is the same whether or
-// not the email has an account. The link opens the SafeRoute website, where the new password is
-// set; then the user signs in here with it.
+// "Forgot password?": asks the API to email a reset link (the same flow as the website). The
+// answer is the same whether or not the email has an account. The new password is then set
+// in the app (reset-password: paste the link) or on the website (tap the link).
 export default function ForgotPasswordScreen() {
   const colors = useColors()
   const router = useRouter()
@@ -62,11 +62,12 @@ export default function ForgotPasswordScreen() {
         {sent ? (
           <View style={{ gap: 10 }} accessibilityLiveRegion="polite">
             <Text size={15} style={{ lineHeight: 22 }}>
-              If an account uses {email.trim()}, we sent it a link to reset the password. It works once, for 60 minutes, and opens
-              the SafeRoute website. Then sign in here with your new password.
+              If an account uses {email.trim()}, we sent it a link to reset the password. It works once, for 60 minutes. Tap it
+              to set a new password on the website, or copy it and set the password here.
             </Text>
+            <Button label="I have the link" icon="key" onPress={() => router.push('/reset-password')} />
             <Text size={13} color={colors.muted} style={{ lineHeight: 19 }}>
-              No email? Ask your company administrator to reset your password for you.
+              No email? Check your spam folder, or ask your company administrator to reset your password for you.
             </Text>
           </View>
         ) : (
