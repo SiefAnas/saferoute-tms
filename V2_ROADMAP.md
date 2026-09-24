@@ -26,6 +26,8 @@ Size: **S** = about a day, **M** = a few days, **L** = a week or more / needs a 
 | **Monitor notes to the admin** | Monitors check in / out and see their driver and van; they can't send anything. | A short note from the monitor (e.g. "Van AC not working", "driver late"), `monitor_notes` (monitor_id, company_id, body, created_at, read_at), `POST /monitor/notes`, and a list on the admin dashboard / Monitors page. | S |
 | **Monitor for more than one driver** | One driver per monitor (saving again replaces it). | Several `monitor_assignments` rows per monitor (drop the unique on `monitor_user_id`), with non-overlapping weekday / shift rules, and `/monitor/me` picking today's. | S–M |
 
+| **More admin work in the mobile app** | Company admin: today, people (add driver / monitor, reset password), students, tap to call. School admin / staff: confirm arrivals, students, tap to call. Everything else: "Open on the website". | Next candidates, most asked first: assign a monitor to a driver (`PUT /monitors/:id/assignment`), set a pay rate, log a school schedule change (`POST /schedule-changes/students/:id`), add a parent. Needs PUT / PATCH / DELETE in the mobile API client (it only does GET / POST today). | S each |
+
 ## From BACKLOG.md / spec §8 (not in the UI yet)
 
 | Feature | What the user sees now | Backend needed | Size |

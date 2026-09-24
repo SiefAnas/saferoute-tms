@@ -1,7 +1,15 @@
-# SafeRoute mobile app (drivers and parents)
+# SafeRoute mobile app
 
-Expo (React Native) app for **drivers** and **parents**. Admins, school admins and school staff
-use the website; if they sign in here they see a "please use the website" screen.
+Expo (React Native) app for every role:
+- **Drivers**: today's run, trips, week, pay.
+- **Monitors**: check in / out, their driver (tap to call) and van, pay.
+- **Parents**: their children's rides, skip a pickup, profile.
+- **Company admins**: who is working now, people (add a driver or monitor, reset a password),
+  students, tap to call. Everything else opens the website ("Open on the website").
+- **School admins and staff**: confirm students as they arrive, students with their ride and
+  driver to call. Everything else opens the website.
+
+The website address for those links is `EXPO_PUBLIC_WEB_URL` (default: the live site).
 
 It talks to the live API (`https://saferoute-tms-api.onrender.com`) by default. The API rules it
 follows are in `../API_CONTRACT.md`; what the server still needs is in `../MOBILE_BACKEND_NEEDS.md`.
@@ -37,7 +45,7 @@ You need: a Windows PC with **Node.js 20 or newer** (https://nodejs.org, the "LT
    - **iPhone:** open the normal **Camera** app, point it at the QR code, tap the banner.
    - **Android:** open **Expo Go** → "Scan QR code" → scan it.
    The first load takes 20–60 seconds. Then the SafeRoute sign-in screen appears.
-6. **Sign in** with a driver or parent account (ask Anas for a test account; passwords are
+6. **Sign in** with any account (ask Anas for a test account; passwords are
    never stored in the repo). The first sign-in after a quiet period can take up to a minute
    while the free server wakes up; the app says so.
 

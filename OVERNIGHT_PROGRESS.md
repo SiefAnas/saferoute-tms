@@ -60,20 +60,26 @@ already merged and live before tonight).
     works), admin adds a monitor (temporary password shown), assigns them, dashboard card and
     payroll rows show them.
 
-## In progress
-- **Job 4 `mobile-admin-roles`** (no migration, mobile only)
-  - Step 1 done (pushed): company admin in the app. Tabs Today / People / Students / More.
+- **Job 4 `mobile-admin-roles`** (pushed, no migration, mobile only)
+  - Step 1: company admin in the app. Tabs Today / People / Students / More.
     Today: drivers + monitors on shift (tap to call), drivers with runs today not checked in,
     absences. People: drivers / monitors / parents with search, details sheet (call, email),
     add driver or monitor (temporary password shown once, copy button), reset password.
     Students: search, school, parent (call), home address (tap to copy), rides with the driver
     (call). More: website links (assignments, fleet, payroll, monitors, parents, profile),
     appearance, log out. Every other action: "Open on the website".
-  - Step 2 next: school admin / staff (Pickup: confirm arrivals, absences; Students with ride
-    and driver to call; More).
+  - Step 2: school admin / staff. Tabs Pickup / Students / More. Pickup: waiting on you (Confirm,
+    call the driver), absent today, confirmed today. Students: search, parent (call), rides
+    with company, van and driver (call). More: website links (admin: students + schedule
+    changes, pickup page, staff and access, school profile; staff: their pickup page).
+  - Checks: tsc, lint, 73 jest tests, and an Android bundle build (`expo export`). Not run on a
+    real phone (no device here); see "What to test on the phone" in the final report.
+
+## In progress
+- Nothing. All four jobs are pushed.
 
 ## Next
-- Job 4 mobile admin roles, then the final report.
+- Anas: merge in order, run migrations 023 and 024 on Neon with their branches, test on the phone.
 
 ## Decisions
 - Monitor daily pay: half the day rate per shift they checked in *and* out of. Drivers' daily
