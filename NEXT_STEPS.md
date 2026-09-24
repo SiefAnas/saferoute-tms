@@ -9,7 +9,20 @@ Do these **in this order** — additive, low-risk items first; the one item that
 existing, already-working connection string last and on its own, so if anything breaks
 afterward it's obvious what caused it.
 
-## 1. SMTP env vars (Resend) — additive, safe to do first
+## 1. Email (Resend)
+
+**Update 2026-09-24: prefer the HTTP API.** The live no-show hang (2026-09-23) was the SMTP
+connection never answering. Render's free web services block outgoing traffic on the SMTP ports
+(25, 465, 587), so SMTP from Render is very likely to keep timing out no matter what the
+credentials are. Two ways round it:
+- **Recommended:** add `RESEND_API_KEY` (the same `re_…` key) on `saferoute-tms-api`. The mailer
+  then sends through Resend's HTTP API on port 443 and ignores the SMTP settings. Keep `MAIL_FROM`.
+- Or keep SMTP on Resend's other ports: `SMTP_PORT=2465` with `SMTP_SECURE=true` (or `2587`
+  with `SMTP_SECURE=false`). Less sure to work than HTTPS.
+Either way, the Render logs now say what happened: `[mail] sent event=… via=…` or
+`[mail] send failed event=… via=… reason=timeout|connection|refused|… error=…`.
+
+### SMTP settings (the original setup)
 
 On `saferoute-tms-api` in Render's dashboard → Environment, add:
 

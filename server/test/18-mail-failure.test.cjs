@@ -147,6 +147,58 @@ async function main() {
       (change2.body?.notified ?? []).includes('admin@co.com')
         ? ok('notified lists the recipients that were sent to')
         : bad(`notified: ${JSON.stringify(change2.body?.notified)}`);
+
+      console.log('\n--- a send can never hang: hard time limit ---');
+      process.env.MAIL_TIMEOUT_MS = '400';
+      mailer._slowBy(5000);
+      errorLines.length = 0;
+      let t1 = Date.now();
+      const slowResult = await mailer.sendMailSafe({ to: 'x@co.com', subject: 's', text: 't' }, 'test_timeout');
+      let tookMs = Date.now() - t1;
+      (slowResult === false && tookMs < 1500) ? ok(`a 5 s send gives up after ${tookMs} ms (limit 400 ms)`) : bad(`timeout: ${slowResult} in ${tookMs} ms`);
+      const timeoutLog = errorLines.find((l) => l.includes('event=test_timeout'));
+      (timeoutLog && timeoutLog.includes('reason=timeout') && !timeoutLog.includes('x@co.com'))
+        ? ok('the failure log says reason=timeout, without the address') : bad(`timeout log: ${timeoutLog}`);
+      mailer._slowBy(0);
+
+      console.log('\n--- Resend HTTP API transport (fake fetch) ---');
+      process.env.RESEND_API_KEY = 're_test_key';
+      process.env.MAIL_FROM = 'SafeRoute <noreply@example.test>';
+      let seen = null;
+      mailer._useTransport('resend-api', async (url, init) => {
+        seen = { url, init };
+        return { ok: true, status: 200, json: async () => ({ id: 'email_123' }) };
+      });
+      const sentOk = await mailer.sendMailSafe({ to: 'parent@co.com', subject: 'Hello', text: 'Body' }, 'test_resend');
+      eq('Resend API send -> true', sentOk, true);
+      const sentBody = seen ? JSON.parse(seen.init.body) : {};
+      eq('posts to api.resend.com/emails', seen?.url, 'https://api.resend.com/emails');
+      eq('with the API key as a Bearer token', seen?.init.headers.Authorization, 'Bearer re_test_key');
+      eq('from MAIL_FROM, to the recipient, subject + text', `${sentBody.from}|${sentBody.to}|${sentBody.subject}|${sentBody.text}`, 'SafeRoute <noreply@example.test>|parent@co.com|Hello|Body');
+
+      errorLines.length = 0;
+      mailer._useTransport('resend-api', (url, init) => new Promise((_, reject) => {
+        init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      }));
+      t1 = Date.now();
+      const hung = await mailer.sendMailSafe({ to: 'parent@co.com', subject: 'Hello', text: 'Body' }, 'test_resend_hang');
+      tookMs = Date.now() - t1;
+      (hung === false && tookMs < 1500) ? ok(`a hanging HTTPS request is aborted after ${tookMs} ms`) : bad(`hang: ${hung} in ${tookMs} ms`);
+      (errorLines.find((l) => l.includes('event=test_resend_hang')) ?? '').includes('via=resend-api reason=timeout')
+        ? ok('logged via=resend-api reason=timeout') : bad(`hang log: ${errorLines.join(' / ')}`);
+
+      errorLines.length = 0;
+      mailer._useTransport('resend-api', async () => ({ ok: false, status: 403, json: async () => ({ name: 'validation_error', message: 'You can only send testing emails to your own email address (owner@example.test).' }) }));
+      const refused = await mailer.sendMailSafe({ to: 'parent@co.com', subject: 'Hello', text: 'Body' }, 'test_resend_403');
+      const refusedLog = errorLines.find((l) => l.includes('event=test_resend_403')) ?? '';
+      eq('Resend refusing the send -> false', refused, false);
+      (refusedLog.includes('reason=refused') && refusedLog.includes('code=403') && refusedLog.includes('own email address') && !refusedLog.includes('owner@example.test'))
+        ? ok("the log keeps Resend's reason, with the address redacted") : bad(`403 log: ${refusedLog}`);
+
+      mailer._useTransport(null);
+      delete process.env.RESEND_API_KEY;
+      delete process.env.MAIL_FROM;
+      delete process.env.MAIL_TIMEOUT_MS;
     } finally {
       server.close();
     }

@@ -169,7 +169,7 @@ current password, weak new password, or new = current.
 Body `{ "email": "…" }`. **Always `200 {"ok": true}`**, whether or not the email has an account
 (never reveals which emails exist). If it does and the account is active, the server emails a
 link `<website>/reset-password?token=…`: single use, expires after **60 minutes**, and only the
-newest link works. Needs SMTP on the server to actually deliver (not set on Render yet).
+newest link works. Delivery needs a working mail transport on the server (Resend: `RESEND_API_KEY` or SMTP).
 `400` missing/invalid email. `429` rate limited (5 per 15 minutes per IP, shared with reset).
 
 ### `POST /auth/reset-password` (public)

@@ -1,25 +1,17 @@
 # Pending
 
-Current list as of 2026-09-23: `access-scope`, `v2-week-schedule` and `mobile-app` merged to `main` and live.
+Current list as of 2026-09-24: everything up to `mobile-admin-roles` is merged to `main` and live
+(migrations 022, 023, 024 run on Neon).
 One or two lines each. Access rules: `ACCESS_SCOPE_REPORT.md` and `API_CONTRACT.md` section 0.
 Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately not in the MVP),
 `API_CONTRACT.md` (for the mobile apps), `NEXT_STEPS.md`, `BACKLOG.md`.
 
 ## Needs Anas
-- **Overnight branches (chain, merge in this order)**: `fix-phone-test` → `stops-and-extra-addresses`
-  (migration **023**) → `monitor-role` (migration **024**) → `mobile-admin-roles` (no migration). See `OVERNIGHT_PROGRESS.md`. Run
-  `npm run migrate:up` on Neon with each branch that adds a migration.
-- **Review `assignment-weekdays`**: days of the week on assignments (default Mon–Fri, existing ones
-  get Mon–Fri), checkboxes on the assignment form, and every "today"/week view uses them. Has
-  migration **022** (adds a column with a default): run `npm run migrate:up` on Neon with the
-  merge. Details in the commit messages and `API_CONTRACT.md`.
-- **`APP_URL` on Render (API service)**: the website address for the reset-password link, e.g.
-  `https://saferoute-tms-client.onrender.com`. Without it the link uses the first
-  `ALLOWED_ORIGINS` entry, which is the same site today.
-- **Render SMTP vars (Resend)**: `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`/
-  `MAIL_FROM` on the API service. Steps in `NEXT_STEPS.md` §1. Still unverified end to end.
-- **`DATABASE_URL` sslmode**: `require` → `verify-full` on Render, on its own deploy, revert if
-  the API can't connect. `NEXT_STEPS.md` §2.
+- **Email from Render (branch `email-timeout`)**: every send now has a hard 15 s limit
+  (`MAIL_TIMEOUT_MS`) and logs `[mail] sent …` / `[mail] send failed … reason=…`. Optional
+  Resend HTTP API transport: set `RESEND_API_KEY` on the API service (it wins over SMTP) to send
+  over HTTPS instead of SMTP. Sending to anyone but your own Resend address needs a verified
+  domain in Resend and `MAIL_FROM` on that domain.
 - **Test data left in Neon** by the MVP-finish checks (all "MVP Test …" / `@example.test`,
   listed in `MVP_FINISH_REPORT.md`), by the access-scope e2e run on the local API (`…muekdz3c…`,
   listed in `ACCESS_SCOPE_REPORT.md`) and by the live e2e check after the merge (`…muelscel…`:
@@ -29,15 +21,18 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
   Delete when you like; nothing depends on it.
 
 ## Open decisions
-- **Whose day does the app follow, Boston time or Cairo time?** Neon `SHOW timezone` = `GMT`
-  (UTC), so the server's "today" flips to tomorrow at ~8pm Boston. Proposed fix: set the Neon
-  database timezone (e.g. `America/New_York`). Not done, waiting on you.
 - **Seed accounts in `PROJECT_STATE.md` are stale**: Neon now holds different demo companies
   (Blue Ridge, Metro, Sunrise) and no "3 Bees"; the documented logins don't work.
 
 ## V2 (not MVP)
 See `V2_ROADMAP.md`. The app shows **Coming soon** for: driver week schedule, live map, parent
 live ETA / "stops away", payment history ("Paid in {month}"), On time / Late status.
+
+## Done (2026-09-24, by Anas)
+- `APP_URL` set on Render (API service): reset-password links point at the live site.
+- SMTP vars (Resend) set on Render.
+- `DATABASE_URL` sslmode updated.
+- Neon database timezone set to `America/New_York`, so the server's "today" follows Boston time.
 
 ## Deliberate decisions (documented in BACKLOG, not bugs)
 - **Access scope decisions (Anas, 2026-09-23):** a driver keeps seeing their own past trips even
