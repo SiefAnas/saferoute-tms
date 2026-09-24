@@ -23,6 +23,9 @@ Size: **S** = about a day, **M** = a few days, **L** = a week or more / needs a 
 | **Message to the driver about a different time** (half days, early release) | Only the one-day override (time / skip) on an assignment. | A note + time on a date that the driver sees on Today / Week, sent by the company or the school (e.g. "Wednesday early release: pickup 12:30"). | S–M |
 | **Different times per weekday** | One usual pickup / drop-off time per assignment, plus one-day overrides. | Times per weekday on the assignment (e.g. `weekday_times jsonb`), applied in `/schedule/today` and `/schedule/week`. | M |
 
+| **Monitor notes to the admin** | Monitors check in / out and see their driver and van; they can't send anything. | A short note from the monitor (e.g. "Van AC not working", "driver late"), `monitor_notes` (monitor_id, company_id, body, created_at, read_at), `POST /monitor/notes`, and a list on the admin dashboard / Monitors page. | S |
+| **Monitor for more than one driver** | One driver per monitor (saving again replaces it). | Several `monitor_assignments` rows per monitor (drop the unique on `monitor_user_id`), with non-overlapping weekday / shift rules, and `/monitor/me` picking today's. | S–M |
+
 ## From BACKLOG.md / spec §8 (not in the UI yet)
 
 | Feature | What the user sees now | Backend needed | Size |

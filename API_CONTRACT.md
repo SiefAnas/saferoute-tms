@@ -22,6 +22,7 @@ the students it is assigned to. **Enforced on the server**, never only in the UI
 | `school_staff` | only students granted to them (`staff_student_access`) |
 | `parent` | only their own linked children, only through `/parent/*` |
 | `driver` | only students on the driver's **own** assignments (morning or afternoon) that are **active today or start in the future**. Not ended assignments, not other drivers' students |
+| `monitor` | **no students at all**. Only their own shifts and pay, plus the assigned driver's name + phone and the van (`GET /monitor/me`) |
 
 "See" means everything: lists, get by id, and student data inside other responses (trips,
 schedule, assignments, vans, schools, dashboard). **A student (or van, school, assignment,
@@ -35,24 +36,26 @@ today's run for that shift (starts later, or the other shift) → `409`.
 
 ### Which endpoints each role can call
 
-| Endpoint | company_admin | school_admin | school_staff | driver | parent |
-|---|---|---|---|---|---|
-| `GET /students`, `GET /students/:id` | company | school | granted | own not-ended assignments | 403 |
-| `POST/PATCH/DELETE /students…` | ✓ | 403 | 403 | 403 | 403 |
-| `GET /vans`, `GET /vans/:id` | company | 403 | 403 | vans on own not-ended assignments | 403 |
-| `GET /schools/:id` | schools the company has students at | 403 | 403 | schools of own not-ended assignments' students | 403 |
-| `GET /schools`, `GET /schools/me` | list / 403 | 403 / own | 403 / own | 403 | 403 |
-| `GET /assignments`, `GET /assignments/:id` | company | 403 | 403 | own, not ended | 403 |
-| `GET /schedule/today`, `POST /schedule/:id/no-show` | 403 | 403 | 403 | own, today | 403 |
-| `GET /schedule/week?start=` | 403 | 403 | 403 | own, not-ended assignments | 403 |
-| `GET /sessions`, `POST /sessions/checkin…` | read company | 403 | 403 | own | 403 |
-| `GET /trips`, `GET /trips/:id` | company | school | granted | trips on own shifts | 403 |
-| `POST /trips` | 403 | 403 | 403 | own students on today's run | 403 |
-| `POST /trips/:id/confirm` | 403 | school | granted | 403 | 403 |
-| `GET /dashboard/absent-today` | company | school | granted | 403 | 403 |
-| `GET/POST /schedule-changes…` | 403 | school | granted | 403 | 403 |
-| `GET /payroll/summary/:driverId`, `/payroll/adjustments/:driverId` | company | 403 | 403 | own id | 403 |
-| `/parent/*` | 403 | 403 | 403 | 403 | own linked children |
+| Endpoint | company_admin | school_admin | school_staff | driver | parent | monitor |
+|---|---|---|---|---|---|---|
+| `GET /students`, `GET /students/:id` | company | school | granted | own not-ended assignments | 403 | 403 |
+| `POST/PATCH/DELETE /students…` | ✓ | 403 | 403 | 403 | 403 | 403 |
+| `GET /vans`, `GET /vans/:id` | company | 403 | 403 | vans on own not-ended assignments | 403 | 403 |
+| `GET /schools/:id` | schools the company has students at | 403 | 403 | schools of own not-ended assignments' students | 403 | 403 |
+| `GET /schools`, `GET /schools/me` | list / 403 | 403 / own | 403 / own | 403 | 403 | 403 |
+| `GET /assignments`, `GET /assignments/:id` | company | 403 | 403 | own, not ended | 403 | 403 |
+| `GET /schedule/today`, `POST /schedule/:id/no-show` | 403 | 403 | 403 | own, today | 403 | 403 |
+| `GET /schedule/week?start=` | 403 | 403 | 403 | own, not-ended assignments | 403 | 403 |
+| `GET /sessions`, `POST /sessions/checkin…` | read company | 403 | 403 | own | 403 | own |
+| `GET /trips`, `GET /trips/:id` | company | school | granted | trips on own shifts | 403 | 403 |
+| `POST /trips` | 403 | 403 | 403 | own students on today's run | 403 | 403 |
+| `POST /trips/:id/confirm` | 403 | school | granted | 403 | 403 | 403 |
+| `GET /dashboard/absent-today` | company | school | granted | 403 | 403 | 403 |
+| `GET/POST /schedule-changes…` | 403 | school | granted | 403 | 403 | 403 |
+| `GET /payroll/summary/:driverId`, `/payroll/adjustments/:driverId` | company | 403 | 403 | own id | 403 | own id |
+| `/parent/*` | 403 | 403 | 403 | 403 | own linked children | 403 |
+| `GET /monitor/me` | 403 | 403 | 403 | 403 | 403 | own |
+| `GET /monitors`, `PUT/DELETE /monitors/:id/assignment` | company | 403 | 403 | 403 | 403 | 403 |
 
 "Trips on own shifts" is the driver's own work history: it can include a trip for a student
 whose assignment has since ended. The trip row only has the `student_id`; the student record
@@ -176,7 +179,7 @@ token, or weak password. `429` rate limited.
 
 ### How accounts are created
 - Company admins and school admins sign up themselves (`POST /signup/company|school`).
-- **Drivers and parents are created by a company admin, school staff by a school admin**
+- **Drivers, monitors and parents are created by a company admin, school staff by a school admin**
   (`POST /users`). The admin doesn't choose a password: the response has a
   `temporary_password` (shown once, e.g. `Kp7x-Qm4r-Tz9w`) to hand over, and the account has
   `must_change_password: true` until the user sets their own. Drivers need only name + email.
@@ -374,6 +377,32 @@ another driver's id. `GET /payroll/adjustments/:driverId` (own id) lists pay adj
 
 ---
 
+## 3b. Monitor endpoints (`monitor`)
+A monitor rides in the van with one driver and checks in and out for their hours. **They never
+get student data**: `/students`, `/trips`, `/vans`, `/assignments`, `/schedule/*`, `/parent/*`,
+`/dashboard/*`, `/users` all answer `403`. Accounts are made by the company admin like drivers
+(`POST /users` with `role: 'monitor'`, name + email, phone optional, temporary password).
+
+### `GET /monitor/me` (monitor only)
+```json
+{
+  "monitor": { "id": "uuid", "full_name": "Mia Monitor" },
+  "assignment": { "days_of_week": [1, 2, 3, 4, 5], "shift_period": "both" },
+  "driver": { "full_name": "Luis Ortega", "phone": "555-0101" },
+  "van": { "id": "uuid", "number": "07", "license_plate": "VAN-777", "brand": "Ford", "model": "Transit", "color": "White" },
+  "open_session": { "id": "uuid", "shift_period": "morning", "check_in_at": "2026-09-24T11:02:00.000Z" },
+  "today_sessions": [{ "id": "uuid", "shift_period": "morning", "check_in_at": "…", "check_out_at": null, "duration_minutes": null }]
+}
+```
+`assignment`, `driver` are `null` until the admin assigns them to a driver; `van` is the van on
+the driver's current runs (today's first), or `null`.
+
+### Check in / out, hours, pay
+Same endpoints and rules as drivers: `POST /sessions/checkin { shift_period, confirm_switch? }`,
+`POST /sessions/:id/checkout`, `GET /sessions` (own), `GET /payroll/summary/:ownId`,
+`GET /payroll/adjustments/:ownId`. Pay: their own rule (hourly or daily). Daily rate: half the
+day rate per shift they checked in and out of (a monitor has no students to account for).
+
 ## 4. Parent endpoints
 
 Parent = `role: "parent"`. **Parents may only call `/parent/*` and `/auth/*`.** `/students`,
@@ -450,7 +479,7 @@ All scoped to the caller's own company or school; another tenant's ids return 40
 | Method + path | Notes |
 |---|---|
 | `GET/PATCH /companies/me` | PATCH: `name, address, zip_code, state, phone, email, city` (email/city optional, blank clears) |
-| `GET /users?role=driver\|parent` · `POST /users` · `GET/PATCH /users/:id` · `POST /users/:id/reset-password` | POST body `{ role: 'driver'\|'parent', fullName, email, phone, address, licenseNumber }` (driver: only name + email required; parent: phone + address required). Response adds `temporary_password` (once). PATCH / reset only by the admin who created the account. |
+| `GET /users?role=driver\|parent\|monitor` · `POST /users` · `GET/PATCH /users/:id` · `POST /users/:id/reset-password` | POST body `{ role: 'driver'\|'parent'\|'monitor', fullName, email, phone, address, licenseNumber }` (driver and monitor: only name + email required; parent: phone + address required). Response adds `temporary_password` (once). PATCH / reset only by the admin who created the account. |
 | `GET/POST /vans`, `GET/PATCH/DELETE /vans/:id` | POST requires `license_plate, brand, model, year, color`; optional `number` (≤10 chars, unique in the company → 409) |
 | `GET/POST /students`, `GET/PATCH/DELETE /students/:id`, `POST/DELETE /students/:id/contacts[/:contactId]` | |
 | `GET /schools` | id + name of schools the company works with (incl. own placeholders) |
@@ -458,8 +487,10 @@ All scoped to the caller's own company or school; another tenant's ids return 40
 | `GET/POST /students/:id/addresses`, `PATCH/DELETE /students/:id/addresses/:addressId` | Extra addresses: `{ label, street_address, city?, state?, zip_code?, days_of_week: [1..7], applies_to: 'morning_pickup'\|'afternoon_dropoff'\|'both', start_date?, end_date? }` (dates `YYYY-MM-DD`). `GET /students/:id` includes `extra_addresses` for the company admin only. Parents see them read-only in `/parent/students/:id/detail` (`extra_addresses`). |
 | `GET/POST /assignments`, `GET/PATCH/DELETE /assignments/:id`, `GET/POST /assignments/:id/overrides`, `DELETE /assignments/:id/overrides/:overrideId` | times `HH:MM`, dates `YYYY-MM-DD`, `days_of_week` a non-empty list of 1–7 (1 = Monday; default `[1,2,3,4,5]`). Conflicts only count shared weekdays. |
 | `GET/POST/DELETE /parent-access` | link a parent to a student |
+| `GET /monitors` | every monitor with `assignment` (`{ driver_user_id, driver_name, driver_phone, days_of_week, shift_period }` or null) and `open_session` (checked in now, or null). Used for the Monitors page, the dashboard and payroll (monitors listed under `assignment.driver_user_id`). |
+| `PUT /monitors/:id/assignment`, `DELETE /monitors/:id/assignment` | `{ driver_user_id, days_of_week?: [1..7] (default Mon–Fri), shift_period?: 'morning'\|'afternoon'\|'both' (default both) }`. One driver per monitor; PUT again replaces it. Monitor or driver outside the company → `404`. |
 | `GET /sessions`, `GET /trips` | whole company |
-| `GET /payroll/rules`, `PUT /payroll/rules/:driverId`, `POST /payroll/adjustments`, `GET /payroll/unpaid-summary/:driverId`, `POST /payroll/rules/:driverId/mark-paid`, `GET /payroll/summary/company` | |
+| `GET /payroll/rules`, `PUT /payroll/rules/:driverId` (a driver's or a monitor's id), `POST /payroll/adjustments`, `GET /payroll/unpaid-summary/:driverId`, `POST /payroll/rules/:driverId/mark-paid`, `GET /payroll/summary/company` | |
 | `GET /dashboard/absent-today` | today's parent skips + driver no-shows |
 
 **School admin** (`school_admin`) / **school staff** (`school_staff`)

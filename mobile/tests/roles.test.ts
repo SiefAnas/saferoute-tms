@@ -11,6 +11,10 @@ describe('destinationForRole', () => {
     expect(destinationForRole('parent')).toBe('/(parent)/students')
   })
 
+  it('sends a monitor to the monitor app', () => {
+    expect(destinationForRole('monitor')).toBe('/(monitor)/home')
+  })
+
   it.each(['company_admin', 'school_admin', 'school_staff'] as const)(
     'sends %s to the website explanation screen',
     (role) => {
@@ -27,10 +31,40 @@ describe('destinationForRole', () => {
 })
 
 describe('isMobileRole', () => {
-  it('is true only for driver and parent', () => {
+  it('is true only for driver, monitor and parent', () => {
     expect(isMobileRole('driver')).toBe(true)
     expect(isMobileRole('parent')).toBe(true)
+    expect(isMobileRole('monitor')).toBe(true)
     expect(isMobileRole('company_admin')).toBe(false)
     expect(isMobileRole(null)).toBe(false)
+  })
+})
+
+describe('monitor Today helpers', () => {
+  // Pure helpers from the monitor app (no React Native), so jest can run them.
+  const { defaultMonitorShift, ridesToday } = jest.requireActual('@/features/monitor/helpers') as typeof import('@/features/monitor/helpers')
+  const base = {
+    monitor: { id: 'm', full_name: 'Mia' },
+    driver: null,
+    van: null,
+    open_session: null,
+    today_sessions: [],
+  }
+  it('opens on the shift they are checked into, else the only shift they ride', () => {
+    const morningOnly = { ...base, assignment: { days_of_week: [1, 2, 3], shift_period: 'afternoon' as const } }
+    expect(defaultMonitorShift(morningOnly, new Date(2026, 8, 21, 8))).toBe('afternoon')
+    const open = { ...morningOnly, open_session: { id: 's', shift_period: 'morning' as const, check_in_at: '2026-09-21T12:00:00Z' } }
+    expect(defaultMonitorShift(open, new Date(2026, 8, 21, 15))).toBe('morning')
+    const both = { ...base, assignment: { days_of_week: [1], shift_period: 'both' as const } }
+    expect(defaultMonitorShift(both, new Date(2026, 8, 21, 8))).toBe('morning')
+    expect(defaultMonitorShift(both, new Date(2026, 8, 21, 15))).toBe('afternoon')
+  })
+  it('rides today only on an assigned weekday (ISO, Sunday = 7)', () => {
+    const monWed = { ...base, assignment: { days_of_week: [1, 3], shift_period: 'both' as const } }
+    expect(ridesToday(monWed, new Date(2026, 8, 21))).toBe(true) // Monday
+    expect(ridesToday(monWed, new Date(2026, 8, 22))).toBe(false) // Tuesday
+    const sunday = { ...base, assignment: { days_of_week: [7], shift_period: 'both' as const } }
+    expect(ridesToday(sunday, new Date(2026, 8, 27))).toBe(true)
+    expect(ridesToday({ ...base, assignment: null }, new Date(2026, 8, 21))).toBe(false)
   })
 })

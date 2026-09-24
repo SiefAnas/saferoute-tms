@@ -16,9 +16,15 @@ async function upsertRule(req, driverId, body = {}) {
       `INSERT INTO pay_rules (driver_id, company_id, rate_type, rate_cents)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (driver_id) DO UPDATE SET rate_type = EXCLUDED.rate_type, rate_cents = EXCLUDED.rate_cents
+         WHERE pay_rules.company_id = EXCLUDED.company_id
        RETURNING *`,
       [driverId, req.auth.tenantId, rate_type, rate_cents]
     );
+    // BUG FIX (monitor-role, 2026-09-24): the conflict branch never checked the company. The FK
+    // only guards the INSERT; on a conflict Postgres UPDATEs the existing row instead, so an admin
+    // of another company who knew a user id could overwrite that user's rate. The WHERE above
+    // skips the update for a row in another company, and no row back means "not yours".
+    if (!rows[0]) throw new HttpError(400, 'driver not found in your company');
     return rows[0];
   } catch (err) {
     throw mapMissingRefError(err, 'driver not found in your company');
@@ -68,14 +74,24 @@ async function dailyRatePayCents(req, driverId, rule, sessionsClause, sessionsRa
     byDayShift.get(key).push(s.id);
   }
 
+  // Monitors (monitor-role) have no students of their own to account for, so a monitor's shift
+  // counts once they checked in and out of it (the sessions here are already checked out). Their
+  // attendance is the whole job; tying it to the driver's pickups would dock a monitor for a
+  // driver's missed step. Half the daily rate per shift, same as drivers.
+  const isMonitor = await userRole(driverId, req.auth.tenantId) === 'monitor';
   for (const [key, sessionIds] of byDayShift) {
     const [workDate, shiftPeriod] = key.split('|');
-    if (await isShiftComplete(req, driverId, workDate, shiftPeriod, sessionIds)) {
+    if (isMonitor || await isShiftComplete(req, driverId, workDate, shiftPeriod, sessionIds)) {
       pay += Math.round(rule.rate_cents / 2);
     }
   }
 
   return pay;
+}
+
+async function userRole(userId, companyId) {
+  const { rows } = await pool.query('SELECT role FROM users WHERE id = $1 AND company_id = $2', [userId, companyId]);
+  return rows[0]?.role ?? null;
 }
 
 // A shift is "complete" for payroll when every student assigned to this driver for that
@@ -193,22 +209,25 @@ async function listAdjustments(req, driverId) {
 // total pay across every driver with a pay rule, over [from, to]. Reuses summary() per
 // driver rather than duplicating its computation — small driver counts make the per-driver
 // round-trip fine for a dashboard widget, not worth a bespoke aggregate query.
+// Monitors (monitor-role) are paid too, so their hours and pay count in the totals;
+// driver_count stays drivers only (it is what the dashboard labels "drivers").
 async function companySummary(req, { from, to } = {}) {
-  const [drivers, rules] = await Promise.all([
+  const [drivers, monitors, rules] = await Promise.all([
     req.db.findMany('users', { where: { role: 'driver' } }),
+    req.db.findMany('users', { where: { role: 'monitor' } }),
     req.db.findMany('pay_rules', {}),
   ]);
   const driverIdsWithRule = new Set(rules.map((r) => r.driver_id));
 
   let totalMinutes = 0;
   let totalPayCents = 0;
-  for (const d of drivers) {
+  for (const d of [...drivers, ...monitors]) {
     if (!driverIdsWithRule.has(d.id)) continue;
     const s = await summary(req, d.id, { from, to });
     totalMinutes += s.worked_minutes;
     totalPayCents += s.total_pay_cents;
   }
-  return { driver_count: drivers.length, total_minutes: totalMinutes, total_pay_cents: totalPayCents };
+  return { driver_count: drivers.length, monitor_count: monitors.length, total_minutes: totalMinutes, total_pay_cents: totalPayCents };
 }
 
 module.exports = { upsertRule, listRules, addAdjustment, summary, unpaidSummary, markPaid, listAdjustments, companySummary };

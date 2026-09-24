@@ -19,7 +19,7 @@ const { requireOperable, requireRole, denyRoles, driverScope } = require('../mid
 const { HttpError } = require('../errors');
 
 const router = express.Router();
-router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent'));
+router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent', 'monitor'));
 const companyAdmin = requireRole('company_admin');
 
 function assertValidYear(year) {

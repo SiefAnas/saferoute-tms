@@ -18,7 +18,7 @@ const { generateTempPassword, setPassword } = require('./passwords');
 
 // Which roles a given admin role may create (same tenant side).
 const CREATABLE = {
-  company_admin: ['driver', 'parent'],
+  company_admin: ['driver', 'parent', 'monitor'],
   school_admin: ['school_staff'],
 };
 

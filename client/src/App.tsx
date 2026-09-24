@@ -10,12 +10,15 @@ import { RegisterPage } from './pages/register/RegisterPage'
 import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
 import { ForgotPasswordPage, ResetPasswordPage, SetPasswordPage } from './pages/login/PasswordPages'
 import { DriverLayout } from './layouts/DriverLayout'
+import { MonitorLayout } from './layouts/MonitorLayout'
 
 // Each role's screens load on demand, so a driver's phone never downloads the admin pages.
 const DriverTodayPage = lazy(() => import('./pages/driver/DriverTodayPage').then((m) => ({ default: m.DriverTodayPage })))
 const DriverTripsPage = lazy(() => import('./pages/driver/DriverTripsPage').then((m) => ({ default: m.DriverTripsPage })))
 const DriverWeekPage = lazy(() => import('./pages/driver/DriverWeekPage').then((m) => ({ default: m.DriverWeekPage })))
 const DriverPayPage = lazy(() => import('./pages/driver/DriverPayPage').then((m) => ({ default: m.DriverPayPage })))
+const MonitorTodayPage = lazy(() => import('./pages/monitor/MonitorTodayPage').then((m) => ({ default: m.MonitorTodayPage })))
+const MonitorsPage = lazy(() => import('./pages/company/MonitorsPage').then((m) => ({ default: m.MonitorsPage })))
 const CompanyAdminDashboard = lazy(() => import('./pages/company/CompanyAdminDashboard').then((m) => ({ default: m.CompanyAdminDashboard })))
 const DriversPage = lazy(() => import('./pages/company/DriversPage').then((m) => ({ default: m.DriversPage })))
 const ParentsPage = lazy(() => import('./pages/company/ParentsPage').then((m) => ({ default: m.ParentsPage })))
@@ -40,6 +43,7 @@ const COMPANY_NAV: NavGroup[] = [
     label: 'Operations',
     items: [
       { to: '/company/drivers', label: 'Drivers', icon: 'person', badge: 'live-drivers' },
+      { to: '/company/monitors', label: 'Monitors', icon: 'badge' },
       { to: '/company/vans', label: 'Fleet', icon: 'local_shipping' },
       { to: '/company/assignments', label: 'Assignments', icon: 'assignment' },
     ],
@@ -93,10 +97,19 @@ function App() {
           </Route>
         </Route>
 
+        <Route element={<ProtectedRoute roles={['monitor']} />}>
+          <Route element={<MonitorLayout />}>
+            <Route path="/monitor" element={<MonitorTodayPage />} />
+            {/* Same page as the driver's Pay tab: own pay rule + own sessions only. */}
+            <Route path="/monitor/pay" element={<DriverPayPage />} />
+          </Route>
+        </Route>
+
         <Route element={<ProtectedRoute roles={['company_admin']} />}>
           <Route element={<AdminLayout hubName="Dispatcher Hub" nav={COMPANY_NAV} />}>
             <Route path="/company" element={<CompanyAdminDashboard />} />
             <Route path="/company/drivers" element={<DriversPage />} />
+            <Route path="/company/monitors" element={<MonitorsPage />} />
             <Route path="/company/vans" element={<VansPage />} />
             <Route path="/company/assignments" element={<AssignmentsPage />} />
             <Route path="/company/payroll" element={<PayrollPage />} />

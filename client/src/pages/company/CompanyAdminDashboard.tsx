@@ -5,7 +5,7 @@ import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { localISODate } from '../../lib/localDate'
 import { firstName, greeting, isToday } from '../../lib/format'
-import { assignmentRunsToday } from '../../lib/weekdays'
+import { assignmentRunsToday, isoWeekday } from '../../lib/weekdays'
 import { Card, CardHeader, CardTitle } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { IconTile } from '../../components/EmptyState'
@@ -19,6 +19,7 @@ import type {
   AbsentTodayEntry,
   Assignment,
   DriverSession,
+  Monitor,
   PayRule,
   PublicUser,
   SchoolSummary,
@@ -90,6 +91,7 @@ export function CompanyAdminDashboard() {
   const assignmentsQuery = useQuery({ queryKey: ['assignments'], queryFn: () => api.get<Assignment[]>('/assignments') })
   const absentQuery = useQuery({ queryKey: ['dashboard-absent-today'], queryFn: () => api.get<AbsentTodayEntry[]>('/dashboard/absent-today') })
   const rulesQuery = useQuery({ queryKey: ['payroll-rules'], queryFn: () => api.get<PayRule[]>('/payroll/rules') })
+  const monitorsQuery = useQuery({ queryKey: ['monitors'], queryFn: () => api.get<Monitor[]>('/monitors') })
 
   const drivers = useMemo(() => (driversQuery.data ?? []).filter((d) => d.is_active), [driversQuery.data])
   const sessions = useMemo(() => sessionsQuery.data ?? [], [sessionsQuery.data])
@@ -345,6 +347,39 @@ export function CompanyAdminDashboard() {
               )}
             </div>
           </Card>
+
+          {/* Monitors (monitor-role): who's on shift right now, and who they ride with. */}
+          {(monitorsQuery.data ?? []).some((m) => m.is_active) && (
+            <Card className="overflow-hidden">
+              <CardHeader className="!px-4 !py-3">
+                <CardTitle>Monitors</CardTitle>
+                <span className="text-[12px] text-muted">
+                  {(monitorsQuery.data ?? []).filter((m) => m.is_active && m.open_session).length} on shift
+                </span>
+              </CardHeader>
+              {(monitorsQuery.data ?? [])
+                .filter((m) => m.is_active)
+                .map((m, i) => {
+                  const ridesToday = m.assignment?.days_of_week.includes(isoWeekday()) ?? false
+                  return (
+                    <div key={m.id} className={`grid grid-cols-[32px_1fr_auto] items-center gap-2.5 px-4 py-[9px] ${i ? 'border-t border-divider' : ''}`}>
+                      <Avatar name={m.full_name} />
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate text-[14px] font-semibold text-ink">{m.full_name}</span>
+                        <span className="truncate text-[12px] text-muted">{m.assignment ? `Rides with ${m.assignment.driver_name}` : 'No driver yet'}</span>
+                      </div>
+                      {m.open_session ? (
+                        <StatusBadge tone="success" label="On shift" />
+                      ) : ridesToday ? (
+                        <StatusBadge tone="caution" label="Not in" />
+                      ) : (
+                        <StatusBadge tone="neutral" label="Off today" />
+                      )}
+                    </div>
+                  )
+                })}
+            </Card>
+          )}
 
           <Card className="overflow-hidden">
             <CardHeader className="!px-4 !py-3">

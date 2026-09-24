@@ -5,6 +5,7 @@
 //   company_admin -> own company's students        school_admin -> own school's students
 //   school_staff  -> granted students only         parent -> linked children, /parent/* only
 //   driver        -> students on own assignments that have not ended (today or future)
+//   monitor       -> no students at all: own shifts/pay, the driver's name + phone, the van
 const PG_PORT = 5467;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
 process.env.JWT_SECRET = 'test-secret-17';
@@ -61,6 +62,7 @@ async function main() {
     const dB = await user('db@a.com', 'driver', 'company_id', A.id);
     const dC = await user('dc@b.com', 'driver', 'company_id', B.id);
     const parent = await user('parent@a.com', 'parent', 'company_id', A.id);
+    const monitor = await user('mon@a.com', 'monitor', 'company_id', A.id);
 
     const student = (company, school, name) =>
       ins('INSERT INTO students(company_id,school_id,full_name,street_address) VALUES($1,$2,$3,$4) RETURNING id', [company, school, name, `${name} home`]);
@@ -89,6 +91,7 @@ async function main() {
     await assign(B.id, sB, dC, vB, '2020-01-01', null);
 
     await ins('INSERT INTO parent_students(parent_user_id,student_id,company_id) VALUES($1,$2,$3) RETURNING id', [parent.id, sMine.id, A.id]);
+    await ins('INSERT INTO monitor_assignments(company_id,monitor_user_id,driver_user_id) VALUES($1,$2,$3) RETURNING id', [A.id, monitor.id, dA.id]);
     await ins('INSERT INTO staff_student_access(staff_user_id,student_id,school_id) VALUES($1,$2,$3) RETURNING id', [staff.id, sMine.id, S1.id]);
 
     const app = createApp();
@@ -97,7 +100,7 @@ async function main() {
       const t = {
         adminA: await login('admin@a.com'), adminB: await login('admin@b.com'),
         sa1: await login('sa1@s1.com'), sa2: await login('sa2@s2.com'), staff: await login('staff@s1.com'),
-        dA: await login('da@a.com'), dB: await login('db@a.com'), dC: await login('dc@b.com'), parent: await login('parent@a.com'),
+        dA: await login('da@a.com'), dB: await login('db@a.com'), dC: await login('dc@b.com'), parent: await login('parent@a.com'), monitor: await login('mon@a.com'),
       };
 
       // Trips to look at later (embedded student ids): dA logs sMine, dB logs sOther, dC logs sB.
@@ -182,6 +185,28 @@ async function main() {
       for (const p of ['/students', `/students/${sMine.id}`, '/trips', '/assignments', '/vans', '/schedule/today']) {
         eq(`parent GET ${p} -> 403 (company routers are closed to parents)`, (await api('GET', p, t.parent)).status, 403);
       }
+
+      console.log('\n--- monitor ---');
+      const monMe = await api('GET', '/monitor/me', t.monitor);
+      eq('monitor GET /monitor/me -> 200', monMe.status, 200);
+      eq("monitor sees the driver's name", monMe.body.driver?.full_name, 'da');
+      eq("monitor sees the van on the driver's run today", monMe.body.van?.license_plate, 'MINE-1');
+      const monJson = JSON.stringify(monMe.body);
+      ok(!/A Mine|A Other|home|student/i.test(monJson) ? 'monitor /monitor/me carries no student data' : `monitor /monitor/me leaks student data: ${monJson}`);
+      for (const p of ['/students', `/students/${sMine.id}`, '/trips', `/trips/${tripMine.body.id}`, '/assignments', `/assignments/${aMine.id}`, '/vans', `/vans/${vMine.id}`,
+        '/schedule/today', '/schedule/week', `/parent/students/${sMine.id}/detail`, '/dashboard/absent-today', '/users', '/monitors', '/payroll/rules', `/schools/${S1.id}`]) {
+        eq(`monitor GET ${p} -> 403`, (await api('GET', p, t.monitor)).status, 403);
+      }
+      eq("monitor GET /payroll/summary of driver A -> 403", (await api('GET', `/payroll/summary/${dA.id}`, t.monitor)).status, 403);
+      eq('monitor logs a trip -> 403', (await api('POST', '/trips', t.monitor, { student_id: sMine.id, trip_type: 'pickup', shift_period: 'morning' })).status, 403);
+      eq('monitor no-show -> 403', (await api('POST', `/schedule/${aMine.id}/no-show`, t.monitor, { shift_period: 'morning' })).status, 403);
+      const monIn = await api('POST', '/sessions/checkin', t.monitor, { shift_period: 'morning' });
+      eq('monitor checks in -> 201', monIn.status, 201);
+      sameSet('monitor GET /sessions = own shift only', ids((await api('GET', '/sessions', t.monitor)).body), [monIn.body.id]);
+      const dASession = (await api('GET', '/sessions', t.dA)).body[0];
+      eq("monitor GET /sessions/:id driver A's shift -> 404", (await api('GET', `/sessions/${dASession.id}`, t.monitor)).status, 404);
+      eq("driver A GET /sessions/:id the monitor's shift -> 404", (await api('GET', `/sessions/${monIn.body.id}`, t.dA)).status, 404);
+      eq("company B admin GET /monitors lists no company A monitor", (await api('GET', '/monitors', t.adminB)).body.length, 0);
     } finally {
       server.close();
     }

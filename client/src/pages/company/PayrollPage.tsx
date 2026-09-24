@@ -16,7 +16,7 @@ import { useComingSoon } from '../../components/ComingSoon'
 import { CsvImportExport } from '../../components/CsvImportExport'
 import { PageTopBar } from '../../layouts/TopBar'
 import type { CsvColumn } from '../../lib/csv'
-import type { Assignment, DriverSession, PayAdjustment, PayRule, PublicUser, RateType, UnpaidPaySummary, Van } from '../../types/api'
+import type { Assignment, DriverSession, Monitor, PayAdjustment, PayRule, PublicUser, RateType, UnpaidPaySummary, Van } from '../../types/api'
 
 interface PayrollCsvRow {
   driver: PublicUser
@@ -49,11 +49,35 @@ export function PayrollPage() {
   const vansQuery = useQuery({ queryKey: ['vans'], queryFn: () => api.get<Van[]>('/vans') })
   const assignmentsQuery = useQuery({ queryKey: ['assignments'], queryFn: () => api.get<Assignment[]>('/assignments') })
 
+  const monitorsQuery = useQuery({ queryKey: ['monitors'], queryFn: () => api.get<Monitor[]>('/monitors') })
+
   const drivers = useMemo(() => driversQuery.data ?? [], [driversQuery.data])
+  // Monitors (monitor-role) are paid like drivers, from their own pay rule, and listed under the
+  // driver they ride with. `people` is everyone who gets paid: rates, adjustments, "mark paid"
+  // and the breakdown all work the same for both.
+  const monitors = useMemo(() => monitorsQuery.data ?? [], [monitorsQuery.data])
+  const people = useMemo<PublicUser[]>(
+    () => [...drivers, ...monitors.map((m) => ({ ...m, address: null, license_number: null, email_verified_at: null }))],
+    [drivers, monitors],
+  )
+  const personLabel = (p: PublicUser) => (p.role === 'monitor' ? `${p.full_name} (monitor)` : p.full_name)
+  // Table order: each driver, then the monitors who ride with them; monitors with no driver last.
+  const tableRows = useMemo(() => {
+    const byId = new Map(people.map((p) => [p.id, p]))
+    const rows: { person: PublicUser; monitorOf: string | null }[] = []
+    for (const d of drivers) {
+      rows.push({ person: d, monitorOf: null })
+      for (const m of monitors.filter((x) => x.assignment?.driver_user_id === d.id)) rows.push({ person: byId.get(m.id)!, monitorOf: d.full_name })
+    }
+    for (const m of monitors.filter((x) => !x.assignment || !drivers.some((d) => d.id === x.assignment!.driver_user_id))) {
+      rows.push({ person: byId.get(m.id)!, monitorOf: '' })
+    }
+    return rows
+  }, [people, drivers, monitors])
   const rulesByDriver = useMemo(() => new Map((rulesQuery.data ?? []).map((r) => [r.driver_id, r])), [rulesQuery.data])
 
   // One unpaid summary per driver with a rate (same query key the drawer uses, so it's cached).
-  const withRule = drivers.filter((d) => rulesByDriver.has(d.id))
+  const withRule = people.filter((d) => rulesByDriver.has(d.id))
   const unpaidQueries = useQueries({
     queries: withRule.map((d) => ({
       queryKey: ['payroll-unpaid-summary', d.id],
@@ -79,11 +103,11 @@ export function PayrollPage() {
 
   const owedTotal = [...unpaidByDriver.values()].reduce((sum, s) => sum + s.total_pay_cents, 0)
   const owedCount = [...unpaidByDriver.values()].filter((s) => s.total_pay_cents > 0).length
-  const missingRate = drivers.filter((d) => d.is_active && !rulesByDriver.has(d.id))
+  const missingRate = people.filter((d) => d.is_active && !rulesByDriver.has(d.id))
 
   const payrollCsvRows: PayrollCsvRow[] = useMemo(
-    () => drivers.map((driver) => ({ driver, rule: rulesByDriver.get(driver.id) ?? null })),
-    [drivers, rulesByDriver],
+    () => people.map((driver) => ({ driver, rule: rulesByDriver.get(driver.id) ?? null })),
+    [people, rulesByDriver],
   )
 
   // CSV import (2026-08-28): matched by driver email, per the task's rule. Reuses
@@ -92,8 +116,8 @@ export function PayrollPage() {
   async function handleImportRow(row: Record<string, string>) {
     const email = row['Driver Email']?.trim()
     if (!email) return { ok: false, message: 'Driver Email is required' }
-    const driver = drivers.find((d) => d.email.toLowerCase() === email.toLowerCase())
-    if (!driver) return { ok: false, message: `No driver found with email ${email}` }
+    const driver = people.find((d) => d.email.toLowerCase() === email.toLowerCase())
+    if (!driver) return { ok: false, message: `No driver or monitor found with email ${email}` }
     const rateTypeInput = row['Rate Type']?.trim().toLowerCase()
     if (rateTypeInput !== 'hourly' && rateTypeInput !== 'daily') return { ok: false, message: 'Rate Type must be "hourly" or "daily"' }
     const rateDollarsInput = row['Rate (Dollars)']?.trim()
@@ -135,7 +159,7 @@ export function PayrollPage() {
       queryClient.invalidateQueries({ queryKey: ['payroll-unpaid-summary', rule.driver_id] })
       setRateDollars('')
       setShowRateModal(false)
-      const name = drivers.find((d) => d.id === rule.driver_id)?.full_name ?? 'Driver'
+      const name = people.find((d) => d.id === rule.driver_id)?.full_name ?? 'Driver'
       toast.show(`${name}'s rate set · ${formatRate(rule.rate_cents, rule.rate_type)}`)
     },
     onError: (err) => setRateError(err instanceof ApiError ? err.message : 'Could not save rate.'),
@@ -167,7 +191,7 @@ export function PayrollPage() {
       queryClient.invalidateQueries({ queryKey: ['payroll-summary', adjDriverId] })
       queryClient.invalidateQueries({ queryKey: ['payroll-unpaid-summary', adjDriverId] })
       queryClient.invalidateQueries({ queryKey: ['payroll-adjustments', adjDriverId] })
-      const name = drivers.find((d) => d.id === adjDriverId)?.full_name ?? 'Driver'
+      const name = people.find((d) => d.id === adjDriverId)?.full_name ?? 'Driver'
       toast.show(`Adjustment added for ${name} · ${formatMoney(Math.round(Number(adjDollars) * 100))}`)
       setAdjDollars('')
       setAdjNote('')
@@ -194,9 +218,9 @@ export function PayrollPage() {
   })
 
   const [detailDriverId, setDetailDriverId] = useState<string | null>(null)
-  const detailDriver = drivers.find((d) => d.id === detailDriverId) ?? null
+  const detailDriver = people.find((d) => d.id === detailDriverId) ?? null
 
-  const loading = driversQuery.isLoading || rulesQuery.isLoading
+  const loading = driversQuery.isLoading || rulesQuery.isLoading || monitorsQuery.isLoading
 
   return (
     <div className="flex flex-col gap-5">
@@ -242,13 +266,13 @@ export function PayrollPage() {
           label="Missing a pay rate"
           value={missingRate.length}
           tone={missingRate.length > 0 ? 'caution' : 'default'}
-          sub={missingRate.length > 0 ? missingRate.map((d) => d.full_name).join(', ') : 'Every active driver has a rate'}
+          sub={missingRate.length > 0 ? missingRate.map((d) => d.full_name).join(', ') : 'Everyone active has a rate'}
         />
       </StatRow>
 
       <TableCard
-        title="Drivers · current cycle"
-        hint="Click a driver for the breakdown"
+        title={monitors.length ? 'Drivers and monitors · current cycle' : 'Drivers · current cycle'}
+        hint="Click a row for the breakdown"
         template={TEMPLATE}
         columns={[
           { label: 'Driver' },
@@ -261,16 +285,23 @@ export function PayrollPage() {
       >
         {loading ? (
           <p className="border-t border-divider px-5 py-4 text-[14px] text-muted">Loading…</p>
-        ) : drivers.length === 0 ? (
+        ) : people.length === 0 ? (
           <EmptyState icon="person_add" title="No drivers yet" body="Add drivers on the Drivers page, then set their pay rates here." />
         ) : (
-          drivers.map((d) => {
+          tableRows.map(({ person: d, monitorOf }) => {
             const rule = rulesByDriver.get(d.id) ?? null
             const unpaid = unpaidByDriver.get(d.id)
             const owed = unpaid?.total_pay_cents ?? 0
             return (
               <TableRow key={d.id} template={TEMPLATE} selected={detailDriverId === d.id} onClick={() => setDetailDriverId(d.id)}>
-                <NameCell name={d.full_name} sub={d.is_active ? vanByDriver(d.id) : 'Deactivated'} />
+                {monitorOf === null ? (
+                  <NameCell name={d.full_name} sub={d.is_active ? vanByDriver(d.id) : 'Deactivated'} />
+                ) : (
+                  <span className="flex min-w-0 items-center gap-2 pl-5">
+                    <span className="material-symbols-outlined !text-[18px] text-faint" aria-hidden>subdirectory_arrow_right</span>
+                    <NameCell name={d.full_name} sub={!d.is_active ? 'Monitor · deactivated' : monitorOf ? `Monitor · rides with ${monitorOf}` : 'Monitor · no driver yet'} />
+                  </span>
+                )}
                 <span className="font-medium text-ink-sub tabular">{rule ? formatRate(rule.rate_cents, rule.rate_type) : '—'}</span>
                 <span className="font-medium text-ink-sub tabular">{rule ? (unpaid ? workedLabel(unpaid) : '…') : '—'}</span>
                 <span className="text-right font-bold tabular">{rule ? (unpaid ? formatMoney(owed) : '…') : '—'}</span>
@@ -312,10 +343,10 @@ export function PayrollPage() {
           <form className="flex flex-col gap-3" onSubmit={handleSetRule}>
             <Field label="Driver">
               <Select required value={rateDriverId} onChange={(e) => setRateDriverId(e.target.value)}>
-                <option value="">Select a driver…</option>
-                {drivers.map((d) => (
+                <option value="">Select a driver or monitor…</option>
+                {people.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.full_name}
+                    {personLabel(d)}
                   </option>
                 ))}
               </Select>
@@ -361,10 +392,10 @@ export function PayrollPage() {
           <form className="flex flex-col gap-3" onSubmit={handleAddAdjustment}>
             <Field label="Driver">
               <Select required value={adjDriverId} onChange={(e) => setAdjDriverId(e.target.value)}>
-                <option value="">Select a driver…</option>
-                {drivers.map((d) => (
+                <option value="">Select a driver or monitor…</option>
+                {people.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.full_name}
+                    {personLabel(d)}
                   </option>
                 ))}
               </Select>

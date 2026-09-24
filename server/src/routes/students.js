@@ -13,7 +13,7 @@ const pool = require('../db/pool');
 const { listExtraAddresses, createExtraAddress, updateExtraAddress, deleteExtraAddress } = require('../services/stops');
 
 const router = express.Router();
-router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent'));
+router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent', 'monitor'));
 const companyAdmin = requireRole('company_admin');
 
 const mapFk = (err) => mapMissingRefError(err, 'school_id not found');

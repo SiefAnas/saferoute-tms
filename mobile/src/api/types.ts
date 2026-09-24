@@ -2,7 +2,7 @@
 // client/src/types/api.ts to just those, and checked against server/src/services/*.js.
 // See API_CONTRACT.md §3 (driver) and §4 (parent).
 
-export type Role = 'driver' | 'parent' | 'company_admin' | 'school_admin' | 'school_staff'
+export type Role = 'driver' | 'parent' | 'company_admin' | 'school_admin' | 'school_staff' | 'monitor'
 export type TenantType = 'company' | 'school'
 
 // POST /auth/login → `user`.
@@ -213,6 +213,23 @@ export interface SchoolDetail {
 export type RateType = 'hourly' | 'daily'
 
 // GET /payroll/summary/:driverId
+// GET /monitor/me (monitor-role): the monitor's own screen. The driver they ride with (to call),
+// the van, the days and shift, and their shifts today. Never any student data.
+export interface MonitorHome {
+  monitor: { id: string; full_name: string }
+  assignment: { days_of_week: number[]; shift_period: AssignmentShiftPeriod } | null
+  driver: { full_name: string; phone: string | null } | null
+  van: { id: string; number: string | null; license_plate: string; brand: string; model: string; color: string | null } | null
+  open_session: { id: string; shift_period: ShiftPeriod | null; check_in_at: string } | null
+  today_sessions: {
+    id: string
+    shift_period: ShiftPeriod | null
+    check_in_at: string
+    check_out_at: string | null
+    duration_minutes: number | null
+  }[]
+}
+
 export interface PaySummary {
   driver_id: string
   rate_type: RateType

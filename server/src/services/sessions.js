@@ -15,6 +15,9 @@ function gps(body, prefix) {
   return { [`${prefix}_lat`]: lat, [`${prefix}_lng`]: lng };
 }
 
+// Who checks in and out for their hours: drivers, and monitors riding with them (monitor-role).
+const CLOCKS_IN = ['driver', 'monitor'];
+
 const SHIFT_LABEL = { morning: 'Morning', afternoon: 'Afternoon' };
 const labelOf = (period) => SHIFT_LABEL[period] || 'a shift';
 
@@ -25,7 +28,7 @@ const labelOf = (period) => SHIFT_LABEL[period] || 'a shift';
 // a switch) can't be checked into again, so the driver can't go back to it. "Today" is the
 // UTC date of check_in_at, the same day key payroll uses to group sessions.
 async function checkIn(req, body = {}) {
-  if (req.auth.role !== 'driver') throw new HttpError(403, 'only drivers check in');
+  if (!CLOCKS_IN.includes(req.auth.role)) throw new HttpError(403, 'only drivers and monitors check in');
   const { shift_period, confirm_switch } = body;
   if (!['morning', 'afternoon'].includes(shift_period)) {
     throw new HttpError(400, "shift_period must be 'morning' or 'afternoon'");
@@ -87,7 +90,7 @@ async function checkIn(req, body = {}) {
 }
 
 async function checkOut(req, id, body = {}) {
-  if (req.auth.role !== 'driver') throw new HttpError(403, 'only drivers check out');
+  if (!CLOCKS_IN.includes(req.auth.role)) throw new HttpError(403, 'only drivers and monitors check out');
   const session = await req.db.findById('sessions', id, {
     owner: { column: 'user_id', value: req.auth.userId },
   });

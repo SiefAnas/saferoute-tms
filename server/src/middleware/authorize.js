@@ -21,6 +21,8 @@ function requireRole(...roles) {
 // /assignments, /vans). Those routers only narrow reads for drivers and school staff, so
 // without this a parent's token listed every student in the company (names, home addresses,
 // guardian phones, notes), every trip, and drivers' check-in GPS. Parents use /parent/* only.
+// `monitor` is denied the same way (no student data at all); monitors use /monitor/* and
+// their own /sessions and /payroll rows.
 function denyRoles(...roles) {
   return (req, res, next) => {
     if (!req.auth) return res.status(401).json({ error: 'unauthenticated' });
@@ -68,8 +70,10 @@ const DRIVER_OWNER_COLUMN = {
 };
 
 // Returns { column, value } to pass as the accessor's `owner` option, or null.
+// Monitors (monitor-role) own the same kinds of rows as drivers: their shifts and pay. They never
+// reach assignments (the /assignments router denies them), so that entry doesn't apply to them.
 function ownerScope(req, table) {
-  if (req.auth.role === 'driver' && DRIVER_OWNER_COLUMN[table]) {
+  if ((req.auth.role === 'driver' || req.auth.role === 'monitor') && DRIVER_OWNER_COLUMN[table]) {
     return { column: DRIVER_OWNER_COLUMN[table], value: req.auth.userId };
   }
   return null;

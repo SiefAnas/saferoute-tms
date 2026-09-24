@@ -14,7 +14,7 @@ class ScopeError extends Error {
 
 // role -> which tenant this user lives in (§5.1). Never both.
 function tenantTypeForRole(role) {
-  if (role === 'driver' || role === 'company_admin' || role === 'parent') return 'company';
+  if (role === 'driver' || role === 'company_admin' || role === 'parent' || role === 'monitor') return 'company';
   if (role === 'school_admin' || role === 'school_staff') return 'school';
   throw new ScopeError(`unknown role: ${role}`);
 }
@@ -39,6 +39,7 @@ const TABLE_SCOPE = {
   pickup_skips: { company: 'company_id' },
   pickup_no_shows: { company: 'company_id' },
   schedule_changes: { company: 'company_id', school: 'school_id' }, // dual-tenant, like trips
+  monitor_assignments: { company: 'company_id' },
 };
 
 // "This assignment has not ended": running today or starting later. The one SQL definition of

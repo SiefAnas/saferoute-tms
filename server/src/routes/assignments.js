@@ -11,7 +11,7 @@ const { upsertOverride, listOverrides, deleteOverride } = require('../services/s
 const { assertNoConflicts } = require('../services/assignmentConflicts');
 
 const router = express.Router();
-router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent'));
+router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent', 'monitor'));
 
 const companyAdmin = requireRole('company_admin');
 

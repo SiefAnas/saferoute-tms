@@ -13,10 +13,10 @@ const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
 
 const companyAdmin = requireRole('company_admin');
-// A driver may only touch their own driver id.
+// A driver (or a monitor, monitor-role) may only read their own pay.
 function assertSelfOrAdmin(req, driverId) {
   if (req.auth.role === 'company_admin') return;
-  if (req.auth.role === 'driver' && req.auth.userId === driverId) return;
+  if ((req.auth.role === 'driver' || req.auth.role === 'monitor') && req.auth.userId === driverId) return;
   throw new HttpError(403, 'forbidden');
 }
 

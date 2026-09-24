@@ -11,4 +11,6 @@ export const ROLE_HOME: Record<Role, string> = {
   // phase (client/src/mockups/parent-dashboard/), not wired to real data yet (§ Parent
   // Dashboard task). A real parent login needs *somewhere* real to land.
   parent: '/parent',
+  // Monitor-role: check in / out, the driver and the van, own pay.
+  monitor: '/monitor',
 }

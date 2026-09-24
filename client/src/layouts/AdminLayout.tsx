@@ -27,6 +27,7 @@ const ROLE_LABEL: Record<Role, string> = {
   school_staff: 'School staff',
   driver: 'Driver',
   parent: 'Parent',
+  monitor: 'Monitor',
 }
 
 function initials(name: string | undefined) {

@@ -7,7 +7,7 @@ const { requireOperable, denyRoles } = require('../middleware/authorize');
 const { logTrip, confirmTrip, listTrips, getTrip } = require('../services/trips');
 
 const router = express.Router();
-router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent'));
+router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent', 'monitor'));
 
 router.post('/', async (req, res, next) => {
   try { res.status(201).json(await logTrip(req, req.body || {})); } catch (e) { next(e); }

@@ -27,7 +27,7 @@ export default function UnsupportedRoleScreen() {
       <EmptyState
         icon="desktop-windows"
         title="Please use the SafeRoute website for your account"
-        body="This app is for drivers and parents. Your account manages schedules, staff and payroll, which all live on the website."
+        body="This app is for drivers, monitors and parents. Your account manages schedules, staff and payroll, which all live on the website."
       />
       <View style={{ paddingHorizontal: 16 }}>
         <Button label="Log out" variant="outline" onPress={() => void signOut()} />

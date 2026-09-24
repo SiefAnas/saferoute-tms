@@ -6,8 +6,8 @@ already merged and live before tonight).
 
 ## Merge order
 1. `fix-phone-test` (from `main`), no migration
-2. `stops-and-extra-addresses` (from 1)
-3. `monitor-role` (from 2)
+2. `stops-and-extra-addresses` (from 1), migration **023**
+3. `monitor-role` (from 2), migration **024**
 4. `mobile-admin-roles` (from 3)
 
 ## Done
@@ -39,12 +39,38 @@ already merged and live before tonight).
   - Tests: suite 22 (37 checks), mobile route/weekday tests; checked in the browser on a local DB.
   - V2 in the roadmap: one-time address, time messages (half days), times per weekday.
 
+- **Job 3 `monitor-role`** (pushed, migration **024**)
+  - New company role `monitor`: created by the company admin (`POST /users`, name + email,
+    phone optional, temporary password, forced change). Assigned to one driver with weekdays +
+    shift (`monitor_assignments`, `PUT/DELETE /monitors/:id/assignment`).
+  - A monitor sees only: own check-in/out and hours, own pay, the driver's name + phone, the van
+    (`GET /monitor/me`). Students / trips / vans / assignments / schedule / parent / dashboard /
+    users all answer 403 (router-level deny, like parents).
+  - Admin web: Monitors page (list, add, edit + reset password, assign to driver in the drawer),
+    dashboard "Monitors" card (on shift / not in / off today), Payroll lists each monitor under
+    their driver with their own rate, adjustments, mark paid, breakdown.
+  - Monitor web (phone + desktop): Today (driver with call button, van, days + shift, check
+    in/out with shift switch, today's hours) and Pay (same page as the driver's). Mobile: the
+    same two tabs in a `(monitor)` group.
+  - **Bug fixed on the way (affects drivers too):** `PUT /payroll/rules/:id` let a company admin
+    overwrite another company's user's pay rate if they knew the id (the upsert's `ON CONFLICT`
+    updated the other company's row). Now 400 "not found in your company". Covered in suite 23.
+  - Tests: suite 23 (60 checks), monitor added to access matrix suite 17 (85 checks), mobile
+    helper tests.
+
 ## In progress
-- **Job 3 `monitor-role`**
+- **Job 4 `mobile-admin-roles`**
 
 ## Next
-- Job 3 monitor role, Job 4 mobile admin roles.
+- Job 4 mobile admin roles, then the final report.
 
 ## Decisions
+- Monitor daily pay: half the day rate per shift they checked in *and* out of. Drivers' daily
+  pay depends on all their students being handled; a monitor has no students, and tying their
+  pay to the driver's pickups would dock them for the driver's missed step. Simplest fair rule.
+- One driver per monitor (saving replaces it). Several drivers per monitor is in V2_ROADMAP.
+- Monitor hours never count toward the driver's pay; they are only *shown* under the driver.
+- The monitor's van = the van on the assigned driver's current runs (today's first). No
+  separate van field on the monitor, so it can't go stale.
 - `notified` in no-show / skip / schedule-change responses now lists who is being told (the
   emails go out after the response), not who was already sent to.

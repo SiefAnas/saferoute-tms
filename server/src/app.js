@@ -20,6 +20,7 @@ const parentPortalRoutes = require('./routes/parentPortal');
 const dashboardRoutes = require('./routes/dashboard');
 const scheduleChangesRoutes = require('./routes/scheduleChanges');
 const companyRoutes = require('./routes/companies');
+const monitorRoutes = require('./routes/monitors');
 
 function createApp() {
   const app = express();
@@ -67,6 +68,8 @@ function createApp() {
   app.use('/dashboard', dashboardRoutes);
   app.use('/schedule-changes', scheduleChangesRoutes);
   app.use('/companies', companyRoutes);
+  app.use('/monitors', monitorRoutes.admin);
+  app.use('/monitor', monitorRoutes.self);
 
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
 

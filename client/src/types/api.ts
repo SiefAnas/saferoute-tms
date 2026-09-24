@@ -1,7 +1,7 @@
 // Types mirror the API's actual response shapes (server/src/services/*.js), not aspirational
 // ones — see individual routes for the source of truth.
 
-export type Role = 'driver' | 'company_admin' | 'school_admin' | 'school_staff' | 'parent'
+export type Role = 'driver' | 'company_admin' | 'school_admin' | 'school_staff' | 'parent' | 'monitor'
 export type TenantType = 'company' | 'school'
 
 // Shape returned by POST /auth/login's `user` field.
@@ -360,6 +360,46 @@ export interface PayRule {
   updated_at: string
 }
 
+// Monitors (monitor-role). GET /monitors (company admin): each monitor with the driver they ride
+// with and whether they're checked in right now.
+export interface MonitorAssignment {
+  id: string
+  driver_user_id: string
+  driver_name: string
+  driver_phone: string | null
+  days_of_week: number[] // ISO weekdays, 1 = Monday
+  shift_period: 'morning' | 'afternoon' | 'both'
+}
+
+export interface MonitorOpenSession {
+  id: string
+  shift_period: ShiftPeriod | null
+  check_in_at: string
+}
+
+export interface Monitor {
+  id: string
+  email: string
+  full_name: string
+  role: 'monitor'
+  phone: string | null
+  is_active: boolean
+  created_by_user_id: string | null
+  must_change_password: boolean
+  assignment: MonitorAssignment | null
+  open_session: MonitorOpenSession | null
+}
+
+// GET /monitor/me: the monitor's own screen. No student data, by design.
+export interface MonitorHome {
+  monitor: { id: string; full_name: string }
+  assignment: { days_of_week: number[]; shift_period: 'morning' | 'afternoon' | 'both' } | null
+  driver: { full_name: string; phone: string | null } | null
+  van: { id: string; number: string | null; license_plate: string; brand: string; model: string; color: string | null } | null
+  open_session: MonitorOpenSession | null
+  today_sessions: { id: string; shift_period: ShiftPeriod | null; check_in_at: string; check_out_at: string | null; duration_minutes: number | null }[]
+}
+
 export interface PaySummary {
   driver_id: string
   rate_type: RateType
@@ -474,6 +514,7 @@ export interface AbsentTodayEntry {
 // GET /payroll/summary/company — company-wide payroll snippet for the Dashboard.
 export interface CompanyPayrollSummary {
   driver_count: number
+  monitor_count?: number // monitor-role: monitors' hours and pay are in the totals too
   total_minutes: number
   total_pay_cents: number
 }

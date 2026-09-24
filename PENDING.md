@@ -7,7 +7,7 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 
 ## Needs Anas
 - **Overnight branches (chain, merge in this order)**: `fix-phone-test` → `stops-and-extra-addresses`
-  (migration **023**) → `monitor-role` → `mobile-admin-roles`. See `OVERNIGHT_PROGRESS.md`. Run
+  (migration **023**) → `monitor-role` (migration **024**) → `mobile-admin-roles`. See `OVERNIGHT_PROGRESS.md`. Run
   `npm run migrate:up` on Neon with each branch that adds a migration.
 - **Review `assignment-weekdays`**: days of the week on assignments (default Mon–Fri, existing ones
   get Mon–Fri), checkboxes on the assignment form, and every "today"/week view uses them. Has
