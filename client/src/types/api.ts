@@ -100,6 +100,8 @@ export interface ParentTransportEntry {
   driver: { full_name: string; phone: string | null } | null
   pickup_time: string | null
   dropoff_time: string | null
+  days_of_week: number[] // ISO weekdays, 1 = Monday ... 7 = Sunday
+  runs_today: boolean // false on a day this ride doesn't run (e.g. the weekend)
 }
 
 export interface ParentStudentDetail {
@@ -250,6 +252,7 @@ export interface Assignment {
   shift_period: AssignmentShiftPeriod
   pickup_time: string | null // "HH:MM:SS", Postgres time formatting
   dropoff_time: string | null
+  days_of_week: number[] // ISO weekdays it runs, 1 = Monday ... 7 = Sunday (default Mon–Fri)
   created_at: string
   updated_at: string
 }

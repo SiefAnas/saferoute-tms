@@ -241,7 +241,7 @@ export function DriverTodayPage() {
           <span className="text-[13px] text-muted">
             {counts[shift === 'morning' ? 'afternoon' : 'morning'] > 0
               ? `You have students on the ${shift === 'morning' ? 'afternoon' : 'morning'} shift.`
-              : 'Nobody is assigned to you today. The office sets this up on Assignments.'}
+              : 'No runs for you today. The Week tab shows the days you drive.'}
           </span>
         </div>
       ) : (

@@ -20,6 +20,14 @@ export function rangesOverlap(aStart: string, aEnd: string | null, bStart: strin
 interface Range {
   start_date: string
   end_date: string | null
+  days_of_week?: number[] // the candidate's days; missing = Monday to Friday
+}
+
+// Mirrors the server's daysOverlap: two assignments only meet on days both run.
+export function daysOverlap(a: number[] | undefined, b: number[] | undefined): boolean {
+  const aDays = a ?? [1, 2, 3, 4, 5]
+  const bDays = b ?? [1, 2, 3, 4, 5]
+  return aDays.some((d) => bDays.includes(d))
 }
 
 // Mirrors server/src/services/assignmentConflicts.js's shiftsOverlap: 'both' overlaps
@@ -30,7 +38,12 @@ export function shiftsOverlap(a: Assignment['shift_period'], b: Assignment['shif
 }
 
 function overlapping(assignments: Assignment[], range: Range, excludeId?: string): Assignment[] {
-  return assignments.filter((a) => a.id !== excludeId && rangesOverlap(range.start_date, range.end_date, a.start_date, a.end_date))
+  return assignments.filter(
+    (a) =>
+      a.id !== excludeId &&
+      rangesOverlap(range.start_date, range.end_date, a.start_date, a.end_date) &&
+      daysOverlap(range.days_of_week, a.days_of_week),
+  )
 }
 
 // The van a driver is already driving during this date range, if any (there should be at

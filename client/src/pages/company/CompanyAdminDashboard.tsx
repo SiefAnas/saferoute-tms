@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { localISODate } from '../../lib/localDate'
-import { firstName, greeting, isAssignmentActiveToday, isToday } from '../../lib/format'
+import { firstName, greeting, isToday } from '../../lib/format'
+import { assignmentRunsToday } from '../../lib/weekdays'
 import { Card, CardHeader, CardTitle } from '../../components/Card'
 import { Button } from '../../components/Button'
 import { IconTile } from '../../components/EmptyState'
@@ -95,7 +96,8 @@ export function CompanyAdminDashboard() {
   const absent = useMemo(() => absentQuery.data ?? [], [absentQuery.data])
 
   const view = useMemo(() => {
-    const inRun = (a: Assignment) => isAssignmentActiveToday(a.start_date, a.end_date) && (a.shift_period === run || a.shift_period === 'both')
+    // Today's run: in its date range AND on today's weekday (a Mon–Fri run isn't expected on Saturday).
+    const inRun = (a: Assignment) => assignmentRunsToday(a) && (a.shift_period === run || a.shift_period === 'both')
     const runAssignments = (assignmentsQuery.data ?? []).filter(inRun)
     const sessionUser = new Map(sessions.map((s) => [s.id, s.user_id]))
     const runTrips = (tripsQuery.data ?? []).filter((t) => isToday(t.created_at) && t.shift_period === run)

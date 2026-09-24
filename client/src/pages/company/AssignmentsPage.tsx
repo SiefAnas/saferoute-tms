@@ -15,6 +15,8 @@ import { formatCalendarMonthDay, formatTimeOfDay } from '../../lib/format'
 import { calendarDateOf, localISODate } from '../../lib/localDate'
 import { vanLabel, vanShort } from '../../lib/fleet'
 import { driverCurrentVanId, studentsTakenByOtherDrivers, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
+import { formatWeekdays, MON_TO_FRI } from '../../lib/weekdays'
+import { WeekdayPicker } from '../../components/WeekdayPicker'
 import type { Assignment, AssignmentShiftPeriod, PublicUser, ScheduleOverride, Student, Van } from '../../types/api'
 
 const SHIFT_LABELS: Record<AssignmentShiftPeriod, string> = { morning: 'Morning', afternoon: 'Afternoon', both: 'Both' }
@@ -84,6 +86,7 @@ export function AssignmentsPage() {
   const [shiftPeriod, setShiftPeriod] = useState<AssignmentShiftPeriod>('both')
   const [pickupTime, setPickupTime] = useState('')
   const [dropoffTime, setDropoffTime] = useState('')
+  const [days, setDays] = useState<number[]>(MON_TO_FRI)
   const [formError, setFormError] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
 
@@ -103,7 +106,7 @@ export function AssignmentsPage() {
 
   // Live conflict filtering (§7 item 3) — computed against today when no start date is
   // picked yet, so the picker is already narrowed before the user gets to the date field.
-  const range = useMemo(() => ({ start_date: startDate || today, end_date: null }), [startDate, today])
+  const range = useMemo(() => ({ start_date: startDate || today, end_date: null, days_of_week: days }), [startDate, today, days])
   const lockedVanId = driverId ? driverCurrentVanId(assignments, driverId, range) : null
   const excludedVanIds = driverId ? vansTakenByOtherDrivers(assignments, driverId, range) : new Set<string>()
   const excludedStudentIds = driverId ? studentsTakenByOtherDrivers(assignments, driverId, range, shiftPeriod) : new Set<string>()
@@ -127,6 +130,7 @@ export function AssignmentsPage() {
         shift_period: shiftPeriod,
         pickup_time: pickupTime || undefined,
         dropoff_time: dropoffTime || undefined,
+        days_of_week: days,
       }),
     onSuccess: (a) => {
       invalidate()
@@ -138,6 +142,7 @@ export function AssignmentsPage() {
       setShiftPeriod('both')
       setPickupTime('')
       setDropoffTime('')
+      setDays(MON_TO_FRI)
       setShowAddModal(false)
     },
     onError: (err) => setFormError(err instanceof ApiError ? err.message : 'Could not create assignment.'),
@@ -165,7 +170,7 @@ export function AssignmentsPage() {
   // Current first, then upcoming, then ended; newest start first inside each.
   const order = (a: Assignment) => (statusOf(a).current ? 0 : statusOf(a).label === 'Ended' ? 2 : 1)
   const sorted = [...assignments].sort((x, y) => order(x) - order(y) || y.start_date.localeCompare(x.start_date))
-  const visibleAssignments = sorted.filter((a) => matches(q, nameOf(a), driverOf(a), plateOf(a), SHIFT_LABELS[a.shift_period]))
+  const visibleAssignments = sorted.filter((a) => matches(q, nameOf(a), driverOf(a), plateOf(a), SHIFT_LABELS[a.shift_period], formatWeekdays(a.days_of_week)))
   const visibleUnassigned = unassigned.filter((s) => matches(q, s.full_name))
   const detail = assignments.find((a) => a.id === detailId) ?? null
   const loading = assignmentsQuery.isLoading || studentsQuery.isLoading
@@ -252,7 +257,10 @@ export function AssignmentsPage() {
                     <span className="truncate font-medium text-ink">{driverOf(a)}</span>
                     <span className="truncate text-[12px] text-muted">{plateOf(a)}</span>
                   </span>
-                  <span className="text-ink-sub">{SHIFT_LABELS[a.shift_period]}</span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="text-ink-sub">{SHIFT_LABELS[a.shift_period]}</span>
+                    <span className="truncate text-[12px] text-muted">{formatWeekdays(a.days_of_week)}</span>
+                  </span>
                   <span className="text-ink-sub tabular">{times(a) || '—'}</span>
                   <span className="text-ink-sub tabular">{dateRange(a)}</span>
                   <span>
@@ -342,6 +350,7 @@ export function AssignmentsPage() {
                 <Input required type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </Field>
             </div>
+            <WeekdayPicker value={days} onChange={setDays} />
             <div className="grid grid-cols-2 gap-3">
               <Field label="Usual pickup time">
                 <Input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} disabled={shiftPeriod === 'afternoon'} />
@@ -394,6 +403,7 @@ function AssignmentDrawer({
   const [editPickup, setEditPickup] = useState('')
   const [editDropoff, setEditDropoff] = useState('')
   const [editShift, setEditShift] = useState<AssignmentShiftPeriod>('both')
+  const [editDays, setEditDays] = useState<number[]>(MON_TO_FRI)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -401,17 +411,24 @@ function AssignmentDrawer({
     setEditPickup(a.pickup_time ? a.pickup_time.slice(0, 5) : '')
     setEditDropoff(a.dropoff_time ? a.dropoff_time.slice(0, 5) : '')
     setEditShift(a.shift_period)
+    setEditDays(a.days_of_week ?? MON_TO_FRI)
     setEditing(true)
   }
 
   const fail = (fallback: string) => (err: unknown) => setError(err instanceof ApiError ? err.message : fallback)
 
   const updateTimes = useMutation({
-    mutationFn: () => api.patch<Assignment>(`/assignments/${a.id}`, { pickup_time: editPickup || null, dropoff_time: editDropoff || null, shift_period: editShift }),
+    mutationFn: () =>
+      api.patch<Assignment>(`/assignments/${a.id}`, {
+        pickup_time: editPickup || null,
+        dropoff_time: editDropoff || null,
+        shift_period: editShift,
+        days_of_week: editDays,
+      }),
     onSuccess: () => {
       invalidate()
       setEditing(false)
-      onToast('Usual times saved')
+      onToast('Schedule saved')
     },
     onError: fail('Could not save the times.'),
   })
@@ -487,7 +504,7 @@ function AssignmentDrawer({
         ]}
       />
 
-      <DrawerSection title="Shift and usual times">
+      <DrawerSection title="Days, shift and usual times">
         {editing ? (
           <form
             className="flex flex-col gap-3"
@@ -504,6 +521,7 @@ function AssignmentDrawer({
                 <option value="afternoon">Afternoon only</option>
               </Select>
             </Field>
+            <WeekdayPicker value={editDays} onChange={setEditDays} />
             <div className="grid grid-cols-2 gap-3">
               <Field label="Pickup">
                 <Input type="time" value={editPickup} onChange={(e) => setEditPickup(e.target.value)} />
@@ -517,14 +535,14 @@ function AssignmentDrawer({
                 Cancel
               </Button>
               <Button type="submit" size="sm" disabled={updateTimes.isPending}>
-                {updateTimes.isPending ? 'Saving…' : 'Save times'}
+                {updateTimes.isPending ? 'Saving…' : 'Save'}
               </Button>
             </div>
           </form>
         ) : (
           <div className="flex items-center justify-between gap-3 rounded-m border border-line px-3 py-2.5 text-[14px]">
             <span className="text-ink">
-              {SHIFT_LABELS[a.shift_period]}
+              {formatWeekdays(a.days_of_week)} · {SHIFT_LABELS[a.shift_period]}
               <span className="text-muted">
                 {a.shift_period !== 'afternoon' ? ` · pickup ${formatTimeOfDay(a.pickup_time)}` : ''}
                 {a.shift_period !== 'morning' ? ` · drop-off ${formatTimeOfDay(a.dropoff_time)}` : ''}

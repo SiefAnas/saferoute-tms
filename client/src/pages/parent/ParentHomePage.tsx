@@ -117,8 +117,12 @@ function ChildView({ student }: { student: Student }) {
   if (detailQuery.isLoading || !d) return <p className="px-5 text-[14px] text-muted">Loading…</p>
 
   const transport = d.transport
-  const morning = transport.find((t) => t.shift_period !== 'afternoon')
-  const afternoon = transport.find((t) => t.shift_period !== 'morning')
+  // Today's times come only from rides that run on today's weekday (runs_today); the driver
+  // cards below still show every ride.
+  const today = transport.filter((t) => t.runs_today !== false)
+  const noRideToday = transport.length > 0 && today.length === 0
+  const morning = today.find((t) => t.shift_period !== 'afternoon')
+  const afternoon = today.find((t) => t.shift_period !== 'morning')
   const pickupTrip = d.trips_today.find((t) => t.trip_type === 'pickup')
   const dropoffTrip = d.trips_today.find((t) => t.trip_type === 'dropoff')
 
@@ -129,19 +133,20 @@ function ChildView({ student }: { student: Student }) {
   else if (pickupTrip?.status === 'complete') banner = { tone: 'success', icon: 'school', text: `Arrived at school ${formatClock(pickupTrip.completed_at ?? pickupTrip.created_at)}` }
   else if (pickupTrip) banner = { tone: 'caution', icon: 'directions_bus', text: `Dropped at school ${formatClock(pickupTrip.created_at)}, waiting for the school to confirm` }
   else if (transport.length === 0) banner = { tone: 'neutral', icon: 'no_transfer', text: 'No ride set up yet' }
+  else if (noRideToday) banner = { tone: 'neutral', icon: 'event_busy', text: 'No ride today' }
   else if (!morning) banner = { tone: 'neutral', icon: 'wb_sunny', text: 'Afternoon ride only' }
   else banner = morning.pickup_time ? { tone: 'neutral', icon: 'schedule', text: `Pickup at ${formatTimeOfDay(morning.pickup_time)}` } : null
 
   const rows = [
     {
       label: 'Morning pickup',
-      value: d.skip_today ? 'Skipped today' : morning ? `${formatTimeOfDay(morning.pickup_time)} · Home` : 'No ride',
+      value: d.skip_today ? 'Skipped today' : morning ? `${formatTimeOfDay(morning.pickup_time)} · Home` : noRideToday ? 'No ride today' : 'No ride',
     },
     {
       label: 'Arrives at school',
       value: pickupTrip?.status === 'complete' ? `${formatClock(pickupTrip.completed_at ?? pickupTrip.created_at)} · ${d.school.name ?? 'School'}` : (d.school.name ?? '—'),
     },
-    { label: 'Afternoon drop-off', value: afternoon ? `${formatTimeOfDay(afternoon.dropoff_time)} · Home` : 'No ride' },
+    { label: 'Afternoon drop-off', value: afternoon ? `${formatTimeOfDay(afternoon.dropoff_time)} · Home` : noRideToday ? 'No ride today' : 'No ride' },
   ]
 
   // One driver card per distinct driver (split students can have two).
