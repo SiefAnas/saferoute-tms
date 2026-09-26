@@ -1,5 +1,7 @@
 # SafeRoute / TMS
 
+© 2026 Anas Sief. All rights reserved.
+
 Multi-tenant Transportation Management System — React + Node/Express + PostgreSQL.
 Single source of truth for scope/architecture: `TMS_PROJECT_SPEC_1.md` (v2).
 
