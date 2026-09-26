@@ -28,8 +28,11 @@ You need: a Windows PC with **Node.js 20 or newer** (https://nodejs.org, the "LT
    ```powershell
    git clone https://github.com/SiefAnas/saferoute-tms.git saferoute-mobile
    cd saferoute-mobile
-   git checkout mobile-app
+   git checkout main
    ```
+   **Already have it?** Get the latest app before testing: `git checkout main`, `git pull`,
+   then step 3 again (`npm install`). The old `mobile-app` branch is out of date (no admin,
+   monitor or school screens).
 3. **Install the app's packages** (one time, takes a few minutes):
    ```powershell
    cd mobile
