@@ -1,4 +1,5 @@
 import { Suspense, useCallback, useMemo, useState, type ReactNode } from 'react'
+import { Copyright } from '../components/Copyright'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -243,6 +244,7 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
               <Suspense fallback={<p className="text-[14px] text-muted">Loading…</p>}>
                 <Outlet />
               </Suspense>
+              <Copyright className="mt-6" />
             </div>
           </div>
         </main>

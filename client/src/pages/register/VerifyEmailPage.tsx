@@ -1,3 +1,4 @@
+import { Copyright } from '../../components/Copyright'
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -42,7 +43,7 @@ export function VerifyEmailPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface p-4">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-2 bg-surface p-4">
       <div className="flex w-full max-w-[440px] flex-col items-center gap-4 rounded-card bg-surface shadow-card p-8 text-center">
         {!token ? (
           <>
@@ -100,6 +101,7 @@ export function VerifyEmailPage() {
           </>
         )}
       </div>
+      <Copyright />
     </main>
   )
 }

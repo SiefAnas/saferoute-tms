@@ -1,3 +1,4 @@
+import { Copyright } from '../../components/Copyright'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -147,7 +148,7 @@ export function RegisterPage() {
 
   if (pendingClaimEmail) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-surface p-4">
+      <main className="flex min-h-screen flex-col items-center justify-center gap-2 bg-surface p-4">
         <div className="flex w-full max-w-[440px] flex-col items-center gap-4 rounded-card bg-surface shadow-card p-8 text-center">
           <span className="material-symbols-outlined !text-[40px] text-primary">mark_email_read</span>
           <h1 className="text-headline-md text-primary">Check your email</h1>
@@ -159,12 +160,13 @@ export function RegisterPage() {
             Back to sign in
           </Link>
         </div>
-      </main>
+        <Copyright />
+    </main>
     )
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface p-4">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-2 bg-surface p-4">
       <div className="flex w-full max-w-[480px] flex-col gap-6 rounded-card bg-surface shadow-card p-8">
         <div className="flex flex-col items-center gap-2 text-center">
           <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-lg bg-primary-container">
@@ -361,6 +363,7 @@ export function RegisterPage() {
           Already have an account? Sign in
         </Link>
       </div>
+      <Copyright />
     </main>
   )
 }

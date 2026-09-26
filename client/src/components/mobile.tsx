@@ -2,6 +2,7 @@ import { createContext, Suspense, useCallback, useContext, useEffect, useState, 
 import { createPortal } from 'react-dom'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
+import { Copyright } from './Copyright'
 import { useComingSoon } from './ComingSoon'
 import { useAuth } from '../lib/auth'
 import { LG_QUERY, MD_QUERY, useMediaQuery } from '../lib/useMediaQuery'
@@ -54,6 +55,7 @@ function PhoneShell({ title, sub, onLogout, tabs, children }: ShellProps) {
           <ThumbSlotContext.Provider value={thumbSlot}>
             <Suspense fallback={<p className="px-5 pt-6 text-[14px] text-muted">Loading…</p>}>{children}</Suspense>
           </ThumbSlotContext.Provider>
+          <Copyright className="mt-auto pt-6" />
         </div>
         <div ref={slotRef} />
         <nav className="grid shrink-0 border-t border-line bg-surface pt-2 pb-[max(24px,env(safe-area-inset-bottom))]" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
@@ -214,6 +216,7 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
               <ThumbSlotContext.Provider value={thumbSlot}>
                 <Suspense fallback={<p className="text-[14px] text-muted">Loading…</p>}>{children}</Suspense>
               </ThumbSlotContext.Provider>
+              <Copyright className="mt-6" />
             </div>
           </div>
           <div ref={slotRef} className="shrink-0 empty:hidden" />

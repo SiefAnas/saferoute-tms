@@ -1,3 +1,4 @@
+import { Copyright } from '@/components/Copyright'
 import { useEffect, useState } from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
 import { useRouter } from 'expo-router'
@@ -143,6 +144,7 @@ export default function LoginScreen() {
             Forgot password?
           </Text>
         </Pressable>
+        <Copyright />
       </ScrollView>
     </KeyboardAvoidingView>
   )

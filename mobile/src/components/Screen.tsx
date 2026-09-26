@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { RefreshControl, ScrollView, View } from 'react-native'
 import { useColors } from '@/theme/theme'
+import { Copyright } from './Copyright'
 
 // Every tab screen: a scroll area on the page background, pull-to-refresh, and the design's
 // thumb action bar pinned above the tab bar. The bar's real height is measured so the scroll
@@ -22,7 +23,7 @@ export function Screen({
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: barHeight + 24 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: barHeight + 24 }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           onRefresh ? (
@@ -31,6 +32,9 @@ export function Screen({
         }
       >
         {children}
+        <View style={{ flex: 1, justifyContent: 'flex-end', paddingTop: 16 }}>
+          <Copyright />
+        </View>
       </ScrollView>
       {thumbBar ? (
         <View
