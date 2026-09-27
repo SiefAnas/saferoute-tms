@@ -46,8 +46,8 @@ you can only send successfully from their shared `onboarding@resend.dev` address
 *to* the email address your Resend account itself is registered under. If `MAIL_FROM` is
 set to an address on a domain you haven't verified in Resend, sends will fail (or silently
 not reach real users) even though the API key is valid. Two options:
-- **Testing now, domain not verified yet:** set `MAIL_FROM=SafeRoute TMS <onboarding@resend.dev>` (the mailer's own default if you leave `MAIL_FROM` unset) and only expect delivery to your own Resend account email while verifying the pipe works.
-- **Verified domain:** set `MAIL_FROM` to a real address on that domain, e.g. `SafeRoute TMS <notifications@yourdomain.com>`.
+- **Testing now, domain not verified yet:** set `MAIL_FROM=SafeTurns <onboarding@resend.dev>` (the mailer's own default if you leave `MAIL_FROM` unset) and only expect delivery to your own Resend account email while verifying the pipe works.
+- **Verified domain:** set `MAIL_FROM` to a real address on that domain, e.g. `SafeTurns <notifications@yourdomain.com>`.
 
 **After setting these**, ping whichever session picks this up next and it can trigger a
 real send by hitting a live endpoint that calls `sendMail` (registration or

@@ -26,7 +26,7 @@ export default function UnsupportedRoleScreen() {
     >
       <EmptyState
         icon="desktop-windows"
-        title="Please use the SafeRoute website for your account"
+        title="Please use the SafeTurns website for your account"
         body="This version of the app has no screens for your account yet. Everything is on the website, or update the app."
       />
       <View style={{ paddingHorizontal: 16 }}>

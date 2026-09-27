@@ -106,7 +106,7 @@ export function ForgotPasswordPage() {
       ) : (
         <form className="flex w-full flex-col gap-5" onSubmit={handleSubmit}>
           <Field label="Email address">
-            <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@saferoute.com" />
+            <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@safeturns.com" />
           </Field>
           <ErrorLine error={error} />
           <Button type="submit" size="lg" disabled={sending} className="w-full">

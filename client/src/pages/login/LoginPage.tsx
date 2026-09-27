@@ -35,7 +35,7 @@ export function LoginPage() {
   }
 
   return (
-    <AuthScreen title="SafeRoute Logistics" subtitle="Sign in to your account">
+    <AuthScreen title="SafeTurns" subtitle="Sign in to your account">
       <form className="flex w-full flex-col gap-6" onSubmit={handleSubmit}>
         <div className="flex flex-col gap-2">
           <label className="px-1 text-[12px] font-semibold text-muted" htmlFor="email">
@@ -48,7 +48,7 @@ export function LoginPage() {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@saferoute.com"
+            placeholder="you@safeturns.com"
           />
         </div>
 

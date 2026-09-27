@@ -1,4 +1,4 @@
-# SafeRoute mobile app
+# SafeTurns mobile app
 
 Expo (React Native) app for every role:
 - **Drivers**: today's run, trips, week, pay.
@@ -47,7 +47,7 @@ You need: a Windows PC with **Node.js 20 or newer** (https://nodejs.org, the "LT
 5. **Open it on the phone:**
    - **iPhone:** open the normal **Camera** app, point it at the QR code, tap the banner.
    - **Android:** open **Expo Go** → "Scan QR code" → scan it.
-   The first load takes 20–60 seconds. Then the SafeRoute sign-in screen appears.
+   The first load takes 20–60 seconds. Then the SafeTurns sign-in screen appears.
 6. **Sign in** with any account (ask Anas for a test account; passwords are
    never stored in the repo). The first sign-in after a quiet period can take up to a minute
    while the free server wakes up; the app says so.

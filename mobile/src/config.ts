@@ -7,6 +7,6 @@ const extra = (Constants.expoConfig?.extra ?? {}) as { apiBaseUrl?: string; appN
 // Fallbacks only matter if the app somehow runs without its own manifest; they mirror
 // app.config.ts's defaults so the app still starts instead of crashing on launch.
 export const API_BASE_URL = extra.apiBaseUrl ?? 'https://saferoute-tms-api.onrender.com'
-export const APP_NAME = extra.appName ?? 'SafeRoute'
+export const APP_NAME = extra.appName ?? 'SafeTurns'
 // The website: admins open it for everything the app doesn't do (see WebsiteRow).
 export const WEB_URL = extra.webUrl ?? 'https://saferoute-tms-client.onrender.com'

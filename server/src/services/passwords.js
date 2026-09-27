@@ -100,9 +100,9 @@ async function requestPasswordReset(email) {
     sendInBackground(
       {
         to: user.email,
-        subject: 'Reset your SafeRoute password',
+        subject: 'Reset your SafeTurns password',
         text:
-          `Someone asked to reset the password for this SafeRoute account.\n\n` +
+          `Someone asked to reset the password for this SafeTurns account.\n\n` +
           `Set a new password here (the link works once, for ${RESET_TTL_MINUTES} minutes):\n` +
           `${appUrl}/reset-password?token=${raw}\n\n` +
           `If it wasn't you, ignore this email. Your password stays the same.`,

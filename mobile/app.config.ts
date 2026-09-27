@@ -2,9 +2,9 @@ import type { ExpoConfig } from 'expo/config'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The only place to change the app's identity or which API it talks to.
-// "SafeRoute" is a working name and will change before publishing, so keep it here.
+// "SafeTurns" is a working name and will change before publishing, so keep it here.
 // ─────────────────────────────────────────────────────────────────────────────
-const APP_NAME = 'SafeRoute'
+const APP_NAME = 'SafeTurns'
 const SLUG = 'saferoute'
 const SCHEME = 'saferoute'
 const BUNDLE_ID = 'com.saferoute.app' // ios.bundleIdentifier and android.package

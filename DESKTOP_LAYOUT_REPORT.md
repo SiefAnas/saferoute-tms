@@ -6,7 +6,7 @@ Date: 2026-09-23. Client only: no backend changes, same endpoints, same Coming s
 - **Phone (under 768px):** exactly the approved mobile design (3a driver, 5b parent). Same
   markup and classes as before: greeting header, scroll area, action bar, bottom tabs.
 - **Tablet and desktop (768px and wider):** a website shell in the admin pages' style:
-  - slate sidebar with the amber tile ("SafeRoute" + "Driver" / "Parent"), the tabs as sidebar
+  - slate sidebar with the amber tile ("SafeTurns" + "Driver" / "Parent"), the tabs as sidebar
     links (Week keeps its Coming soon, with a "Soon" chip), user, theme toggle and logout in the
     footer;
   - a top bar with the greeting and the date line (driver: date · van · plate);

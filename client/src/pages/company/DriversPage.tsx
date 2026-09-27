@@ -282,7 +282,7 @@ export function DriversPage() {
               <Input value={driverLicense} onChange={(e) => setDriverLicense(e.target.value)} />
             </Field>
             <p className="text-[13px] text-muted">
-              SafeRoute makes a temporary password for you to give the driver. They choose their own the first time they sign in.
+              SafeTurns makes a temporary password for you to give the driver. They choose their own the first time they sign in.
             </p>
             {addError && (
               <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">

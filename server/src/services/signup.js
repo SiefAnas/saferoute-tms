@@ -120,7 +120,7 @@ async function signupClaim(kind, claimId, { fullName, email, password }) {
     to: email,
     subject: 'Verify your email to finish claiming ' + result.orgName,
     text:
-      `You're claiming "${result.orgName}" on SafeRoute.\n` +
+      `You're claiming "${result.orgName}" on SafeTurns.\n` +
       `Verify your email to activate the account:\n` +
       `  token: ${result.raw}\n` +
       `This link expires in 24 hours.`,
@@ -200,7 +200,7 @@ async function verifyEmail(rawToken) {
       sendInBackground({
         to: creator.email,
         subject: `A placeholder you created was claimed: ${claimedOrg.name}`,
-        text: `The organization "${claimedOrg.name}" you added on SafeRoute has been claimed by its owner. You no longer have edit rights on its core details.`,
+        text: `The organization "${claimedOrg.name}" you added on SafeTurns has been claimed by its owner. You no longer have edit rights on its core details.`,
       }, 'placeholder_claimed');
     }
   }
@@ -237,7 +237,7 @@ async function resendVerification(email) {
     return newRaw;
   });
 
-  sendInBackground({ to: user.email, subject: 'Your SafeRoute verification link', text: `token: ${raw}\nExpires in 24 hours.` }, 'resend_verification');
+  sendInBackground({ to: user.email, subject: 'Your SafeTurns verification link', text: `token: ${raw}\nExpires in 24 hours.` }, 'resend_verification');
   return { ok: true };
 }
 

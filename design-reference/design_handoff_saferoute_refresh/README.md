@@ -1,12 +1,12 @@
-# Handoff: SafeRoute TMS visual refresh (Driver mobile + Company web)
+# Handoff: SafeTurns visual refresh (Driver mobile + Company web)
 
 ## Overview
-A visual modernization of the existing SafeRoute TMS React app (`client/`). There are no functional changes to the backend. It covers two directions the owner approved:
+A visual modernization of the existing SafeTurns React app (`client/`). There are no functional changes to the backend. It covers two directions the owner approved:
 - **Driver app (mobile, `/driver`)**: design **3a**. Minimal light theme, plus a dark theme in slate + amber.
 - **Company admin web (AdminLayout pages, starting with `/company/payroll`)**: design **3b**. Amber + slate, with light and dark themes.
 
 ## About the design files
-`SafeRoute Directions.dc.html` is an **HTML design reference**, not production code. Recreate it inside the existing React 19 + Tailwind v4 + react-router + TanStack Query codebase. Use its patterns: `index.css` `@theme` tokens, `Button`, `Card`, `StatusBadge`, `Modal`, and the layouts. **Approved designs:** `3a` (driver app), `3b` (Payroll), `4a` (Company dashboard), `5a` (all other company and school admin pages), `5b` (parent app). Turns 2 and 1 at the bottom of the file are earlier explorations; ignore them.
+`SafeTurns Directions.dc.html` is an **HTML design reference**, not production code. Recreate it inside the existing React 19 + Tailwind v4 + react-router + TanStack Query codebase. Use its patterns: `index.css` `@theme` tokens, `Button`, `Card`, `StatusBadge`, `Modal`, and the layouts. **Approved designs:** `3a` (driver app), `3b` (Payroll), `4a` (Company dashboard), `5a` (all other company and school admin pages), `5b` (parent app). Turns 2 and 1 at the bottom of the file are earlier explorations; ignore them.
 
 ## Fidelity
 **High-fidelity.** Colors, type, spacing, radii and interactions are final. All data in the mock is fake. Wire everything to the existing endpoints: `/sessions`, `/trips`, `/schedule/today`, `/schedule/:id/no-show`, `/students/:id`, `/schools/:id`, `/payroll/*`.
@@ -273,4 +273,4 @@ Uses the mobile tokens and dark mode from 3a. Bottom tabs: Students (`group`), P
 - Map areas from earlier turns are placeholders and not in scope.
 
 ## Files
-- `SafeRoute Directions.dc.html`: open it in a browser. The final designs are `#3a` (driver) and `#3b` (web). Everything is clickable.
+- `SafeTurns Directions.dc.html`: open it in a browser. The final designs are `#3a` (driver) and `#3b` (web). Everything is clickable.

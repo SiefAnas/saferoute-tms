@@ -175,7 +175,7 @@ export function MonitorsPage() {
               </Field>
             </div>
             <p className="text-[13px] text-muted">
-              SafeRoute makes a temporary password for you to give the monitor. They choose their own the first time they sign in.
+              SafeTurns makes a temporary password for you to give the monitor. They choose their own the first time they sign in.
             </p>
             {addError && (
               <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">

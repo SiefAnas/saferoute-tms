@@ -45,7 +45,7 @@ was nothing to rescue.
     icon is opaque RGB, because the App Store rejects an alpha channel.
   - Touch targets: shift tabs and compact buttons 44pt, child chips 36pt + hitSlop, and Coming
     soon rows min 44pt.
-  - "Still loading, SafeRoute may be waking up" after 6 s, on every loading state and under
+  - "Still loading, SafeTurns may be waking up" after 6 s, on every loading state and under
     Sign in.
   - Audited: every screen already had loading / error-with-Try-again / empty states and
     pull-to-refresh; every pressable has an accessibility role + label.
@@ -134,7 +134,7 @@ Same Wi-Fi, or `npx expo start --tunnel`.
 
 ## Known issues
 - Server: no-show / skip-pickup can answer 500 after saving (see above). The app copes.
-- Placeholder icon and the working name "SafeRoute" / bundle id `com.saferoute.app`: change
+- Placeholder icon and the working name "SafeTurns" / bundle id `com.saferoute.app`: change
   before a store build (`app.config.ts`).
 - `eas.json`'s `development` profile needs `expo-dev-client` installed first (not needed for
   Expo Go or preview/production builds).

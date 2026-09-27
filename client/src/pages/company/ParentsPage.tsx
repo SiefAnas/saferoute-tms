@@ -271,7 +271,7 @@ export function ParentsPage() {
               <Input required placeholder="Street, city, state, zip" value={address} onChange={(e) => setAddress(e.target.value)} />
             </Field>
             <p className="text-[13px] text-muted">
-              SafeRoute makes a temporary password for you to give the parent. They choose their own the first time they sign in.
+              SafeTurns makes a temporary password for you to give the parent. They choose their own the first time they sign in.
             </p>
 
             <Field label="Link to students (optional, can also be done later)">

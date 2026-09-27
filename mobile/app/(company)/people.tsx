@@ -289,7 +289,7 @@ function AddPersonSheet({ kind, onClose }: { kind: 'driver' | 'monitor'; onClose
             <TextInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="555-123-4567" placeholderTextColor={colors.faint} style={input} accessibilityLabel="Phone" />
           </Field>
           <Text size={13} color={colors.muted} style={{ lineHeight: 18 }}>
-            SafeRoute makes a temporary password for you to give the {noun}. They choose their own the first time they sign in.
+            SafeTurns makes a temporary password for you to give the {noun}. They choose their own the first time they sign in.
             {kind === 'monitor' ? ' Assign them to a driver on the website.' : ''}
           </Text>
           {error ? <ActionError message={error} /> : null}

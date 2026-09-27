@@ -1,4 +1,4 @@
-# PROJECT_STATE.md — SafeRoute TMS handoff snapshot
+# PROJECT_STATE.md — SafeTurns handoff snapshot
 
 *Last verified: 2026-07-18. Every number in this file was re-confirmed live (full test
 suite re-run, fresh `tsc`/`vite build`, live Neon query) immediately before writing it —

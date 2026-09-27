@@ -16,7 +16,7 @@
 const sentMessages = [];
 
 const MAIL_TIMEOUT_MS = () => Number(process.env.MAIL_TIMEOUT_MS) || 15_000;
-const FROM = () => process.env.MAIL_FROM || 'SafeRoute TMS <onboarding@resend.dev>';
+const FROM = () => process.env.MAIL_FROM || 'SafeTurns <onboarding@resend.dev>';
 
 let smtpTransport = null;
 function getSmtpTransport() {

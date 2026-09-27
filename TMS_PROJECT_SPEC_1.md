@@ -17,7 +17,7 @@ so it does not have to re-guess the vision from git history each time.
 
 ## 1. What this app is
 
-SafeRoute TMS is a multi-tenant Transportation Management System for school van/shuttle
+SafeTurns is a multi-tenant Transportation Management System for school van/shuttle
 services. It connects two kinds of organizations:
 
 - **Transportation companies** (own vans, employ drivers, get paid)
@@ -161,7 +161,7 @@ Single login page, all 4 roles. Password auth, JWT issued on success.
 
 ### 5.2 / 5.3 Claim and placeholder flow
 This solves a real chicken-and-egg problem: a company might add a school to their system
-before that school has ever signed up for SafeRoute themselves (or vice versa). So:
+before that school has ever signed up for SafeTurns themselves (or vice versa). So:
 
 - If you create a company/school placeholder for the "other side" (e.g. company_admin adds
   a new school while creating a student), that org starts as `unclaimed`.

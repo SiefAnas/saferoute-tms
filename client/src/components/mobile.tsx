@@ -143,7 +143,7 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
             <span className="material-symbols-outlined !text-[20px] text-on-amber">local_shipping</span>
           </span>
           <div className="flex min-w-0 flex-col">
-            <span className="truncate font-display text-[15px] font-bold text-sidebar-strong">SafeRoute</span>
+            <span className="truncate font-display text-[15px] font-bold text-sidebar-strong">SafeTurns</span>
             <span className="truncate text-[12px] text-sidebar-icon">{hubName}</span>
           </div>
         </div>

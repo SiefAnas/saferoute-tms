@@ -5,7 +5,7 @@ const { autoCompleteStaleTrips } = require('./services/trips');
 
 const app = createApp();
 app.listen(port, () => {
-  console.log(`SafeRoute API listening on http://localhost:${port}`);
+  console.log(`SafeTurns API listening on http://localhost:${port}`);
 });
 
 // In-process sweep for the trip 5-minute auto-complete (idempotent; safe across instances).

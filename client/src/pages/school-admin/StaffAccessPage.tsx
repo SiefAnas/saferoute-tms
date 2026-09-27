@@ -178,7 +178,7 @@ export function StaffAccessPage() {
               <Input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
             <p className="text-[13px] text-muted">
-              SafeRoute makes a temporary password for you to give them. They choose their own the first time they sign in.
+              SafeTurns makes a temporary password for you to give them. They choose their own the first time they sign in.
             </p>
             {createError && (
               <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">

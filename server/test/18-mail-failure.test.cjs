@@ -163,7 +163,7 @@ async function main() {
 
       console.log('\n--- Resend HTTP API transport (fake fetch) ---');
       process.env.RESEND_API_KEY = 're_test_key';
-      process.env.MAIL_FROM = 'SafeRoute <noreply@example.test>';
+      process.env.MAIL_FROM = 'SafeTurns <noreply@example.test>';
       let seen = null;
       mailer._useTransport('resend-api', async (url, init) => {
         seen = { url, init };
@@ -174,7 +174,7 @@ async function main() {
       const sentBody = seen ? JSON.parse(seen.init.body) : {};
       eq('posts to api.resend.com/emails', seen?.url, 'https://api.resend.com/emails');
       eq('with the API key as a Bearer token', seen?.init.headers.Authorization, 'Bearer re_test_key');
-      eq('from MAIL_FROM, to the recipient, subject + text', `${sentBody.from}|${sentBody.to}|${sentBody.subject}|${sentBody.text}`, 'SafeRoute <noreply@example.test>|parent@co.com|Hello|Body');
+      eq('from MAIL_FROM, to the recipient, subject + text', `${sentBody.from}|${sentBody.to}|${sentBody.subject}|${sentBody.text}`, 'SafeTurns <noreply@example.test>|parent@co.com|Hello|Body');
 
       errorLines.length = 0;
       mailer._useTransport('resend-api', (url, init) => new Promise((_, reject) => {

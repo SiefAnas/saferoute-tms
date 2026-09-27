@@ -78,7 +78,7 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
 }
 
 export const SLOW_AFTER_MS = 6000
-export const SLOW_MESSAGE = 'Still loading. SafeRoute may be waking up, this can take up to a minute.'
+export const SLOW_MESSAGE = 'Still loading. SafeTurns may be waking up, this can take up to a minute.'
 
 // One place that turns a thrown error into something a driver or parent can act on.
 // A NetworkError gets "Try again" (the API is on a plan that spins down, so the first call
@@ -91,7 +91,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry: () => 
       title={offline ? 'No connection' : 'Something went wrong'}
       body={
         offline
-          ? 'SafeRoute could not be reached. Check your signal and try again — the first try after a quiet period can take a few seconds.'
+          ? 'SafeTurns could not be reached. Check your signal and try again — the first try after a quiet period can take a few seconds.'
           : error instanceof ApiError
             ? error.message
             : 'Please try again.'
@@ -126,7 +126,7 @@ export function ActionError({ message }: { message: string }) {
 // A 5xx carries no useful text ("internal server error"), and the server may have saved the
 // action before failing, so say that plainly instead of implying nothing happened.
 export const SERVER_ERROR_MESSAGE =
-  'SafeRoute had a problem finishing this. The screen has been refreshed: check whether it went through before trying again.'
+  'SafeTurns had a problem finishing this. The screen has been refreshed: check whether it went through before trying again.'
 
 export function messageFor(error: unknown, fallback: string): string {
   if (error instanceof ApiError && error.status >= 500) return SERVER_ERROR_MESSAGE

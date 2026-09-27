@@ -16,7 +16,7 @@ export class ApiError extends Error {
 // service taking longer than our timeout to wake up. Separated from ApiError so screens can
 // offer "Try again" instead of showing a server message that doesn't exist.
 export class NetworkError extends Error {
-  constructor(message = 'Could not reach SafeRoute. Check your connection and try again.') {
+  constructor(message = 'Could not reach SafeTurns. Check your connection and try again.') {
     super(message)
     this.name = 'NetworkError'
   }
@@ -105,6 +105,6 @@ function fallbackMessage(status: number): string {
   if (status === 401) return 'Your session has ended. Please sign in again.'
   if (status === 404) return 'Not found.'
   if (status === 429) return 'Too many attempts. Please wait a few minutes and try again.'
-  if (status >= 500) return 'SafeRoute had a problem. Please try again in a moment.'
+  if (status >= 500) return 'SafeTurns had a problem. Please try again in a moment.'
   return `Request failed (${status}).`
 }

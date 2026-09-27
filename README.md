@@ -1,8 +1,14 @@
-# SafeRoute / TMS
+# SafeTurns
 
 © 2026 Anas Sief. All rights reserved.
 
-Multi-tenant Transportation Management System — React + Node/Express + PostgreSQL.
+SafeTurns is a multi-tenant school transportation management system: transport companies run
+drivers, monitors, vans and routes; schools confirm pickups and drop-offs; parents follow their
+children's rides. Web app (React), mobile app (Expo), API (Node/Express + PostgreSQL).
+
+(Formerly "SafeRoute TMS". Technical names keep `saferoute`: the GitHub repo, the Render
+service URLs, the database names, the mobile bundle id / Expo slug / link scheme and the
+browser storage keys, so nothing breaks and nobody is signed out.)
 Single source of truth for scope/architecture: `TMS_PROJECT_SPEC_1.md` (v2).
 
 > Fresh rewrite of an earlier native-Android prototype, rebuilt as a multi-tenant web SaaS.
