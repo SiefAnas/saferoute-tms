@@ -227,6 +227,8 @@ async function main() {
       const asg2 = await api('POST', '/assignments', adminA, {
         student_id: stu.body.id, driver_user_id: driverAId, van_id: vanA.id, start_date: '2020-01-01',
         pickup_time: '07:30', dropoff_time: '15:00',
+        // Every day, so the /schedule/today checks below also pass on weekends (default is Mon–Fri).
+        days_of_week: [1, 2, 3, 4, 5, 6, 7],
       });
       (asg2.status === 201 && asg2.body.pickup_time && asg2.body.dropoff_time)
         ? ok('assignment create accepts pickup_time/dropoff_time') : bad(`asg2 create: ${asg2.status} ${JSON.stringify(asg2.body)}`);
