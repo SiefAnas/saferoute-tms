@@ -556,3 +556,36 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* ---- SafeTurns logo (design-reference/brand/safeturns-logo) ----
+ * Only the logo follows the theme: amber in light, evergreen in dark. "on-light" / "on-dark" is
+ * what sits behind it; "auto" is for surfaces that flip with the theme (cards, auth card). The
+ * sidebar is dark slate in both themes, so it always uses on-dark. Used by components/Logo.tsx. */
+:root {
+  --logo-light-shield: #111318;
+  --logo-light-arrow: #f59e0b;
+  --logo-light-safe: #111318;
+  --logo-light-turns: #b86e00;
+  --logo-dark-shield: #f59e0b;
+  --logo-dark-arrow: #111318;
+  --logo-dark-safe: #faf8f3;
+  --logo-dark-turns: #f59e0b;
+  --logo-auto-shield: var(--logo-light-shield);
+  --logo-auto-arrow: var(--logo-light-arrow);
+  --logo-auto-safe: var(--logo-light-safe);
+  --logo-auto-turns: var(--logo-light-turns);
+}
+:root[data-theme='dark'] {
+  --logo-light-shield: #123c36;
+  --logo-light-arrow: #f5f0e6;
+  --logo-light-safe: #123c36;
+  --logo-light-turns: #23876a;
+  --logo-dark-shield: #f5f0e6;
+  --logo-dark-arrow: #123c36;
+  --logo-dark-safe: #f5f0e6;
+  --logo-dark-turns: #8fd9b8;
+  --logo-auto-shield: var(--logo-dark-shield);
+  --logo-auto-arrow: var(--logo-dark-arrow);
+  --logo-auto-safe: var(--logo-dark-safe);
+  --logo-auto-turns: var(--logo-dark-turns);
+}

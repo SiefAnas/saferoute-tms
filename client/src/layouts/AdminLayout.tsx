@@ -1,5 +1,6 @@
 import { Suspense, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { Copyright } from '../components/Copyright'
+import { Logo } from '../components/Logo'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
@@ -135,9 +136,11 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
         type="button"
         onClick={() => setCollapsed((c) => !c)}
         aria-label={collapsed ? 'Show sidebar' : 'Hide sidebar'}
-        className="flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-btn bg-amber hover:bg-amber-hover"
+        title={collapsed ? 'Show sidebar' : 'Hide sidebar'}
+        className="flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-btn transition-colors hover:bg-sidebar-hover"
       >
-        <span className="material-symbols-outlined !text-[20px] text-on-amber">local_shipping</span>
+        {/* The SafeTurns shield (on-dark: the sidebar is slate in both themes). */}
+        <Logo kind="mark" surface="dark" className="h-[30px]" />
       </button>
       {!rail && (
         <div className="flex min-w-0 flex-col">

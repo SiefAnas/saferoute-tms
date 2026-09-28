@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
 import { Copyright } from './Copyright'
+import { Logo } from './Logo'
 import { useComingSoon } from './ComingSoon'
 import { useAuth } from '../lib/auth'
 import { LG_QUERY, MD_QUERY, useMediaQuery } from '../lib/useMediaQuery'
@@ -138,14 +139,10 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
         aria-label="Menu"
         className={`flex w-60 shrink-0 flex-col gap-0.5 overflow-y-auto bg-sidebar px-3 py-[18px] ${desktop ? '' : 'fixed inset-y-0 left-0 z-50 shadow-drawer'}`}
       >
-        <div className="flex items-center gap-2.5 px-2 pb-5">
-          <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-btn bg-amber">
-            <span className="material-symbols-outlined !text-[20px] text-on-amber">local_shipping</span>
-          </span>
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate font-display text-[15px] font-bold text-sidebar-strong">SafeTurns</span>
-            <span className="truncate text-[12px] text-sidebar-icon">{hubName}</span>
-          </div>
+        <div className="flex flex-col gap-1.5 px-2 pb-5">
+          {/* The SafeTurns lockup, on-dark: this sidebar is slate in both themes. */}
+          <Logo kind="lockup" surface="dark" className="h-[26px]" />
+          <span className="truncate text-[12px] text-sidebar-icon">{hubName}</span>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5">
           {tabs.map((t) =>
