@@ -31,6 +31,8 @@ const listeners = new Set<() => void>()
 
 function apply(theme: Theme) {
   document.documentElement.setAttribute('data-theme', theme)
+  // The browser-tab icon follows the app's theme, not only the OS (favicon.svg alone would).
+  document.getElementById('favicon-svg')?.setAttribute('href', theme === 'dark' ? '/favicon-dark.svg' : '/favicon-light.svg')
   listeners.forEach((l) => l())
 }
 

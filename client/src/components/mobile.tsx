@@ -139,7 +139,7 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
         aria-label="Menu"
         className={`flex w-60 shrink-0 flex-col gap-0.5 overflow-y-auto bg-sidebar px-3 py-[18px] ${desktop ? '' : 'fixed inset-y-0 left-0 z-50 shadow-drawer'}`}
       >
-        <div className="flex flex-col gap-1.5 px-2 pb-5">
+        <div className="flex flex-col items-start gap-1.5 px-2 pb-5">
           {/* The SafeTurns lockup, on-dark: this sidebar is slate in both themes. */}
           <Logo kind="lockup" surface="dark" className="h-[26px]" />
           <span className="truncate text-[12px] text-sidebar-icon">{hubName}</span>
