@@ -8,6 +8,7 @@ import { Button } from '@/components/Button'
 import { Text } from '@/components/Text'
 import { ActionError, messageFor, SLOW_AFTER_MS, SLOW_MESSAGE } from '@/components/States'
 import { APP_NAME } from '@/config'
+import { Logo } from '@/components/Logo'
 import { destinationForRole } from '@/lib/roles'
 import { radius } from '@/theme/tokens'
 import { Field, inputStyle, PasswordInput } from '@/components/Form'
@@ -70,10 +71,9 @@ export default function LoginScreen() {
         }}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={{ gap: 6 }}>
-          <Text size={24} weight="semibold" style={{ letterSpacing: -0.5 }}>
-            {APP_NAME}
-          </Text>
+        <View style={{ gap: 10 }}>
+          {/* The SafeTurns lockup: the screen background flips with the theme, so surface "auto". */}
+          <Logo kind="lockup" surface="auto" height={36} accessibilityLabel={APP_NAME} />
           <Text size={14} color={colors.muted}>
             Sign in with the email and password your company gave you.
           </Text>
