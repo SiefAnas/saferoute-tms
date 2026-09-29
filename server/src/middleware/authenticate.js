@@ -11,6 +11,7 @@
 const pool = require('../db/pool');
 const { verifyJwt } = require('../auth/jwt');
 const { tenantTypeForRole } = require('../db/scoped');
+const { tempPasswordExpired } = require('../services/passwords');
 
 async function check(req, res, next, allowPasswordChange) {
   try {
@@ -28,7 +29,7 @@ async function check(req, res, next, allowPasswordChange) {
 
     const { rows } = await pool.query(
       `SELECT u.id, u.role, u.company_id, u.school_id, u.is_active, u.email_verified_at,
-              u.must_change_password, u.password_changed_at,
+              u.must_change_password, u.password_changed_at, u.temp_password_expires_at,
               COALESCE(c.claim_status, s.claim_status) AS org_claim_status
          FROM users u
          LEFT JOIN companies c ON c.id = u.company_id
@@ -42,6 +43,9 @@ async function check(req, res, next, allowPasswordChange) {
     }
     if (user.password_changed_at && claims.iat < Math.floor(new Date(user.password_changed_at).getTime() / 1000)) {
       return res.status(401).json({ error: 'your password was changed, please log in again' });
+    }
+    if (tempPasswordExpired(user)) {
+      return res.status(401).json({ error: 'This temporary password has expired. Ask your admin to reset it.', code: 'TEMP_PASSWORD_EXPIRED' });
     }
     if (user.must_change_password && !allowPasswordChange) {
       return res.status(403).json({ error: 'set a new password before continuing', code: 'PASSWORD_CHANGE_REQUIRED' });

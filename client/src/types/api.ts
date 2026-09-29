@@ -58,6 +58,9 @@ export interface PublicUser {
   email_verified_at: string | null
   created_by_user_id: string | null
   must_change_password: boolean // still on a temporary password
+  email_bounced?: boolean // mail to this address bounced; nothing is sent until it is corrected
+  account_status?: 'created' | 'never_logged_in' | 'active'
+  temp_password_expires_at?: string | null
 }
 
 // POST /users: the new account plus its temporary password, returned this one time only.
@@ -517,4 +520,32 @@ export interface CompanyPayrollSummary {
   monitor_count?: number // monitor-role: monitors' hours and pay are in the totals too
   total_minutes: number
   total_pay_cents: number
+}
+
+// Bulk import (docs/bulk-import-spec.md)
+export interface ImportField {
+  key: string
+  label: string
+  required: boolean
+}
+export interface ImportTypesResponse {
+  max_rows: number
+  types: { id: string; label: string; match_key: string; fields: ImportField[] }[]
+}
+export interface ImportPreview {
+  type: string
+  counts: { create: number; update: number; error: number }
+  rows: { index: number; action: 'create' | 'update' | 'error'; reason: string | null; note: string | null }[]
+}
+export interface ImportCredential {
+  full_name: string
+  email: string
+  role: Role
+  temporary_password: string
+}
+export interface ImportCommitResult {
+  type: string
+  counts: { created: number; updated: number; error: number }
+  rows: { index: number; status: 'created' | 'updated' | 'error'; reason: string | null }[]
+  credentials: ImportCredential[]
 }

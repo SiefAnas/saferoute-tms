@@ -10,6 +10,7 @@ process.env.NODE_ENV = 'test';
 process.env.RATE_LIMIT_FORCE = '1';
 process.env.RATE_LIMIT_LOGIN_MAX = '1000';
 process.env.RATE_LIMIT_RESET_MAX = '20';
+process.env.RATE_LIMIT_RESET_EMAIL_MAX = '20';
 
 const { createRecorder, startEmbeddedPostgres, runMigrateUp } = require('./lib/testkit.cjs');
 const createApp = require('../src/app.js');

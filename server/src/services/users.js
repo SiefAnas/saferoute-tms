@@ -14,7 +14,8 @@ const pool = require('../db/pool');
 const { hashPassword } = require('../auth/password');
 const { HttpError } = require('../errors');
 const { assertValidEmail, assertMaxLength } = require('../validate');
-const { generateTempPassword, setPassword } = require('./passwords');
+const { assignmentNotEndedSql } = require('../db/scoped');
+const { TEMP_PASSWORD_DAYS, generateTempPassword, setPassword, logPasswordReset } = require('./passwords');
 
 // Which roles a given admin role may create (same tenant side).
 const CREATABLE = {
@@ -68,6 +69,7 @@ async function createUser(req, body = {}) {
       email_verified_at: new Date().toISOString(),
       created_by_user_id: req.auth.userId,
       must_change_password: true,
+      temp_password_expires_at: new Date(Date.now() + TEMP_PASSWORD_DAYS * 86400_000).toISOString(),
     });
     return { ...publicUser(row), temporary_password: temporaryPassword };
   } catch (err) {
@@ -112,7 +114,11 @@ async function updateUser(req, id, body = {}) {
   if (body.email !== undefined) {
     assertValidEmail(body.email);
     patch.email = body.email;
+    // A corrected address gets a fresh start: mail to it was only being skipped because the old one bounced.
+    if (String(body.email).toLowerCase() !== String(existing.email).toLowerCase()) patch.email_bounced = false;
   }
+  if (patch.is_active !== undefined && typeof patch.is_active !== 'boolean') throw new HttpError(400, 'is_active must be true or false');
+  if (patch.is_active === false && existing.is_active) await assertNoActiveAssignments(req, existing);
   // Admins no longer set passwords directly: POST /users/:id/reset-password gives a temporary
   // one the user must replace, so the admin never knows the password the user keeps.
   if (body.password !== undefined) {
@@ -132,6 +138,35 @@ async function updateUser(req, id, body = {}) {
     if (err.code === '23505') throw new HttpError(409, 'email already registered');
     throw err;
   }
+}
+
+// Terminating = deactivating. A driver still on running or future assignments (or a monitor still
+// riding with a driver) can't be deactivated: the admin reassigns first, so no child is left
+// without a ride. Rows are never deleted; history stays.
+async function assertNoActiveAssignments(req, user) {
+  let count = 0;
+  if (user.role === 'driver') {
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM assignments WHERE company_id = $1 AND driver_user_id = $2 AND ${assignmentNotEndedSql()}`,
+      [req.auth.tenantId, user.id]
+    );
+    count = rows[0].n;
+  } else if (user.role === 'monitor') {
+    const { rows } = await pool.query('SELECT count(*)::int AS n FROM monitor_assignments WHERE company_id = $1 AND monitor_user_id = $2', [req.auth.tenantId, user.id]);
+    count = rows[0].n;
+  }
+  if (count > 0) {
+    throw new HttpError(409, `This ${user.role} has ${count} active assignment${count === 1 ? '' : 's'}. Reassign ${count === 1 ? 'it' : 'them'} before deactivating.`);
+  }
+}
+
+// Created: temporary password issued, not used yet. Never logged in: no sign-in on record and
+// the temporary password has expired (or the account predates tracking). Active: has signed in.
+function accountStatus(u) {
+  if (u.last_login_at && !u.must_change_password) return 'active';
+  if (!u.last_login_at && u.must_change_password && !(u.temp_password_expires_at && new Date(u.temp_password_expires_at) < new Date())) return 'created';
+  if (u.last_login_at) return 'created';
+  return 'never_logged_in';
 }
 
 // Creator-only rule shared by edit and password reset (see updateUser above for the
@@ -155,6 +190,7 @@ async function adminResetPassword(req, id) {
   assertCanManage(req, target);
   const temporaryPassword = generateTempPassword();
   await setPassword(pool, target.id, temporaryPassword, { mustChange: true });
+  await logPasswordReset(pool, { actorId: req.auth.userId, targetId: target.id, method: 'admin_reset' });
   return { user: publicUser({ ...target, must_change_password: true }), temporary_password: temporaryPassword };
 }
 
@@ -172,7 +208,10 @@ function publicUser(u) {
     email_verified_at: u.email_verified_at,
     created_by_user_id: u.created_by_user_id ?? null,
     must_change_password: Boolean(u.must_change_password),
+    email_bounced: Boolean(u.email_bounced),
+    account_status: accountStatus(u),
+    temp_password_expires_at: u.must_change_password ? (u.temp_password_expires_at ?? null) : null,
   };
 }
 
-module.exports = { createUser, listUsers, getUser, updateUser, adminResetPassword };
+module.exports = { publicUser, accountStatus, createUser, listUsers, getUser, updateUser, adminResetPassword };

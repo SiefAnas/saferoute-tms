@@ -129,6 +129,16 @@ async function sendMail(message) {
   }
 }
 
+async function isBounced(to) {
+  try {
+    const pool = require('../db/pool');
+    const { rows } = await pool.query('SELECT 1 FROM users WHERE lower(email) = lower($1) AND email_bounced LIMIT 1', [String(to)]);
+    return rows.length > 0;
+  } catch {
+    return false; // if the check itself fails, sending is still the better default
+  }
+}
+
 // A short, plain reason for the log, from the error nodemailer / fetch / the timeout gives.
 function failureReason(err) {
   const code = String(err?.code ?? '');
@@ -151,6 +161,12 @@ const redact = (s) => String(s).replace(/[^\s<>"'@]+@[^\s<>"'@]+/g, '[email]');
 async function sendMailSafe(message, event) {
   const transport = activeTransport();
   const started = Date.now();
+  // An address that bounced is never mailed again (protects the sending reputation, so the
+  // messages that matter, like parent notifications, keep arriving) until an admin corrects it.
+  if (await isBounced(message.to)) {
+    console.error(`[mail] skipped event=${event} reason=email-bounced`);
+    return false;
+  }
   try {
     await sendMail(message);
     if (process.env.NODE_ENV !== 'test' && transport !== 'dev') {
