@@ -7,7 +7,9 @@ import { Input } from '../../components/Input'
 import { Modal } from '../../components/Modal'
 import { formatTimeOfDay } from '../../lib/format'
 import { driverCurrentVanId, studentsTakenByOtherDrivers, vansTakenByOtherDrivers } from '../../lib/assignmentRules'
-import type { Assignment, PublicUser, ScheduleOverride, Student, Van } from '../../types/api'
+import type { Assignment, AssignmentShiftPeriod, PublicUser, ScheduleOverride, Student, Van } from '../../types/api'
+
+const SHIFT_LABELS: Record<AssignmentShiftPeriod, string> = { morning: 'Morning', afternoon: 'Afternoon', both: 'Both' }
 
 // Company Admin — Assignments (§6 frontend gap): which driver+van is assigned to which
 // student. GET /assignments returns raw ids only, so names are joined client-side against
@@ -33,6 +35,7 @@ export function AssignmentsPage() {
   const [driverId, setDriverId] = useState('')
   const [vanId, setVanId] = useState('')
   const [startDate, setStartDate] = useState('')
+  const [shiftPeriod, setShiftPeriod] = useState<AssignmentShiftPeriod>('both')
   const [pickupTime, setPickupTime] = useState('')
   const [dropoffTime, setDropoffTime] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
@@ -45,7 +48,7 @@ export function AssignmentsPage() {
   const assignments = assignmentsQuery.data ?? []
   const lockedVanId = driverId ? driverCurrentVanId(assignments, driverId, range) : null
   const excludedVanIds = driverId ? vansTakenByOtherDrivers(assignments, driverId, range) : new Set<string>()
-  const excludedStudentIds = driverId ? studentsTakenByOtherDrivers(assignments, driverId, range) : new Set<string>()
+  const excludedStudentIds = driverId ? studentsTakenByOtherDrivers(assignments, driverId, range, shiftPeriod) : new Set<string>()
 
   // The driver's own current van (if any) is the only valid choice — lock the picker to it
   // rather than let the admin pick a van that doesn't match reality.
@@ -57,6 +60,7 @@ export function AssignmentsPage() {
   const [editingTimesId, setEditingTimesId] = useState<string | null>(null)
   const [editPickup, setEditPickup] = useState('')
   const [editDropoff, setEditDropoff] = useState('')
+  const [editShift, setEditShift] = useState<AssignmentShiftPeriod>('both')
   const [expandedOverridesId, setExpandedOverridesId] = useState<string | null>(null)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['assignments'] })
@@ -68,6 +72,7 @@ export function AssignmentsPage() {
         driver_user_id: driverId,
         van_id: vanId,
         start_date: startDate,
+        shift_period: shiftPeriod,
         pickup_time: pickupTime || undefined,
         dropoff_time: dropoffTime || undefined,
       }),
@@ -77,6 +82,7 @@ export function AssignmentsPage() {
       setDriverId('')
       setVanId('')
       setStartDate('')
+      setShiftPeriod('both')
       setPickupTime('')
       setDropoffTime('')
       setShowAddModal(false)
@@ -95,7 +101,8 @@ export function AssignmentsPage() {
   })
 
   const updateTimes = useMutation({
-    mutationFn: (id: string) => api.patch<Assignment>(`/assignments/${id}`, { pickup_time: editPickup || null, dropoff_time: editDropoff || null }),
+    mutationFn: (id: string) =>
+      api.patch<Assignment>(`/assignments/${id}`, { pickup_time: editPickup || null, dropoff_time: editDropoff || null, shift_period: editShift }),
     onSuccess: () => {
       invalidate()
       setEditingTimesId(null)
@@ -106,6 +113,7 @@ export function AssignmentsPage() {
     setEditingTimesId(a.id)
     setEditPickup(a.pickup_time ? a.pickup_time.slice(0, 5) : '')
     setEditDropoff(a.dropoff_time ? a.dropoff_time.slice(0, 5) : '')
+    setEditShift(a.shift_period)
   }
 
   function handleSubmit(e: FormEvent) {
@@ -138,7 +146,7 @@ export function AssignmentsPage() {
             <table className="w-full text-left">
               <thead className="border-b border-outline-variant bg-surface-container-low">
                 <tr>
-                  {['Student', 'Driver', 'Van', 'Start', 'End', 'Pickup', 'Dropoff', ''].map((h) => (
+                  {['Student', 'Driver', 'Van', 'Start', 'End', 'Shift', 'Pickup', 'Dropoff', ''].map((h) => (
                     <th key={h} className="px-6 py-2 text-label-md text-secondary uppercase">
                       {h}
                     </th>
@@ -148,7 +156,7 @@ export function AssignmentsPage() {
               <tbody className="divide-y divide-outline-variant">
                 {(assignmentsQuery.data ?? []).length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-4 text-body-md text-on-surface-variant">
+                    <td colSpan={9} className="px-6 py-4 text-body-md text-on-surface-variant">
                       {assignmentsQuery.isLoading ? 'Loading…' : 'No assignments yet.'}
                     </td>
                   </tr>
@@ -172,6 +180,17 @@ export function AssignmentsPage() {
                         {editingTimes ? (
                           <>
                             <td className="px-6 py-3">
+                              <select
+                                value={editShift}
+                                onChange={(e) => setEditShift(e.target.value as AssignmentShiftPeriod)}
+                                className={`${timeInputClass} w-full`}
+                              >
+                                <option value="morning">Morning</option>
+                                <option value="afternoon">Afternoon</option>
+                                <option value="both">Both</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-3">
                               <input type="time" value={editPickup} onChange={(e) => setEditPickup(e.target.value)} className={timeInputClass} />
                             </td>
                             <td className="px-6 py-3">
@@ -180,6 +199,7 @@ export function AssignmentsPage() {
                           </>
                         ) : (
                           <>
+                            <td className="px-6 py-3 text-data-mono text-secondary">{SHIFT_LABELS[a.shift_period]}</td>
                             <td className="px-6 py-3 text-data-mono text-secondary">{formatTimeOfDay(a.pickup_time)}</td>
                             <td className="px-6 py-3 text-data-mono text-secondary">{formatTimeOfDay(a.dropoff_time)}</td>
                           </>
@@ -235,7 +255,7 @@ export function AssignmentsPage() {
                     if (expandedOverridesId === a.id) {
                       rows.push(
                         <tr key={`${a.id}-overrides`}>
-                          <td colSpan={8} className="bg-surface-container-low px-6 py-4">
+                          <td colSpan={9} className="bg-surface-container-low px-6 py-4">
                             <OverridesPanel assignmentId={a.id} />
                           </td>
                         </tr>,
@@ -286,6 +306,11 @@ export function AssignmentsPage() {
                 This driver is currently driving {vansById.get(lockedVanId)?.license_plate ?? 'this van'} for this date range. The van is locked to match.
               </p>
             )}
+            <select value={shiftPeriod} onChange={(e) => setShiftPeriod(e.target.value as AssignmentShiftPeriod)} className={selectClass}>
+              <option value="both">Both shifts (full day)</option>
+              <option value="morning">Morning only</option>
+              <option value="afternoon">Afternoon only</option>
+            </select>
             <input
               required
               type="date"

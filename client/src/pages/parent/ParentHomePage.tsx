@@ -89,6 +89,11 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
     enabled: showMore,
   })
   const d = detailQuery.data
+  const transport = d?.transport ?? []
+  // Morning entry drives the "picked up at school" scheduled time, afternoon entry drives
+  // "dropped off at home" - falls back to the single entry when the student isn't split.
+  const morningEntry = transport.find((t) => t.shift_period !== 'afternoon') ?? transport[0]
+  const afternoonEntry = transport.find((t) => t.shift_period === 'afternoon') ?? transport[0]
 
   const pickupTrip = d?.trips_today.find((t) => t.trip_type === 'pickup')
   const dropoffTrip = d?.trips_today.find((t) => t.trip_type === 'dropoff')
@@ -119,7 +124,7 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
           <h2 className="text-headline-sm text-primary">{student.full_name}</h2>
           <p className="text-body-sm text-on-surface-variant">
             {student.grade ? `Grade ${student.grade}` : 'Grade -'} · {d?.company.name ?? 'No company assigned'}
-            {d?.van ? ` · ${d.van.brand} ${d.van.model}` : ''}
+            {transport[0]?.van ? ` · ${transport[0].van.brand} ${transport[0].van.model}` : ''}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-primary-container bg-primary-fixed px-3 py-1 text-label-md text-on-primary-fixed-variant">
@@ -129,15 +134,22 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
 
       <div className="flex flex-col gap-2">
         <SkipPickupButton student={student} skipToday={d?.skip_today ?? false} onSkipped={onMessage} />
-        {d?.driver?.phone && (
-          <a
-            href={`tel:${d.driver.phone}`}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-error-container bg-surface-container-low text-body-md font-semibold text-error transition-colors hover:bg-error-container"
-          >
-            <span className="material-symbols-outlined !text-[20px]">call</span>
-            Contact {d.driver.full_name.split(' ')[0]}
-          </a>
-        )}
+        {transport
+          .filter((t) => t.driver?.phone)
+          .map((t, i) => {
+            const label = transport.length > 1 ? (t.shift_period === 'afternoon' ? 'Afternoon' : t.shift_period === 'morning' ? 'Morning' : null) : null
+            return (
+              <a
+                key={i}
+                href={`tel:${t.driver!.phone}`}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-error-container bg-surface-container-low text-body-md font-semibold text-error transition-colors hover:bg-error-container"
+              >
+                <span className="material-symbols-outlined !text-[20px]">call</span>
+                Contact {t.driver!.full_name.split(' ')[0]}
+                {label ? ` (${label})` : ''}
+              </a>
+            )
+          })}
         <p className="text-center text-body-sm text-on-surface-variant">For urgent or emergency inquiries only.</p>
       </div>
 
@@ -152,33 +164,16 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
 
       {showMore && (
         <div className="flex flex-col gap-5">
-          {!d?.van || !d?.driver ? (
+          {transport.length === 0 ? (
             <p className="text-body-md text-on-surface-variant">No driver/van currently assigned to this student.</p>
           ) : (
-            <>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-outline-variant bg-surface-container-low p-4 sm:grid-cols-5">
-                {[
-                  ['Plate', d.van.license_plate],
-                  ['Brand', d.van.brand],
-                  ['Model', d.van.model],
-                  ['Year', String(d.van.year)],
-                  ['Color', d.van.color ?? '-'],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <p className="text-label-md text-on-surface-variant uppercase">{label}</p>
-                    <p className="text-body-md font-medium text-on-surface">{value}</p>
-                  </div>
-                ))}
-              </div>
-
-              <TripTimeline
-                pickupTrip={pickupTrip}
-                dropoffTrip={dropoffTrip}
-                pickupScheduled={d.pickup_time}
-                dropoffScheduled={d.dropoff_time}
-                schoolName={d.school.name}
-              />
-            </>
+            <TripTimeline
+              pickupTrip={pickupTrip}
+              dropoffTrip={dropoffTrip}
+              pickupScheduled={morningEntry?.pickup_time ?? null}
+              dropoffScheduled={afternoonEntry?.dropoff_time ?? null}
+              schoolName={d?.school.name ?? null}
+            />
           )}
 
           <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
@@ -189,15 +184,37 @@ function StudentDetailView({ student, onMessage }: { student: Student; onMessage
             </p>
           </div>
 
-          {d?.driver && (
-            <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
-              <h3 className="mb-2 text-label-md text-secondary uppercase">Driver</h3>
-              <p className="text-body-md text-on-surface">{d.driver.full_name}</p>
-              <p className="text-body-md text-on-surface-variant">
-                <ContactLink type="phone" value={d.driver.phone} />
-              </p>
-            </div>
-          )}
+          {transport.map((t, i) => {
+            const label = transport.length > 1 ? (t.shift_period === 'afternoon' ? 'Afternoon' : t.shift_period === 'morning' ? 'Morning' : 'All day') : null
+            return (
+              <div key={i} className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
+                <h3 className="mb-2 text-label-md text-secondary uppercase">{label ? `Van & Driver — ${label}` : 'Van & Driver'}</h3>
+                {t.van && (
+                  <div className="mb-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                    {[
+                      ['Plate', t.van.license_plate],
+                      ['Brand', t.van.brand],
+                      ['Model', t.van.model],
+                      ['Color', t.van.color ?? '-'],
+                    ].map(([l, value]) => (
+                      <div key={l}>
+                        <p className="text-label-md text-on-surface-variant uppercase">{l}</p>
+                        <p className="text-body-md font-medium text-on-surface">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {t.driver && (
+                  <>
+                    <p className="text-body-md text-on-surface">{t.driver.full_name}</p>
+                    <p className="text-body-md text-on-surface-variant">
+                      <ContactLink type="phone" value={t.driver.phone} />
+                    </p>
+                  </>
+                )}
+              </div>
+            )
+          })}
 
           <div className="rounded-lg border border-outline-variant bg-surface-container-low p-4">
             <h3 className="mb-2 text-label-md text-secondary uppercase">Your Info</h3>
@@ -307,9 +324,16 @@ function SkipPickupButton({
     queryKey: ['skip-status', student.id],
     queryFn: () => api.get<SkipStatus>(`/parent/students/${student.id}/skip-status`),
   })
+  // Explicit annotation matters here: useQuery's inferred `data` type doesn't narrow
+  // cleanly on its own through the splitShift discriminant without it.
+  const data: SkipStatus | undefined = statusQuery.data
 
   const skip = useMutation({
-    mutationFn: () => api.post<{ skipped: boolean; notified: string[] }>(`/parent/students/${student.id}/skip-pickup`),
+    mutationFn: (shiftChoice?: 'morning' | 'whole_day') =>
+      api.post<{ skipped: boolean; notified: string[] }>(
+        `/parent/students/${student.id}/skip-pickup`,
+        shiftChoice ? { shift_choice: shiftChoice } : undefined,
+      ),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['skip-status', student.id] })
       queryClient.invalidateQueries({ queryKey: ['parent-student-detail', student.id] })
@@ -318,22 +342,53 @@ function SkipPickupButton({
     onError: (err) => onSkipped(err instanceof ApiError ? err.message : 'Could not report absence.'),
   })
 
-  const eligible = !skipToday && (statusQuery.data?.eligible ?? false)
+  // Split students (separate morning + afternoon assignments, possibly different drivers)
+  // get a choice: skip just the morning pickup, or the whole day (both shifts). A student
+  // with a single assignment (the common case) has nothing to choose between, so it keeps
+  // the old one-click button below.
+  if (data?.splitShift) {
+    const { morningOnly, wholeDay } = data
+    return (
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          disabled={skipToday || !morningOnly.eligible || skip.isPending}
+          className="h-11 flex-1 gap-2 text-body-md"
+          onClick={() => skip.mutate('morning')}
+        >
+          <span className="material-symbols-outlined !text-[20px]">event_busy</span>
+          {morningOnly.alreadySkipped ? 'Morning Skipped' : 'Skip Morning Only'}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={skipToday || !wholeDay.eligible || skip.isPending}
+          className="h-11 flex-1 gap-2 text-body-md"
+          onClick={() => skip.mutate('whole_day')}
+        >
+          <span className="material-symbols-outlined !text-[20px]">event_busy</span>
+          {wholeDay.alreadySkipped ? 'Whole Day Skipped' : 'Skip Whole Day'}
+        </Button>
+      </div>
+    )
+  }
+
+  const status = data !== undefined && data.splitShift === false ? data : null
+  const eligible = !skipToday && (status?.eligible ?? false)
   return (
     <Button
       variant="outline"
       disabled={!eligible || skip.isPending || statusQuery.isLoading}
       className="h-11 gap-2 text-body-md"
-      onClick={() => skip.mutate()}
+      onClick={() => skip.mutate(undefined)}
     >
       <span className="material-symbols-outlined !text-[20px]">event_busy</span>
       {skip.isPending
         ? 'Reporting…'
-        : skipToday || statusQuery.data?.alreadySkipped
+        : skipToday || status?.alreadySkipped
           ? 'Absence Reported for Today'
           : eligible
             ? 'Report Absence'
-            : (statusQuery.data?.reason ?? 'Report Absence Unavailable')}
+            : (status?.reason ?? 'Report Absence Unavailable')}
     </Button>
   )
 }

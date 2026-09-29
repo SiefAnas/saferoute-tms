@@ -12,27 +12,33 @@ const { notifyCompanyAndSchoolAdmins } = require('./notifications');
 // ANDs both driver_user_id and company_id so this can never cross into another driver's or
 // another company's assignments.
 //
-// Also surfaces parent_skipped_today / no_show_reported_today (added alongside the driver
-// no-show feature) so a driver's own schedule view can show "parent already skipped this
-// pickup" and the Mark Absent button can reflect an already-reported no-show, without a
-// second round-trip.
+// Also surfaces parent_skipped / no_show_reported per shift (morning/afternoon - added
+// alongside the shift-period split) so a driver's own schedule view can show "parent already
+// skipped this pickup" and the Mark Absent button can reflect an already-reported no-show,
+// without a second round-trip. Each flag is a per-shift object rather than one flat boolean
+// now, since an assignment covering shift_period='both' can have independent morning and
+// afternoon outcomes.
 async function getTodaySchedule(req) {
   const { rows } = await pool.query(
-    `SELECT a.id AS assignment_id, a.pickup_time, a.dropoff_time,
+    `SELECT a.id AS assignment_id, a.shift_period, a.pickup_time, a.dropoff_time,
             st.id AS student_id, st.full_name AS student_name, st.grade,
             st.parent_name, st.parent_phone,
             sc.id AS school_id, sc.name AS school_name,
             o.id AS override_id, o.pickup_time AS override_pickup_time,
             o.dropoff_time AS override_dropoff_time, o.skip AS override_skip, o.note AS override_note,
-            (ps.id IS NOT NULL) AS parent_skipped_today,
-            (pns.id IS NOT NULL) AS no_show_reported_today
+            EXISTS(SELECT 1 FROM pickup_skips ps WHERE ps.student_id = a.student_id
+                     AND ps.skip_date = CURRENT_DATE AND ps.shift_period = 'morning') AS parent_skipped_morning,
+            EXISTS(SELECT 1 FROM pickup_skips ps WHERE ps.student_id = a.student_id
+                     AND ps.skip_date = CURRENT_DATE AND ps.shift_period = 'afternoon') AS parent_skipped_afternoon,
+            EXISTS(SELECT 1 FROM pickup_no_shows pns WHERE pns.student_id = a.student_id
+                     AND pns.no_show_date = CURRENT_DATE AND pns.shift_period = 'morning') AS no_show_morning,
+            EXISTS(SELECT 1 FROM pickup_no_shows pns WHERE pns.student_id = a.student_id
+                     AND pns.no_show_date = CURRENT_DATE AND pns.shift_period = 'afternoon') AS no_show_afternoon
        FROM assignments a
        JOIN students st ON st.id = a.student_id
        JOIN schools sc ON sc.id = st.school_id
        LEFT JOIN assignment_schedule_overrides o
               ON o.assignment_id = a.id AND o.override_date = CURRENT_DATE
-       LEFT JOIN pickup_skips ps ON ps.student_id = a.student_id AND ps.skip_date = CURRENT_DATE
-       LEFT JOIN pickup_no_shows pns ON pns.student_id = a.student_id AND pns.no_show_date = CURRENT_DATE
       WHERE a.driver_user_id = $1
         AND a.company_id = $2
         AND a.start_date <= CURRENT_DATE
@@ -42,6 +48,7 @@ async function getTodaySchedule(req) {
   );
   return rows.map((r) => ({
     assignment_id: r.assignment_id,
+    shift_period: r.shift_period,
     pickup_time: r.pickup_time,
     dropoff_time: r.dropoff_time,
     student: { id: r.student_id, name: r.student_name, grade: r.grade, parent_name: r.parent_name, parent_phone: r.parent_phone },
@@ -49,25 +56,30 @@ async function getTodaySchedule(req) {
     override: r.override_id
       ? { pickup_time: r.override_pickup_time, dropoff_time: r.override_dropoff_time, skip: r.override_skip, note: r.override_note }
       : null,
-    parent_skipped_today: r.parent_skipped_today,
-    no_show_reported_today: r.no_show_reported_today,
+    parent_skipped: { morning: r.parent_skipped_morning, afternoon: r.parent_skipped_afternoon },
+    no_show_reported: { morning: r.no_show_morning, afternoon: r.no_show_afternoon },
   }));
 }
 
 // Driver-reported no-show (task: "when they arrive and no one shows up they can hit the
-// button the student is Absent"). Requires an open shift, same invariant logTrip already
-// enforces for logging a trip. Notifies the school and company admin — same shared helper
-// the parent Skip Pickup feature uses, no new notification mechanism.
-async function markNoShow(req, assignmentId) {
+// button the student is Absent"). Requires an open shift for the reported shift_period, same
+// invariant logTrip enforces for logging a trip - a driver could have both morning and
+// afternoon open at once, so shift_period picks which one this no-show belongs to. Notifies
+// the school and company admin — same shared helper the parent Skip Pickup feature uses.
+async function markNoShow(req, assignmentId, body = {}) {
+  const { shift_period } = body;
+  if (!['morning', 'afternoon'].includes(shift_period)) {
+    throw new HttpError(400, "shift_period must be 'morning' or 'afternoon'");
+  }
   const assignment = await req.db.findById('assignments', assignmentId, {
     owner: { column: 'driver_user_id', value: req.auth.userId },
   });
   if (!assignment) throw new HttpError(404, 'assignment not found');
 
   const open = (await req.db.findMany('sessions', { owner: { column: 'user_id', value: req.auth.userId } })).find(
-    (s) => s.check_out_at === null
+    (s) => s.check_out_at === null && s.shift_period === shift_period
   );
-  if (!open) throw new HttpError(409, 'check in before reporting a no-show');
+  if (!open) throw new HttpError(409, 'check in for that shift before reporting a no-show');
 
   const student = await req.db.findById('students', assignment.student_id);
   if (!student) throw new HttpError(404, 'student not found');
@@ -75,18 +87,18 @@ async function markNoShow(req, assignmentId) {
   let inserted;
   try {
     inserted = await pool.query(
-      `INSERT INTO pickup_no_shows (company_id, student_id, driver_user_id, no_show_date)
-       VALUES ($1, $2, $3, CURRENT_DATE) RETURNING *`,
-      [req.auth.tenantId, student.id, req.auth.userId]
+      `INSERT INTO pickup_no_shows (company_id, student_id, driver_user_id, no_show_date, shift_period)
+       VALUES ($1, $2, $3, CURRENT_DATE, $4) RETURNING *`,
+      [req.auth.tenantId, student.id, req.auth.userId, shift_period]
     );
   } catch (err) {
-    if (err.code === '23505') throw new HttpError(409, 'a no-show was already reported for this student today');
+    if (err.code === '23505') throw new HttpError(409, 'a no-show was already reported for this student for this shift today');
     throw err;
   }
 
   const driver = await req.db.findById('users', req.auth.userId);
-  const subject = `No-show reported for ${student.full_name}`;
-  const text = `${driver?.full_name ?? 'The driver'} reported that no one was available for ${student.full_name}'s pickup this morning.`;
+  const subject = `No-show reported for ${student.full_name} (${shift_period} shift)`;
+  const text = `${driver?.full_name ?? 'The driver'} reported that no one was available for ${student.full_name}'s ${shift_period} pickup.`;
   const notified = await notifyCompanyAndSchoolAdmins(req.auth.tenantId, student.school_id, { subject, text });
 
   return { reported: true, noShow: inserted.rows[0], notified };

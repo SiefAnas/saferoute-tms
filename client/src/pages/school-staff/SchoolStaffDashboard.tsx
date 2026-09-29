@@ -8,7 +8,14 @@ import { Modal } from '../../components/Modal'
 import { StatusBadge } from '../../components/StatusBadge'
 import { ContactLink } from '../../components/ContactLink'
 import { InfoTooltip } from '../../components/InfoTooltip'
-import type { AbsentTodayEntry, School, ScheduleChange, ScheduleChangeType, Student, StudentContact, Trip } from '../../types/api'
+import type { AbsentTodayEntry, School, ScheduleChange, ScheduleChangeType, Student, StudentContact, TransportEntry, Trip } from '../../types/api'
+
+// A single active assignment doesn't need a shift label (nothing to distinguish it from).
+// Two (split morning/afternoon) do, so the reader can tell them apart.
+function shiftLabel(entry: TransportEntry, all: TransportEntry[]): string | null {
+  if (all.length < 2) return null
+  return entry.shift_period === 'afternoon' ? 'Afternoon' : entry.shift_period === 'morning' ? 'Morning' : 'All day'
+}
 
 // Which trip_type is "relevant" for a student right now, i.e. which confirmation a school
 // staff/admin would plausibly be doing at this moment: mornings, staff confirm the driver
@@ -266,6 +273,7 @@ function StudentRow({
   onLogChange: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
+  const transport = student.transport ?? []
   const detailQuery = useQuery({
     queryKey: ['student-detail', student.id],
     queryFn: () => api.get<Student>(`/students/${student.id}`),
@@ -297,9 +305,21 @@ function StudentRow({
             ''
           )}
         </td>
-        <td className="px-6 py-3 text-body-md text-on-surface-variant whitespace-nowrap">{student.company_name ?? '-'}</td>
         <td className="px-6 py-3 text-body-md text-on-surface-variant whitespace-nowrap">
-          {student.van ? `${student.van.brand} ${student.van.model}` : '-'}
+          {transport.length === 0
+            ? '-'
+            : [...new Set(transport.map((t) => t.company_name).filter(Boolean))].join(', ') || '-'}
+        </td>
+        <td className="px-6 py-3 text-body-md text-on-surface-variant whitespace-nowrap">
+          {transport.length === 0
+            ? '-'
+            : transport
+                .map((t) => {
+                  const label = shiftLabel(t, transport)
+                  const van = t.van ? `${t.van.brand} ${t.van.model}` : 'no van'
+                  return label ? `${label}: ${van}` : van
+                })
+                .join(' · ')}
         </td>
         <td className="px-6 py-3">
           {absent ? (
@@ -363,30 +383,58 @@ function StudentRow({
 
                 <div>
                   <h4 className="mb-2 text-label-md text-secondary uppercase">Van</h4>
-                  {student.van ? (
-                    <div className="flex flex-col gap-0.5 text-body-md text-on-surface-variant">
-                      <p className="text-on-surface">
-                        {student.van.brand} {student.van.model} ({student.van.year})
-                      </p>
-                      <p>Plate: {student.van.license_plate}</p>
-                      <p>Color: {student.van.color ?? '-'}</p>
-                    </div>
-                  ) : (
+                  {transport.length === 0 ? (
                     <p className="text-body-md text-on-surface-variant">No van currently assigned.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {transport.map((t, i) => {
+                        const label = shiftLabel(t, transport)
+                        return (
+                          <div key={i} className="flex flex-col gap-0.5 text-body-md text-on-surface-variant">
+                            {label && <p className="text-label-md text-secondary">{label}</p>}
+                            {t.van ? (
+                              <>
+                                <p className="text-on-surface">
+                                  {t.van.brand} {t.van.model} ({t.van.year})
+                                </p>
+                                <p>Plate: {t.van.license_plate}</p>
+                                <p>Color: {t.van.color ?? '-'}</p>
+                              </>
+                            ) : (
+                              <p>No van on this assignment.</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
 
                 <div>
                   <h4 className="mb-2 text-label-md text-secondary uppercase">Driver</h4>
-                  {student.driver ? (
-                    <div className="flex flex-col gap-0.5 text-body-md text-on-surface-variant">
-                      <p className="text-on-surface">{student.driver.full_name}</p>
-                      <p>
-                        <ContactLink type="phone" value={student.driver.phone} />
-                      </p>
-                    </div>
-                  ) : (
+                  {transport.length === 0 ? (
                     <p className="text-body-md text-on-surface-variant">No driver currently assigned.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {transport.map((t, i) => {
+                        const label = shiftLabel(t, transport)
+                        return (
+                          <div key={i} className="flex flex-col gap-0.5 text-body-md text-on-surface-variant">
+                            {label && <p className="text-label-md text-secondary">{label}</p>}
+                            {t.driver ? (
+                              <>
+                                <p className="text-on-surface">{t.driver.full_name}</p>
+                                <p>
+                                  <ContactLink type="phone" value={t.driver.phone} />
+                                </p>
+                              </>
+                            ) : (
+                              <p>No driver on this assignment.</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
 

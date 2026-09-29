@@ -16,15 +16,22 @@ function gps(body, prefix) {
 
 async function checkIn(req, body = {}) {
   if (req.auth.role !== 'driver') throw new HttpError(403, 'only drivers check in');
-  // One open shift at a time.
+  const { shift_period } = body;
+  if (!['morning', 'afternoon'].includes(shift_period)) {
+    throw new HttpError(400, "shift_period must be 'morning' or 'afternoon'");
+  }
+  // One open shift per shift_period, so morning and afternoon are independent check-in/
+  // check-out pairs. A legacy open shift with no shift_period recorded blocks both, since
+  // we can't tell which one it belongs to.
   const open = await req.db.findMany('sessions', {
     owner: { column: 'user_id', value: req.auth.userId },
     where: {}, // check_out_at IS NULL filtered below
   });
-  if (open.some((s) => s.check_out_at === null)) {
-    throw new HttpError(409, 'you already have an open shift; check out first');
+  const blocking = open.filter((s) => s.check_out_at === null);
+  if (blocking.some((s) => s.shift_period === null || s.shift_period === shift_period)) {
+    throw new HttpError(409, 'you already have an open shift for this period; check out first');
   }
-  return req.db.insert('sessions', { user_id: req.auth.userId, ...gps(body, 'check_in') });
+  return req.db.insert('sessions', { user_id: req.auth.userId, shift_period, ...gps(body, 'check_in') });
 }
 
 async function checkOut(req, id, body = {}) {

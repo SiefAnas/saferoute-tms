@@ -21,6 +21,13 @@ interface Range {
   end_date: string | null
 }
 
+// Mirrors server/src/services/assignmentConflicts.js's shiftsOverlap: 'both' overlaps
+// everything, 'morning'/'afternoon' only overlap themselves or 'both'.
+export function shiftsOverlap(a: Assignment['shift_period'], b: Assignment['shift_period']): boolean {
+  if (a === 'both' || b === 'both') return true
+  return a === b
+}
+
 function overlapping(assignments: Assignment[], range: Range, excludeId?: string): Assignment[] {
   return assignments.filter((a) => a.id !== excludeId && rangesOverlap(range.start_date, range.end_date, a.start_date, a.end_date))
 }
@@ -43,12 +50,20 @@ export function vansTakenByOtherDrivers(assignments: Assignment[], driverId: str
   )
 }
 
-// Students already assigned to a DIFFERENT driver during this date range — exclude these
-// from the student picker once a driver is chosen.
-export function studentsTakenByOtherDrivers(assignments: Assignment[], driverId: string, range: Range, excludeId?: string): Set<string> {
+// Students already assigned to a DIFFERENT driver for an overlapping shift during this date
+// range — exclude these from the student picker once a driver (and shift) is chosen. A
+// student with a 'morning' assignment to one driver can still be picked for 'afternoon' with
+// another.
+export function studentsTakenByOtherDrivers(
+  assignments: Assignment[],
+  driverId: string,
+  range: Range,
+  shiftPeriod: Assignment['shift_period'] = 'both',
+  excludeId?: string,
+): Set<string> {
   return new Set(
     overlapping(assignments, range, excludeId)
-      .filter((a) => a.driver_user_id !== driverId)
+      .filter((a) => a.driver_user_id !== driverId && shiftsOverlap(a.shift_period, shiftPeriod))
       .map((a) => a.student_id),
   )
 }

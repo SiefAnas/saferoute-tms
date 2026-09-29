@@ -10,7 +10,18 @@ import { StatusBadge } from '../../components/StatusBadge'
 import { Modal } from '../../components/Modal'
 import { MonthCalendar } from '../../components/MonthCalendar'
 import { ContactLink } from '../../components/ContactLink'
-import type { DriverSession, Student, SchoolDetail, Trip, TripType, TodayScheduleItem, PaySummary } from '../../types/api'
+import type { DriverSession, Student, SchoolDetail, ShiftPeriod, Trip, TripType, TodayScheduleItem, PaySummary } from '../../types/api'
+
+const SHIFTS: { period: ShiftPeriod; label: string }[] = [
+  { period: 'morning', label: 'Morning Shift' },
+  { period: 'afternoon', label: 'Afternoon Shift' },
+]
+
+// An item belongs to a shift's schedule section if the assignment covers that shift
+// specifically, or covers 'both' (the driver does the full day for that student).
+function itemsForShift(items: TodayScheduleItem[], shiftPeriod: ShiftPeriod) {
+  return items.filter((i) => i.shift_period === shiftPeriod || i.shift_period === 'both')
+}
 
 function monthRange(d: Date) {
   const from = new Date(d.getFullYear(), d.getMonth(), 1)
@@ -36,10 +47,12 @@ export function DriverDashboard() {
   const [detailStudentId, setDetailStudentId] = useState<string | null>(null)
   const [detailSchoolId, setDetailSchoolId] = useState<string | null>(null)
   // Per-row Pickup/Drop-off marker — a status choice, not a live action; Confirm is what
-  // actually logs the trip. Defaults to 'pickup' per assignment until touched.
+  // actually logs the trip. Defaults to 'pickup' per assignment until touched. Keyed by
+  // `assignmentId|shiftPeriod` since a 'both' assignment shows up under both shift sections
+  // and each needs its own independent toggle.
   const [rowType, setRowType] = useState<Record<string, TripType>>({})
   // Forces a re-render every 30s so "elapsed time since check-in" stays live.
-  const [, setTick] = useState(0)
+  const [tick, setTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 30_000)
     return () => clearInterval(id)
@@ -57,12 +70,23 @@ export function DriverDashboard() {
     retry: false, // a 404 (no pay rule configured) is an expected state, not worth retrying
   })
 
-  const openSession = sessionsQuery.data?.find((s) => s.check_out_at === null)
+  // Morning and afternoon are two fully independent check-in/check-out pairs — a driver can
+  // have both open at once (e.g. forgot to check out morning before starting afternoon).
+  const openSessionByShift = useMemo(() => {
+    const map: Partial<Record<ShiftPeriod, DriverSession>> = {}
+    for (const s of sessionsQuery.data ?? []) {
+      if (s.check_out_at === null && s.shift_period) map[s.shift_period] = s
+    }
+    return map
+  }, [sessionsQuery.data])
 
   const checkIn = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (shiftPeriod: ShiftPeriod) => {
       const coords = await getCurrentCoords()
-      return api.post<DriverSession>('/sessions/checkin', coords ? { check_in_lat: coords.lat, check_in_lng: coords.lng } : {})
+      return api.post<DriverSession>('/sessions/checkin', {
+        shift_period: shiftPeriod,
+        ...(coords ? { check_in_lat: coords.lat, check_in_lng: coords.lng } : {}),
+      })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sessions'] }),
     onError: (err) => setActionError(err instanceof ApiError ? err.message : 'Check-in failed.'),
@@ -81,8 +105,8 @@ export function DriverDashboard() {
   })
 
   const logTrip = useMutation({
-    mutationFn: (vars: { studentId: string; tripType: TripType }) =>
-      api.post<Trip>('/trips', { student_id: vars.studentId, trip_type: vars.tripType }),
+    mutationFn: (vars: { studentId: string; tripType: TripType; shiftPeriod: ShiftPeriod }) =>
+      api.post<Trip>('/trips', { student_id: vars.studentId, trip_type: vars.tripType, shift_period: vars.shiftPeriod }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['trips'] })
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
@@ -93,7 +117,8 @@ export function DriverDashboard() {
   // "When they arrive and no one shows up" — real feature, notifies the school + company
   // admin (server/src/services/schedule.js's markNoShow), same as the parent's Skip Pickup.
   const markAbsent = useMutation({
-    mutationFn: (assignmentId: string) => api.post<{ reported: boolean }>(`/schedule/${assignmentId}/no-show`),
+    mutationFn: (vars: { assignmentId: string; shiftPeriod: ShiftPeriod }) =>
+      api.post<{ reported: boolean }>(`/schedule/${vars.assignmentId}/no-show`, { shift_period: vars.shiftPeriod }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schedule-today'] }),
     onError: (err) => setActionError(err instanceof ApiError ? err.message : 'Could not report the no-show.'),
   })
@@ -112,13 +137,15 @@ export function DriverDashboard() {
     const completed = (sessionsQuery.data ?? [])
       .filter((s) => s.check_out_at && isToday(s.check_in_at))
       .reduce((sum, s) => sum + (s.duration_minutes ?? 0), 0)
-    if (openSession && isToday(openSession.check_in_at)) {
-      const elapsed = (Date.now() - new Date(openSession.check_in_at).getTime()) / 60_000
-      return completed + Math.max(0, elapsed)
-    }
-    return completed
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-derive on the 30s tick above
-  }, [sessionsQuery.data, openSession])
+    // Both shifts can be open at once, so sum elapsed time across every open session today
+    // rather than assuming there's only one.
+    const openElapsed = (sessionsQuery.data ?? [])
+      .filter((s) => s.check_out_at === null && isToday(s.check_in_at))
+      .reduce((sum, s) => sum + Math.max(0, (Date.now() - new Date(s.check_in_at).getTime()) / 60_000), 0)
+    return completed + openElapsed
+    // tick is intentionally a dep with no other use here - it's what forces this to
+    // re-derive on the 30s tick above instead of freezing at whatever it was on check-in.
+  }, [sessionsQuery.data, tick])
 
   // Days worked this month, derived from the already-fetched sessions — no new endpoint.
   const workedDaysMarked = useMemo(() => {
@@ -141,38 +168,29 @@ export function DriverDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <section>
-        <Button
-          className="h-[72px] w-full"
-          onClick={() => (openSession ? checkOut.mutate(openSession.id) : checkIn.mutate())}
-          disabled={checkIn.isPending || checkOut.isPending}
-        >
-          <span className="material-symbols-outlined text-[32px]">{openSession ? 'logout' : 'login'}</span>
-          <span className="text-headline-md font-bold">
-            {checkIn.isPending || checkOut.isPending ? 'PLEASE WAIT…' : openSession ? 'CHECK OUT' : 'CHECK IN'}
-          </span>
-        </Button>
-      </section>
-
       {actionError && (
         <p role="alert" className="rounded-lg bg-error-container px-4 py-2 text-body-md text-on-error-container">
           {actionError}
         </p>
       )}
 
-      <section className="grid grid-cols-2 gap-4">
-        <Card className="flex h-32 flex-col justify-between p-4">
-          <span className="text-label-md text-on-surface-variant uppercase">Current Status</span>
-          <div className="mt-auto">
-            {openSession ? (
-              <StatusBadge tone="success" label="Checked In" pulse />
-            ) : (
-              <StatusBadge tone="neutral" label="Checked Out" />
-            )}
-          </div>
-        </Card>
-        <Card className="flex h-32 flex-col justify-between p-4">
-          <span className="text-label-md text-on-surface-variant uppercase">Today's Hours</span>
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {SHIFTS.map(({ period, label }) => (
+          <ShiftCard
+            key={period}
+            label={label}
+            session={openSessionByShift[period]}
+            checkingIn={checkIn.isPending && checkIn.variables === period}
+            checkingOut={checkOut.isPending && checkOut.variables === openSessionByShift[period]?.id}
+            onCheckIn={() => checkIn.mutate(period)}
+            onCheckOut={(id) => checkOut.mutate(id)}
+          />
+        ))}
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Card className="flex h-24 flex-col justify-between p-4">
+          <span className="text-label-md text-on-surface-variant uppercase">Today's Hours (Both Shifts)</span>
           <span className="mt-auto text-headline-md font-bold text-on-surface">{formatDuration(todaysMinutes)}</span>
         </Card>
       </section>
@@ -184,126 +202,139 @@ export function DriverDashboard() {
         ) : (scheduleQuery.data ?? []).length === 0 ? (
           <p className="text-body-md text-on-surface-variant">No students assigned to you today.</p>
         ) : (
-          <div className="flex flex-col gap-3">
-            {(scheduleQuery.data ?? []).map((item) => {
-              const type = rowType[item.assignment_id] ?? 'pickup'
-              const skip = item.override?.skip ?? false
-              const effectivePickup = item.override?.pickup_time ?? item.pickup_time
-              const effectiveDropoff = item.override?.dropoff_time ?? item.dropoff_time
-              const pickupChanged = Boolean(item.override?.pickup_time) && item.override!.pickup_time !== item.pickup_time
-              const dropoffChanged = Boolean(item.override?.dropoff_time) && item.override!.dropoff_time !== item.dropoff_time
-              const loggedToday = todaysTrips.filter((t) => t.student_id === item.student.id)
-              const alreadyLogged = loggedToday.some((t) => t.trip_type === type)
-
+          <div className="flex flex-col gap-6">
+            {SHIFTS.map(({ period, label }) => {
+              const items = itemsForShift(scheduleQuery.data ?? [], period)
+              if (items.length === 0) return null
               return (
-                <Card key={item.assignment_id} className="flex flex-col gap-3 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => setDetailStudentId(item.student.id)}
-                        className="text-title-lg font-medium text-primary hover:underline"
-                      >
-                        {item.student.name}
-                      </button>
-                      {item.student.grade && <span className="ml-2 text-label-md text-on-surface-variant">Grade {item.student.grade}</span>}
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => setDetailSchoolId(item.school.id)}
-                          className="text-body-md text-secondary hover:underline"
-                        >
-                          {item.school.name}
-                        </button>
-                      </div>
-                      <p className="text-body-md text-on-surface-variant">
-                        {item.student.parent_name ?? '-'}{' '}
-                        {item.student.parent_phone ? (
-                          <>
-                            · <ContactLink type="phone" value={item.student.parent_phone} />
-                          </>
-                        ) : (
-                          ''
+                <div key={period} className="flex flex-col gap-3">
+                  <h3 className="text-title-md text-secondary">{label}</h3>
+                  {items.map((item) => {
+                    const rowKey = `${item.assignment_id}|${period}`
+                    const type = rowType[rowKey] ?? 'pickup'
+                    const skip = item.override?.skip ?? false
+                    const effectivePickup = item.override?.pickup_time ?? item.pickup_time
+                    const effectiveDropoff = item.override?.dropoff_time ?? item.dropoff_time
+                    const pickupChanged = Boolean(item.override?.pickup_time) && item.override!.pickup_time !== item.pickup_time
+                    const dropoffChanged = Boolean(item.override?.dropoff_time) && item.override!.dropoff_time !== item.dropoff_time
+                    const loggedToday = todaysTrips.filter((t) => t.student_id === item.student.id && t.shift_period === period)
+                    const alreadyLogged = loggedToday.some((t) => t.trip_type === type)
+                    const openSession = openSessionByShift[period]
+                    const noShowReported = item.no_show_reported[period]
+                    const parentSkipped = item.parent_skipped[period]
+
+                    return (
+                      <Card key={rowKey} className="flex flex-col gap-3 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => setDetailStudentId(item.student.id)}
+                              className="text-title-lg font-medium text-primary hover:underline"
+                            >
+                              {item.student.name}
+                            </button>
+                            {item.student.grade && <span className="ml-2 text-label-md text-on-surface-variant">Grade {item.student.grade}</span>}
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => setDetailSchoolId(item.school.id)}
+                                className="text-body-md text-secondary hover:underline"
+                              >
+                                {item.school.name}
+                              </button>
+                            </div>
+                            <p className="text-body-md text-on-surface-variant">
+                              {item.student.parent_name ?? '-'}{' '}
+                              {item.student.parent_phone ? (
+                                <>
+                                  · <ContactLink type="phone" value={item.student.parent_phone} />
+                                </>
+                              ) : (
+                                ''
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 text-right">
+                            {skip ? (
+                              <span className="text-label-md font-medium text-error">No pickup/dropoff today</span>
+                            ) : (
+                              <>
+                                <span className={`text-body-md ${pickupChanged ? 'font-bold text-error' : 'text-on-surface-variant'}`}>
+                                  Pickup: {formatTimeOfDay(effectivePickup)}
+                                </span>
+                                <span className={`text-body-md ${dropoffChanged ? 'font-bold text-error' : 'text-on-surface-variant'}`}>
+                                  Dropoff: {formatTimeOfDay(effectiveDropoff)}
+                                </span>
+                              </>
+                            )}
+                            {item.override?.note && <span className="text-label-md text-on-surface-variant">{item.override.note}</span>}
+                          </div>
+                        </div>
+
+                        {parentSkipped && (
+                          <p className="rounded-lg bg-secondary-container px-3 py-2 text-label-md text-on-secondary-container">
+                            Parent skipped {period} pickup for this student today, no pickup needed.
+                          </p>
                         )}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 text-right">
-                      {skip ? (
-                        <span className="text-label-md font-medium text-error">No pickup/dropoff today</span>
-                      ) : (
-                        <>
-                          <span className={`text-body-md ${pickupChanged ? 'font-bold text-error' : 'text-on-surface-variant'}`}>
-                            Pickup: {formatTimeOfDay(effectivePickup)}
-                          </span>
-                          <span className={`text-body-md ${dropoffChanged ? 'font-bold text-error' : 'text-on-surface-variant'}`}>
-                            Dropoff: {formatTimeOfDay(effectiveDropoff)}
-                          </span>
-                        </>
-                      )}
-                      {item.override?.note && <span className="text-label-md text-on-surface-variant">{item.override.note}</span>}
-                    </div>
-                  </div>
 
-                  {item.parent_skipped_today && (
-                    <p className="rounded-lg bg-secondary-container px-3 py-2 text-label-md text-on-secondary-container">
-                      Parent skipped pickup for this student today, no pickup needed.
-                    </p>
-                  )}
+                        <div className="flex items-center gap-2">
+                          {(['pickup', 'dropoff'] as const).map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setRowType((prev) => ({ ...prev, [rowKey]: t }))}
+                              className={`flex-1 rounded-lg border px-4 py-2 text-label-md capitalize transition-colors ${
+                                type === t
+                                  ? 'border-primary bg-primary-fixed text-on-primary-fixed-variant'
+                                  : 'border-outline-variant text-on-surface-variant'
+                              }`}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                          <Button
+                            variant="secondary"
+                            className="h-10 px-4 text-label-md"
+                            disabled={!openSession || logTrip.isPending || alreadyLogged}
+                            onClick={() => logTrip.mutate({ studentId: item.student.id, tripType: type, shiftPeriod: period })}
+                          >
+                            {!openSession ? 'Check in first' : alreadyLogged ? 'Already logged' : 'Confirm'}
+                          </Button>
+                        </div>
 
-                  <div className="flex items-center gap-2">
-                    {(['pickup', 'dropoff'] as const).map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setRowType((prev) => ({ ...prev, [item.assignment_id]: t }))}
-                        className={`flex-1 rounded-lg border px-4 py-2 text-label-md capitalize transition-colors ${
-                          type === t
-                            ? 'border-primary bg-primary-fixed text-on-primary-fixed-variant'
-                            : 'border-outline-variant text-on-surface-variant'
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                    <Button
-                      variant="secondary"
-                      className="h-10 px-4 text-label-md"
-                      disabled={!openSession || logTrip.isPending || alreadyLogged}
-                      onClick={() => logTrip.mutate({ studentId: item.student.id, tripType: type })}
-                    >
-                      {!openSession ? 'Check in first' : alreadyLogged ? 'Already logged' : 'Confirm'}
-                    </Button>
-                  </div>
+                        {type === 'pickup' && (
+                          <Button
+                            variant="outline"
+                            className="h-10 w-fit px-4 text-label-md"
+                            disabled={
+                              !openSession ||
+                              markAbsent.isPending ||
+                              noShowReported ||
+                              parentSkipped ||
+                              loggedToday.some((t) => t.trip_type === 'pickup')
+                            }
+                            onClick={() => markAbsent.mutate({ assignmentId: item.assignment_id, shiftPeriod: period })}
+                          >
+                            <span className="material-symbols-outlined !text-[18px]">person_off</span>
+                            {noShowReported ? 'Absence Reported' : markAbsent.isPending ? 'Reporting…' : 'Mark Absent'}
+                          </Button>
+                        )}
 
-                  {type === 'pickup' && (
-                    <Button
-                      variant="outline"
-                      className="h-10 w-fit px-4 text-label-md"
-                      disabled={
-                        !openSession ||
-                        markAbsent.isPending ||
-                        item.no_show_reported_today ||
-                        item.parent_skipped_today ||
-                        loggedToday.some((t) => t.trip_type === 'pickup')
-                      }
-                      onClick={() => markAbsent.mutate(item.assignment_id)}
-                    >
-                      <span className="material-symbols-outlined !text-[18px]">person_off</span>
-                      {item.no_show_reported_today ? 'Absence Reported' : markAbsent.isPending ? 'Reporting…' : 'Mark Absent'}
-                    </Button>
-                  )}
-
-                  {loggedToday.length > 0 && (
-                    <div className="flex gap-3 text-label-md text-on-surface-variant">
-                      {loggedToday.map((t) => (
-                        <span key={t.id} className="flex items-center gap-1">
-                          <span className="material-symbols-outlined !text-[16px] text-green-600">check_circle</span>
-                          {t.trip_type} logged at {formatClock(t.created_at)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </Card>
+                        {loggedToday.length > 0 && (
+                          <div className="flex gap-3 text-label-md text-on-surface-variant">
+                            {loggedToday.map((t) => (
+                              <span key={t.id} className="flex items-center gap-1">
+                                <span className="material-symbols-outlined !text-[16px] text-green-600">check_circle</span>
+                                {t.trip_type} logged at {formatClock(t.created_at)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </Card>
+                    )
+                  })}
+                </div>
               )
             })}
           </div>
@@ -324,6 +355,7 @@ export function DriverDashboard() {
                 <div className="flex-1">
                   <h3 className="text-title-lg capitalize">
                     {trip.trip_type}: {studentName(trip.student_id)}
+                    {trip.shift_period && <span className="ml-2 text-label-md capitalize text-on-surface-variant">({trip.shift_period})</span>}
                   </h3>
                   {trip.status === 'complete' ? (
                     <StatusBadge tone="success" label={trip.auto_completed ? 'Auto-completed' : 'Complete'} />
@@ -368,6 +400,45 @@ export function DriverDashboard() {
       )}
       {detailSchoolId && <SchoolDetailModal schoolId={detailSchoolId} onClose={() => setDetailSchoolId(null)} />}
     </div>
+  )
+}
+
+// One independent check-in/check-out block per shift (morning/afternoon are two separate
+// events in the same day, not one continuous shift with a midday marker).
+function ShiftCard({
+  label,
+  session,
+  checkingIn,
+  checkingOut,
+  onCheckIn,
+  onCheckOut,
+}: {
+  label: string
+  session: DriverSession | undefined
+  checkingIn: boolean
+  checkingOut: boolean
+  onCheckIn: () => void
+  onCheckOut: (id: string) => void
+}) {
+  const pending = checkingIn || checkingOut
+  const elapsedMinutes = session ? Math.max(0, (Date.now() - new Date(session.check_in_at).getTime()) / 60_000) : 0
+
+  return (
+    <Card className="flex flex-col gap-3 p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-title-lg text-on-surface">{label}</h2>
+        {session ? <StatusBadge tone="success" label="Checked In" pulse /> : <StatusBadge tone="neutral" label="Checked Out" />}
+      </div>
+      <Button
+        className="h-16 w-full"
+        onClick={() => (session ? onCheckOut(session.id) : onCheckIn())}
+        disabled={pending}
+      >
+        <span className="material-symbols-outlined text-[24px]">{session ? 'logout' : 'login'}</span>
+        <span className="text-title-lg font-bold">{pending ? 'PLEASE WAIT…' : session ? 'CHECK OUT' : 'CHECK IN'}</span>
+      </Button>
+      {session && <span className="text-body-md text-on-surface-variant">{formatDuration(elapsedMinutes)} so far</span>}
+    </Card>
   )
 }
 

@@ -59,18 +59,18 @@ async function main() {
       const s2 = await login('s2@s.com');
 
       console.log('--- Logging requires an open shift ---');
-      eq('log trip with no open shift -> 409', (await api('POST', '/trips', drv, { student_id: stu1.id, trip_type: 'pickup' })).status, 409);
-      const ci = await api('POST', '/sessions/checkin', drv, {});
+      eq('log trip with no open shift -> 409', (await api('POST', '/trips', drv, { student_id: stu1.id, trip_type: 'pickup', shift_period: 'morning' })).status, 409);
+      const ci = await api('POST', '/sessions/checkin', drv, { shift_period: 'morning' });
       eq('driver check-in -> 201', ci.status, 201);
 
       console.log('\n--- Driver logs trip (= driver confirmation) ---');
-      const t1 = await api('POST', '/trips', drv, { student_id: stu1.id, trip_type: 'pickup' });
+      const t1 = await api('POST', '/trips', drv, { student_id: stu1.id, trip_type: 'pickup', shift_period: 'morning' });
       (t1.status === 201 && t1.body.status === 'pending' && t1.body.driver_confirmed_at && !t1.body.staff_confirmed_at)
         ? ok('log trip -> 201 pending, driver_confirmed set, staff not') : bad(`log: ${t1.status} ${JSON.stringify(t1.body)}`);
       eq('log-trip response is also enriched with driver contact', t1.body.driver_name, 'Drv');
       const sess = (await api('GET', `/sessions/${ci.body.id}`, drv)).body;
       eq('session.trip_count incremented to 1', sess.trip_count, 1);
-      eq('driver logging a student not in their company -> 404', (await api('POST', '/trips', drv, { student_id: stuB.id, trip_type: 'pickup' })).status, 404);
+      eq('driver logging a student not in their company -> 404', (await api('POST', '/trips', drv, { student_id: stuB.id, trip_type: 'pickup', shift_period: 'morning' })).status, 404);
 
       console.log('\n--- Two-way confirmation ---');
       eq('non-granted staff (staff2) confirms trip for student1 -> 404', (await api('POST', `/trips/${t1.body.id}/confirm`, s2)).status, 404);
@@ -81,8 +81,8 @@ async function main() {
       eq('confirming an already-complete trip -> 409', (await api('POST', `/trips/${t1.body.id}/confirm`, s1)).status, 409);
 
       console.log('\n--- 5-minute auto-complete (backdated, no real waiting) ---');
-      const t2 = (await api('POST', '/trips', drv, { student_id: stu2.id, trip_type: 'dropoff' })).body; // never staff-confirmed
-      const t3 = (await api('POST', '/trips', drv, { student_id: stu1.id, trip_type: 'dropoff' })).body; // fresh, should NOT sweep
+      const t2 = (await api('POST', '/trips', drv, { student_id: stu2.id, trip_type: 'dropoff', shift_period: 'morning' })).body; // never staff-confirmed
+      const t3 = (await api('POST', '/trips', drv, { student_id: stu1.id, trip_type: 'dropoff', shift_period: 'morning' })).body; // fresh, should NOT sweep
       await pool.query("UPDATE trips SET driver_confirmed_at = now() - interval '6 minutes' WHERE id = $1", [t2.id]);
       const swept = await autoCompleteStaleTrips();
       eq('sweep completes exactly 1 stale trip', swept, 1);
@@ -109,7 +109,7 @@ async function main() {
 
       console.log('\n--- [caveat #1 regression] staff confirm racing the sweep stays benign ---');
       // Fresh pending trip for the granted student.
-      const tr = (await api('POST', '/trips', drv, { student_id: stu1.id, trip_type: 'pickup' })).body;
+      const tr = (await api('POST', '/trips', drv, { student_id: stu1.id, trip_type: 'pickup', shift_period: 'morning' })).body;
       // Build the real staff scoped accessor, but wrap findById so the sweep lands in the exact
       // gap between confirmTrip's read (sees 'pending') and its update.
       const baseDb = createScopedDb(pool, { type: 'school', id: S.id }, { userId: staff1.id, role: 'school_staff' });

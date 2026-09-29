@@ -67,8 +67,8 @@ async function main() {
       await ins('INSERT INTO parent_students(parent_user_id,student_id,company_id,created_by_user_id) VALUES($1,$2,$3,$4) RETURNING id', [parent.id, stu.id, A.id, admin.id]);
 
       console.log('--- Trip confirmation: school_admin can now confirm, not just school_staff ---');
-      await api('POST', '/sessions/checkin', driverTok, {});
-      const trip1 = (await api('POST', '/trips', driverTok, { student_id: stu.id, trip_type: 'dropoff' })).body;
+      await api('POST', '/sessions/checkin', driverTok, { shift_period: 'morning' });
+      const trip1 = (await api('POST', '/trips', driverTok, { student_id: stu.id, trip_type: 'dropoff', shift_period: 'morning' })).body;
       eq('company_admin confirming a trip -> 403 (not a school role)', (await api('POST', `/trips/${trip1.id}/confirm`, adminTok)).status, 403);
       eq('driver confirming a trip -> 403', (await api('POST', `/trips/${trip1.id}/confirm`, driverTok)).status, 403);
       eq('non-granted staff2 confirming -> 404 (not their granted student)', (await api('POST', `/trips/${trip1.id}/confirm`, staff2Tok)).status, 404);
@@ -77,7 +77,7 @@ async function main() {
         ? ok('school_admin confirms trip -> 200 complete (new capability)')
         : bad(`school_admin confirm: ${confBySchoolAdmin.status} ${JSON.stringify(confBySchoolAdmin.body)}`);
 
-      const trip2 = (await api('POST', '/trips', driverTok, { student_id: stu.id, trip_type: 'pickup' })).body;
+      const trip2 = (await api('POST', '/trips', driverTok, { student_id: stu.id, trip_type: 'pickup', shift_period: 'morning' })).body;
       const confByStaff = await api('POST', `/trips/${trip2.id}/confirm`, staff1Tok);
       eq('granted school_staff still confirms trips -> 200 (unchanged)', confByStaff.status, 200);
 

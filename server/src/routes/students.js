@@ -35,10 +35,15 @@ function readScope(req) {
 // belt-and-suspenders precedent as scheduleChanges.js's applyPickupSkip. Skipped entirely
 // for company_admin readers (their own company's data, already visible elsewhere, and
 // req.auth.tenantId is a company id there so the school_id filter wouldn't even apply).
+//
+// Returns EVERY active assignment per student, not just one (shift_period split fix,
+// found during the shift_period audit): a student can have a separate morning and afternoon
+// assignment, each with its own driver/van, so picking "the latest one" silently hid one of
+// the two shifts. `transport` is now an array, one entry per active assignment.
 async function attachTransportInfo(req, students) {
   if (req.auth.tenantType !== 'school' || students.length === 0) return students;
   const { rows } = await pool.query(
-    `SELECT DISTINCT ON (a.student_id) a.student_id,
+    `SELECT a.student_id, a.shift_period,
             v.license_plate, v.brand, v.model, v.year, v.color,
             u.full_name AS driver_name, u.phone AS driver_phone,
             c.name AS company_name
@@ -49,19 +54,20 @@ async function attachTransportInfo(req, students) {
        JOIN companies c ON c.id = a.company_id
       WHERE a.student_id = ANY($1::uuid[]) AND st.school_id = $2
         AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
-      ORDER BY a.student_id, a.created_at DESC`,
+      ORDER BY a.student_id, a.shift_period, a.created_at DESC`,
     [students.map((s) => s.id), req.auth.tenantId]
   );
-  const byStudent = new Map(rows.map((r) => [r.student_id, r]));
-  return students.map((s) => {
-    const t = byStudent.get(s.id);
-    return {
-      ...s,
-      company_name: t?.company_name ?? null,
-      van: t ? { license_plate: t.license_plate, brand: t.brand, model: t.model, year: t.year, color: t.color } : null,
-      driver: t ? { full_name: t.driver_name, phone: t.driver_phone } : null,
-    };
-  });
+  const byStudent = new Map();
+  for (const r of rows) {
+    if (!byStudent.has(r.student_id)) byStudent.set(r.student_id, []);
+    byStudent.get(r.student_id).push({
+      shift_period: r.shift_period,
+      company_name: r.company_name,
+      van: { license_plate: r.license_plate, brand: r.brand, model: r.model, year: r.year, color: r.color },
+      driver: { full_name: r.driver_name, phone: r.driver_phone },
+    });
+  }
+  return students.map((s) => ({ ...s, transport: byStudent.get(s.id) ?? [] }));
 }
 
 // Students page task (2026-08-27): every field required except notes. Enforced here (not a

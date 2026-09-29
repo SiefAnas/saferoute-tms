@@ -42,18 +42,32 @@ export function VansPage() {
   }, [driversQuery.data])
 
   // A van can legitimately have more than one driver active today (different students,
-  // different assignments) — show every distinct driver currently using this van.
+  // different assignments, or the same van handed off between a morning and an afternoon
+  // driver) — show every distinct driver currently using this van, labeled by shift when a
+  // driver's use of this van is confined to just one (so "Morning: X / Afternoon: Y" reads
+  // as two different drivers sharing the van, not one driver oddly duplicated).
   const currentDriversFor = useMemo(() => {
-    const byVan = new Map<string, Set<string>>()
+    const byVan = new Map<string, Map<string, Set<string>>>()
     for (const a of assignmentsQuery.data ?? []) {
       if (!isAssignmentActiveToday(a.start_date, a.end_date)) continue
-      if (!byVan.has(a.van_id)) byVan.set(a.van_id, new Set())
-      byVan.get(a.van_id)!.add(a.driver_user_id)
+      if (!byVan.has(a.van_id)) byVan.set(a.van_id, new Map())
+      const drivers = byVan.get(a.van_id)!
+      if (!drivers.has(a.driver_user_id)) drivers.set(a.driver_user_id, new Set())
+      drivers.get(a.driver_user_id)!.add(a.shift_period)
     }
-    return (vanId: string) =>
-      Array.from(byVan.get(vanId) ?? [])
-        .map(driverName)
-        .filter((n): n is string => Boolean(n))
+    return (vanId: string) => {
+      const drivers = byVan.get(vanId)
+      if (!drivers) return []
+      const out: string[] = []
+      for (const [driverId, shifts] of drivers) {
+        const name = driverName(driverId)
+        if (!name) continue
+        const onlyOneShift = shifts.size === 1 && !shifts.has('both')
+        const label = onlyOneShift ? (shifts.has('afternoon') ? 'Afternoon' : 'Morning') : null
+        out.push(label ? `${name} (${label})` : name)
+      }
+      return out
+    }
   }, [assignmentsQuery.data, driverName])
 
   const [editingId, setEditingId] = useState<string | null>(null)

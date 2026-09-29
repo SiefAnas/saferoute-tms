@@ -1,7 +1,7 @@
 // Driver-reported no-show (real feature, added alongside the parent-role permission work):
 // "when a driver arrives and no one shows up, they can hit a button marking the student
-// Absent" — notifies the school and company admin. Also covers getTodaySchedule's new
-// parent_skipped_today / no_show_reported_today fields.
+// Absent" — notifies the school and company admin. Also covers getTodaySchedule's
+// parent_skipped / no_show_reported fields, now per shift_period.
 const PG_PORT = 5460;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
 process.env.JWT_SECRET = 'test-secret-10';
@@ -71,30 +71,37 @@ async function main() {
         student_id: stu.id, driver_user_id: driver.id, van_id: van.id, start_date: '2020-01-01',
       })).body;
 
-      console.log('--- no-show requires an open shift ---');
+      console.log('--- no-show requires shift_period ---');
+      eq(
+        'no-show with no shift_period -> 400',
+        (await api('POST', `/schedule/${asg.id}/no-show`, drv, {})).status,
+        400
+      );
+
+      console.log('\n--- no-show requires an open shift for that period ---');
       eq(
         'no-show before check-in -> 409',
-        (await api('POST', `/schedule/${asg.id}/no-show`, drv)).status,
+        (await api('POST', `/schedule/${asg.id}/no-show`, drv, { shift_period: 'morning' })).status,
         409
       );
 
-      await api('POST', '/sessions/checkin', drv, {});
+      await api('POST', '/sessions/checkin', drv, { shift_period: 'morning' });
 
       console.log('\n--- ownership ---');
       eq(
         'a different driver reporting a no-show on an assignment not theirs -> 404',
-        (await api('POST', `/schedule/${asg.id}/no-show`, drv2)).status,
+        (await api('POST', `/schedule/${asg.id}/no-show`, drv2, { shift_period: 'morning' })).status,
         404
       );
       eq(
         'non-driver role hitting the no-show route -> 403',
-        (await api('POST', `/schedule/${asg.id}/no-show`, admin)).status,
+        (await api('POST', `/schedule/${asg.id}/no-show`, admin, { shift_period: 'morning' })).status,
         403
       );
 
       console.log('\n--- report + notify ---');
       mailer._reset();
-      const report = await api('POST', `/schedule/${asg.id}/no-show`, drv);
+      const report = await api('POST', `/schedule/${asg.id}/no-show`, drv, { shift_period: 'morning' });
       (report.status === 200 && report.body.reported === true)
         ? ok('driver reports a no-show -> 200')
         : bad(`report: ${report.status} ${JSON.stringify(report.body)}`);
@@ -104,18 +111,20 @@ async function main() {
         : bad(`notified: ${JSON.stringify(sentTo)}`);
 
       eq(
-        'reporting again same day -> 409 (double-submit guard)',
-        (await api('POST', `/schedule/${asg.id}/no-show`, drv)).status,
+        'reporting again same shift same day -> 409 (double-submit guard)',
+        (await api('POST', `/schedule/${asg.id}/no-show`, drv, { shift_period: 'morning' })).status,
         409
       );
 
-      console.log("\n--- getTodaySchedule reflects the report ---");
+      console.log("\n--- getTodaySchedule reflects the report, per shift ---");
       const today = await api('GET', '/schedule/today', drv);
       const item = (today.body ?? []).find((i) => i.assignment_id === asg.id);
-      (item && item.no_show_reported_today === true)
-        ? ok("today's schedule shows no_show_reported_today: true")
+      (item && item.no_show_reported.morning === true)
+        ? ok("today's schedule shows no_show_reported.morning: true")
         : bad(`schedule item: ${JSON.stringify(item)}`);
-      eq('parent_skipped_today is false (no parent skip happened)', item?.parent_skipped_today, false);
+      eq('no_show_reported.afternoon is false (only morning was reported)', item?.no_show_reported.afternoon, false);
+      eq('parent_skipped.morning is false (no parent skip happened)', item?.parent_skipped.morning, false);
+      eq('parent_skipped.afternoon is false (no parent skip happened)', item?.parent_skipped.afternoon, false);
     } finally {
       server.close();
     }

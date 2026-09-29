@@ -6,6 +6,7 @@ const pool = require('../db/pool');
 const { withTx } = require('../db/tx');
 const { HttpError } = require('../errors');
 const { autoCompleteMinutes } = require('../config');
+const { notifyCompanyAndSchoolAdmins } = require('./notifications');
 
 // Read sub-scope by role:
 //  - driver       -> trips within their own shifts
@@ -29,14 +30,19 @@ const CONFIRM_ROLES = ['school_staff', 'school_admin'];
 
 async function logTrip(req, body = {}) {
   if (req.auth.role !== 'driver') throw new HttpError(403, 'only drivers log trips');
-  const { student_id, trip_type } = body;
+  const { student_id, trip_type, shift_period } = body;
   if (!student_id || !['pickup', 'dropoff'].includes(trip_type)) {
     throw new HttpError(400, "student_id and trip_type ('pickup'|'dropoff') are required");
   }
-  // Must be on an open shift.
+  if (!['morning', 'afternoon'].includes(shift_period)) {
+    throw new HttpError(400, "shift_period must be 'morning' or 'afternoon'");
+  }
+  // Must be on an open shift for that period. A driver can have both shifts open at once
+  // (e.g. forgot to check out morning before starting afternoon), so shift_period is what
+  // picks the right one rather than "whichever shift happens to be open".
   const open = (await req.db.findMany('sessions', { owner: { column: 'user_id', value: req.auth.userId } }))
-    .find((s) => s.check_out_at === null);
-  if (!open) throw new HttpError(409, 'check in before logging a trip');
+    .find((s) => s.check_out_at === null && s.shift_period === shift_period);
+  if (!open) throw new HttpError(409, 'check in for that shift before logging a trip');
 
   // Student must be in the driver's company; grab its school_id for the trip's denormalized key.
   const student = await req.db.findById('students', student_id);
@@ -46,10 +52,10 @@ async function logTrip(req, body = {}) {
   // pool.query calls, so a failure between them could drift the per-shift count.
   const trip = await withTx(async (client) => {
     const { rows } = await client.query(
-      `INSERT INTO trips (session_id, company_id, student_id, school_id, trip_type, driver_confirmed_at, status)
-       VALUES ($1, $2, $3, $4, $5, now(), 'pending')
+      `INSERT INTO trips (session_id, company_id, student_id, school_id, trip_type, shift_period, driver_confirmed_at, status)
+       VALUES ($1, $2, $3, $4, $5, $6, now(), 'pending')
        RETURNING *`,
-      [open.id, req.auth.tenantId, student_id, student.school_id, trip_type]
+      [open.id, req.auth.tenantId, student_id, student.school_id, trip_type, open.shift_period]
     );
     await client.query(
       'UPDATE sessions SET trip_count = trip_count + 1 WHERE id = $1 AND company_id = $2',
@@ -120,20 +126,38 @@ async function getTrip(req, id) {
 // Background sweep: complete half-confirmed trips older than the threshold. System-wide
 // (all tenants) since it's a scheduled job, not a user request. Idempotent conditional UPDATE.
 //
-// TODO (V2, explicitly deferred per the pickup-confirmation task): this silent auto-confirm
-// is temporary MVP behavior. V2 should replace it with a reminder to school staff/admin, plus
-// a notification to the school/company admin if a trip goes unconfirmed all the way to the
-// timeout — not just quietly marking it complete as if someone actually confirmed it.
+// V2 (was a TODO, now built alongside shift_period since it's the same alerting path):
+// silently auto-confirming hid a real problem - staff never actually confirmed the trip.
+// Now each auto-completed trip also notifies the company + school admin, same
+// notifyCompanyAndSchoolAdmins() helper the no-show and skip-pickup features already use.
 async function autoCompleteStaleTrips() {
-  const { rowCount } = await pool.query(
-    `UPDATE trips
-        SET status = 'complete', auto_completed = true, completed_at = now()
+  const { rows: stale } = await pool.query(
+    `SELECT id, company_id, school_id, student_id, trip_type, shift_period
+       FROM trips
       WHERE status = 'pending'
         AND LEAST(COALESCE(driver_confirmed_at, 'infinity'::timestamptz),
                   COALESCE(staff_confirmed_at,  'infinity'::timestamptz))
             < now() - ($1 || ' minutes')::interval`,
     [String(autoCompleteMinutes)]
   );
+  if (stale.length === 0) return 0;
+
+  const { rowCount } = await pool.query(
+    `UPDATE trips SET status = 'complete', auto_completed = true, completed_at = now()
+      WHERE id = ANY($1::uuid[]) AND status = 'pending'`,
+    [stale.map((t) => t.id)]
+  );
+
+  await Promise.all(stale.map(async (t) => {
+    const student = (await pool.query('SELECT full_name FROM students WHERE id = $1', [t.student_id])).rows[0];
+    const shiftNote = t.shift_period ? ` (${t.shift_period} shift)` : '';
+    const subject = `${t.trip_type === 'pickup' ? 'Pickup' : 'Dropoff'} not confirmed for ${student?.full_name ?? 'a student'}${shiftNote}`;
+    const text =
+      `${student?.full_name ?? 'A student'}'s ${t.trip_type} was not confirmed by school staff within ` +
+      `${autoCompleteMinutes} minutes and was auto-completed${shiftNote}. Please verify this actually happened.`;
+    await notifyCompanyAndSchoolAdmins(t.company_id, t.school_id, { subject, text });
+  }));
+
   return rowCount;
 }
 
