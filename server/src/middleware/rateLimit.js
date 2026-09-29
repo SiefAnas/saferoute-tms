@@ -56,4 +56,18 @@ const passwordResetLimiter = createLimiter({
   message: 'too many password reset attempts, please try again later',
 });
 
-module.exports = { loginLimiter, signupLimiter, searchLimiter, verifyLimiter, passwordResetLimiter };
+// Same endpoint, per email address: one inbox can't be flooded with reset mail from many IPs.
+// Unknown emails count too, so hitting the limit reveals nothing about which accounts exist.
+const passwordResetEmailLimiter = DISABLED
+  ? (req, res, next) => next()
+  : rateLimit({
+      windowMs: 60 * 60 * 1000,
+      max: Number(process.env.RATE_LIMIT_RESET_EMAIL_MAX) || 3,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) => `reset:${String(req.body?.email ?? '').trim().toLowerCase().slice(0, 254)}`,
+      validate: { keyGeneratorIpFallback: false },
+      message: { error: 'too many password reset attempts, please try again later' },
+    });
+
+module.exports = { passwordResetEmailLimiter, loginLimiter, signupLimiter, searchLimiter, verifyLimiter, passwordResetLimiter };

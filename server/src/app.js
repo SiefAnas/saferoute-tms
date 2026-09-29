@@ -21,6 +21,8 @@ const dashboardRoutes = require('./routes/dashboard');
 const scheduleChangesRoutes = require('./routes/scheduleChanges');
 const companyRoutes = require('./routes/companies');
 const monitorRoutes = require('./routes/monitors');
+const webhookRoutes = require('./routes/webhooks');
+const importRoutes = require('./routes/imports');
 
 function createApp() {
   const app = express();
@@ -70,6 +72,8 @@ function createApp() {
   app.use('/companies', companyRoutes);
   app.use('/monitors', monitorRoutes.admin);
   app.use('/monitor', monitorRoutes.self);
+  app.use('/webhooks', webhookRoutes);
+  app.use('/imports', importRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
 

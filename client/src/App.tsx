@@ -32,6 +32,7 @@ const StaffAccessPage = lazy(() => import('./pages/school-admin/StaffAccessPage'
 const SchoolProfilePage = lazy(() => import('./pages/school-admin/SchoolProfilePage').then((m) => ({ default: m.SchoolProfilePage })))
 const SchoolStaffDashboard = lazy(() => import('./pages/school-staff/SchoolStaffDashboard').then((m) => ({ default: m.SchoolStaffDashboard })))
 const ParentHomePage = lazy(() => import('./pages/parent/ParentHomePage').then((m) => ({ default: m.ParentHomePage })))
+const ImportPage = lazy(() => import('./pages/ImportPage').then((m) => ({ default: m.ImportPage })))
 const ParentProfilePage = lazy(() => import('./pages/parent/ParentProfilePage').then((m) => ({ default: m.ParentProfilePage })))
 
 // Sidebar nav per role (design 5a, "Sidebar"): grouped, with the only uppercase text in the app
@@ -56,7 +57,13 @@ const COMPANY_NAV: NavGroup[] = [
     ],
   },
   { label: 'Finance', items: [{ to: '/company/payroll', label: 'Payroll', icon: 'payments' }] },
-  { label: 'Settings', items: [{ to: '/company/profile', label: 'Company profile', icon: 'apartment' }] },
+  {
+    label: 'Settings',
+    items: [
+      { to: '/company/import', label: 'Import', icon: 'upload_file' },
+      { to: '/company/profile', label: 'Company profile', icon: 'apartment' },
+    ],
+  },
 ]
 const SCHOOL_ADMIN_NAV: NavGroup[] = [
   {
@@ -66,7 +73,13 @@ const SCHOOL_ADMIN_NAV: NavGroup[] = [
     ],
   },
   { label: 'People', items: [{ to: '/school-admin/staff', label: 'Staff & access', icon: 'badge' }] },
-  { label: 'Settings', items: [{ to: '/school-admin/profile', label: 'School profile', icon: 'school' }] },
+  {
+    label: 'Settings',
+    items: [
+      { to: '/school-admin/import', label: 'Import', icon: 'upload_file' },
+      { to: '/school-admin/profile', label: 'School profile', icon: 'school' },
+    ],
+  },
 ]
 const SCHOOL_STAFF_NAV: NavGroup[] = [
   { items: [{ to: '/school-staff', label: 'Pickup & drop-off', icon: 'how_to_reg', end: true }] },
@@ -116,6 +129,7 @@ function App() {
             <Route path="/company/students" element={<CompanyStudentsPage />} />
             <Route path="/company/parents" element={<ParentsPage />} />
             <Route path="/company/profile" element={<CompanyProfilePage />} />
+            <Route path="/company/import" element={<ImportPage />} />
           </Route>
         </Route>
 
@@ -125,6 +139,7 @@ function App() {
             <Route path="/school-admin/pickup" element={<SchoolStaffDashboard />} />
             <Route path="/school-admin/staff" element={<StaffAccessPage />} />
             <Route path="/school-admin/profile" element={<SchoolProfilePage />} />
+            <Route path="/school-admin/import" element={<ImportPage />} />
           </Route>
         </Route>
 

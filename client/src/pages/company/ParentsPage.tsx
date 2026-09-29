@@ -125,7 +125,6 @@ export function ParentsPage() {
     const fullName = row['Full Name']?.trim()
     const phone = row['Phone']?.trim()
     const address = row['Address']?.trim()
-    const activeRaw = row['Active']?.trim().toLowerCase()
 
     const existing = (parentsQuery.data ?? []).find((p) => p.email.toLowerCase() === email.toLowerCase())
     try {
@@ -134,7 +133,6 @@ export function ParentsPage() {
         if (fullName) patch.full_name = fullName
         if (phone) patch.phone = phone
         if (address) patch.address = address
-        if (activeRaw) patch.is_active = ['true', '1', 'yes'].includes(activeRaw)
         if (Object.keys(patch).length === 0) return { ok: true, message: 'No changes' }
         await api.patch(`/users/${existing.id}`, patch)
         return { ok: true, message: 'Updated' }

@@ -4,7 +4,8 @@ const pool = require('../db/pool');
 const { verifyPassword, DUMMY_HASH } = require('../auth/password');
 const authenticate = require('../middleware/authenticate');
 const { verifyEmail, resendVerification } = require('../services/signup');
-const { loginLimiter, verifyLimiter, passwordResetLimiter } = require('../middleware/rateLimit');
+const { loginLimiter, verifyLimiter, passwordResetLimiter, passwordResetEmailLimiter } = require('../middleware/rateLimit');
+const { tempPasswordExpired } = require('../services/passwords');
 const { changePassword, requestPasswordReset, resetPassword, loginPayload } = require('../services/passwords');
 
 const router = express.Router();
@@ -24,6 +25,10 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     if (!user || !user.is_active || !ok) {
       return res.status(401).json({ error: 'invalid credentials' });
     }
+    if (tempPasswordExpired(user)) {
+      return res.status(401).json({ error: 'This temporary password has expired. Ask your admin to reset it.', code: 'TEMP_PASSWORD_EXPIRED' });
+    }
+    await pool.query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
 
     // user.must_change_password: the client must send the user to "set your password" first
     // (every other endpoint answers 403 PASSWORD_CHANGE_REQUIRED until they do).
@@ -47,7 +52,7 @@ router.post('/change-password', authenticate.allowPasswordChange, async (req, re
 });
 
 // Forgot password: always { ok: true }, whether or not the email has an account.
-router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => {
+router.post('/forgot-password', passwordResetLimiter, passwordResetEmailLimiter, async (req, res, next) => {
   try {
     res.json(await requestPasswordReset((req.body || {}).email));
   } catch (err) {

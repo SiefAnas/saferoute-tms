@@ -18,6 +18,7 @@ const { assertValidEmail, assertPasswordStrength } = require('../validate');
 const { appUrl } = require('../config');
 
 const RESET_TTL_MINUTES = 60;
+const TEMP_PASSWORD_DAYS = 7;
 
 // No look-alike characters (0/O, 1/l/I), so it can be read out or copied from a screen.
 const TEMP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -40,12 +41,25 @@ function passwordChangedNow() {
   return new Date(Math.floor(Date.now() / 1000) * 1000);
 }
 
-async function setPassword(db, userId, plain, { mustChange }) {
-  const hash = await hashPassword(plain);
+// A temporary password (mustChange) stops working after TEMP_PASSWORD_DAYS; a password the user
+// chose never expires. `rounds` lets bulk import use a cheaper hash for its random temp passwords.
+async function setPassword(db, userId, plain, { mustChange, rounds }) {
+  const hash = await hashPassword(plain, rounds);
   await db.query(
-    'UPDATE users SET password_hash = $2, must_change_password = $3, password_changed_at = $4 WHERE id = $1',
+    `UPDATE users SET password_hash = $2, must_change_password = $3::boolean, password_changed_at = $4,
+            temp_password_expires_at = CASE WHEN $3::boolean THEN now() + interval '${TEMP_PASSWORD_DAYS} days' ELSE NULL END
+      WHERE id = $1`,
     [userId, hash, mustChange, passwordChangedNow()]
   );
+}
+
+function tempPasswordExpired(user) {
+  return Boolean(user.must_change_password && user.temp_password_expires_at && new Date(user.temp_password_expires_at) < new Date());
+}
+
+// Every reset is recorded: who did it, for whom, how, when. actorId is null for self service.
+async function logPasswordReset(db, { actorId = null, targetId, method }) {
+  await db.query('INSERT INTO password_reset_log (actor_user_id, target_user_id, method) VALUES ($1, $2, $3)', [actorId, targetId, method]);
 }
 
 function loginPayload(user) {
@@ -128,8 +142,9 @@ async function resetPassword({ token, newPassword } = {}) {
     if (!row) throw new HttpError(400, 'this reset link is invalid or has expired');
     await client.query('UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL', [row.user_id]);
     await setPassword(client, row.user_id, newPassword, { mustChange: false });
+    await logPasswordReset(client, { targetId: row.user_id, method: 'self_service' });
   });
   return { ok: true };
 }
 
-module.exports = { generateTempPassword, setPassword, changePassword, requestPasswordReset, resetPassword, loginPayload };
+module.exports = { TEMP_PASSWORD_DAYS, tempPasswordExpired, generateTempPassword, setPassword, logPasswordReset, changePassword, requestPasswordReset, resetPassword, loginPayload };

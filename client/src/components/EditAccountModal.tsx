@@ -87,6 +87,11 @@ export function EditAccountModal({
   return (
     <Modal title={`Edit ${user.full_name}`} onClose={onClose}>
       <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+        {user.email_bounced && (
+          <p className="rounded-row bg-caution-bg px-3 py-2 text-[13px] text-caution-fg">
+            Email to {user.email} bounced, so SafeTurns has stopped sending to it. Correct the address below to start again.
+          </p>
+        )}
         <Field label="Full name">
           <Input required value={fullName} onChange={(e) => setFullName(e.target.value)} />
         </Field>
@@ -113,7 +118,11 @@ export function EditAccountModal({
             <span className="flex flex-col">
               <span className="text-[13px] font-semibold text-ink">Password</span>
               <span className="text-[12px] text-muted">
-                {user.must_change_password ? "Hasn't set their own password yet." : 'Set by them. You never see it.'}
+                {user.account_status === 'never_logged_in'
+                  ? 'Never logged in. The temporary password has expired: reset it to send a new one.'
+                  : user.must_change_password
+                    ? `Created, hasn't set their own password yet${user.temp_password_expires_at ? ` (temporary password works until ${new Date(user.temp_password_expires_at).toLocaleDateString()})` : ''}.`
+                    : 'Active. Set by them. You never see it.'}
               </span>
             </span>
             {!confirmReset && (

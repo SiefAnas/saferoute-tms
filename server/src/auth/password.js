@@ -3,8 +3,8 @@ const bcrypt = require('bcryptjs');
 
 const ROUNDS = 12;
 
-async function hashPassword(plain) {
-  return bcrypt.hash(plain, ROUNDS);
+async function hashPassword(plain, rounds = ROUNDS) {
+  return bcrypt.hash(plain, rounds);
 }
 
 async function verifyPassword(plain, hash) {

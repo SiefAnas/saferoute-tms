@@ -136,6 +136,9 @@ Response `200`:
   `tenantType`: `company` (driver, parent, company_admin) or `school`.
 - Errors: `400` missing fields, `401 {"error":"invalid credentials"}` (wrong email/password or
   deactivated), `429` rate limited.
+- `401 {"error":"This temporary password has expired. Ask your admin to reset it.", "code":"TEMP_PASSWORD_EXPIRED"}`:
+  the right temporary password, but more than **7 days** old. Only the admin's Reset password fixes
+  it. An already signed-in session on an expired temporary password gets the same 401.
 - Email match is case-insensitive.
 
 ### Token
@@ -170,7 +173,10 @@ Body `{ "email": "…" }`. **Always `200 {"ok": true}`**, whether or not the ema
 (never reveals which emails exist). If it does and the account is active, the server emails a
 link `<website>/reset-password?token=…`: single use, expires after **60 minutes**, and only the
 newest link works. Delivery needs a working mail transport on the server (Resend: `RESEND_API_KEY` or SMTP).
-`400` missing/invalid email. `429` rate limited (5 per 15 minutes per IP, shared with reset).
+`400` missing/invalid email. `429` rate limited: 5 per 15 minutes per IP (shared with reset),
+and 3 per hour per email address (counted for unknown emails too). Not sent if the address is
+flagged `email_bounced`. Every completed reset (self service or admin) is recorded in
+`password_reset_log` (who, for whom, how, when).
 
 ### `POST /auth/reset-password` (public)
 Body `{ "token": "…", "newPassword": "…" }` (the website's reset page sends this). `200
@@ -188,6 +194,32 @@ token, or weak password. `429` rate limited.
   working. For when email isn't available. `403` another admin's account, the admin
   themselves, or another admin; `404` another company/school's user.
 - `PATCH /users/:id` no longer takes `password` (`400`).
+- Accounts are never deleted. `PATCH /users/:id {"is_active": false}` deactivates (can't log in,
+  hidden from assignment lists, history kept). A driver or monitor with running or future
+  assignments can't be deactivated: `409 {"error":"This driver has N active assignments. Reassign them before deactivating."}`.
+- User objects also carry `email_bounced` (mail to it bounced; nothing is sent until the email is
+  corrected, which clears the flag), `account_status` (`created` = temporary password not replaced
+  yet, `never_logged_in` = temporary password expired unused, `active`) and
+  `temp_password_expires_at`.
+- `POST /webhooks/email-bounce` (mail provider only, header `x-webhook-secret: $BOUNCE_WEBHOOK_SECRET`;
+  `404` when unset or wrong): body `{ "email": "…" }` or a Resend `email.bounced` event. Flags the address.
+
+### Bulk import (company admin, school admin; website only)
+Full design: `docs/bulk-import-spec.md`. The website reads the spreadsheet and maps its columns;
+the server gets rows keyed by SafeTurns field names and checks everything itself.
+- `GET /imports/types` → `{ max_rows: 100, types: [{ id, label, match_key, fields: [{ key, label, required }] }] }`.
+  Company admin: `drivers, monitors, parents, vans, students`. School admin: `staff`.
+- `GET /imports/mapping?type=…` → `{ mapping }` (last column choices for this company/school, or null).
+  `PUT /imports/mapping` body `{ type, mapping: { field: "Column name" } }`.
+- `POST /imports/preview` body `{ type, rows: [{ field: "text" }] }` → `{ counts: { create, update, error },
+  rows: [{ index, action: "create"|"update"|"error", reason, note }] }`. Writes nothing.
+- `POST /imports/commit` same body → `{ counts: { created, updated, error }, rows: [{ index, status, reason }],
+  credentials: [{ full_name, email, role, temporary_password }] }`. Plans again, then imports each good
+  row in its own transaction; bad rows are skipped. `credentials` is the only time those temporary
+  passwords are ever returned (`Cache-Control: no-store`).
+- Matching: email (people), license plate (vans), student name + school (students). Existing records are
+  updated, never duplicated, never deactivated. Duplicate keys inside one file are errors on every such row.
+- `400`: unknown type, no rows, more than 100 rows. `403`: a type your role can't import.
 
 ---
 
