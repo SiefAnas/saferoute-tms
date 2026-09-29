@@ -80,6 +80,18 @@ async function main() {
       (await fetch(`${BASE}/auth/me`)).status === 401 ? ok('/auth/me without token -> 401') : bad('/auth/me open without token');
       (await fetch(`${BASE}/auth/me`, { headers: authHdr(tokenA + 'x') })).status === 401 ? ok('tampered token -> 401') : bad('tampered token accepted');
 
+      console.log('\n--- Token lifetime vs. user state ---');
+      await q("INSERT INTO users(email,password_hash,full_name,role,company_id) VALUES('deact@x.com',$1,'Deact','company_admin',$2) RETURNING id", [hash, A.id]);
+      await q("INSERT INTO users(email,password_hash,full_name,role,company_id) VALUES('gone@x.com',$1,'Gone','company_admin',$2) RETURNING id", [hash, A.id]);
+      const tokenDeact = (await login('deact@x.com')).body.token;
+      const tokenGone = (await login('gone@x.com')).body.token;
+      (await fetch(`${BASE}/auth/me`, { headers: authHdr(tokenDeact) })).status === 200 ? ok('token valid while user active') : bad('fresh token rejected');
+      await pool.query("UPDATE users SET is_active = false WHERE email = 'deact@x.com'");
+      (await fetch(`${BASE}/auth/me`, { headers: authHdr(tokenDeact) })).status === 401 ? ok('existing token dies when user deactivated') : bad('deactivated user token still accepted');
+      await pool.query("DELETE FROM users WHERE email = 'gone@x.com'");
+      (await fetch(`${BASE}/auth/me`, { headers: authHdr(tokenGone) })).status === 401 ? ok('existing token dies when user deleted') : bad('deleted user token still accepted');
+      (await login('gone@x.com')).status === 401 ? ok('deleted user login -> 401') : bad('deleted user could log in');
+
       console.log('\n--- Tenant isolation (HTTP, via scoped req.db) ---');
       const vansA = await (await fetch(`${BASE}/t/vans`, { headers: authHdr(tokenA) })).json();
       (vansA.length === 1 && vansA[0].id === vanA.id) ? ok('admin A sees only Company A van') : bad(`admin A vans wrong: ${JSON.stringify(vansA.map((v) => v.license_plate))}`);
