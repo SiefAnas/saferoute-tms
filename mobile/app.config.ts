@@ -28,6 +28,14 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   ios: {
     bundleIdentifier: BUNDLE_ID,
+    // SafeTurns icons (design-reference/brand/safeturns-logo): amber for the normal (light) home
+    // screen, evergreen on a transparent background for dark mode (Apple's guideline), and a
+    // grayscale one for tinted icons. Expo SDK 57: ios.icon = { light, dark, tinted }.
+    icon: {
+      light: './assets/ios-icon-light.png',
+      dark: './assets/ios-icon-dark.png',
+      tinted: './assets/ios-icon-tinted.png',
+    },
     supportsTablet: true,
     infoPlist: {
       // Check-in/check-out save the driver's coordinates when the phone allows it
@@ -38,6 +46,8 @@ const config: ExpoConfig = {
   },
   android: {
     package: BUNDLE_ID,
+    // Android can't switch the app icon with dark mode, so it stays amber on #111318. The
+    // monochrome layer is for Android 13+ themed icons.
     adaptiveIcon: {
       backgroundColor: '#111318',
       foregroundImage: './assets/android-icon-foreground.png',
@@ -54,10 +64,12 @@ const config: ExpoConfig = {
     [
       'expo-splash-screen',
       {
-        image: './assets/splash-icon.png',
+        // Amber shield on the light background, evergreen shield on the dark one.
+        image: './assets/splash-icon-light.png',
+        imageWidth: 130,
         resizeMode: 'contain',
         backgroundColor: '#fafafa',
-        dark: { backgroundColor: '#141a22' },
+        dark: { image: './assets/splash-icon-dark.png', backgroundColor: '#141a22' },
       },
     ],
   ],

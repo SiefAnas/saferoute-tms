@@ -73,7 +73,7 @@ Everything lives at the top of **`app.config.ts`**:
 | Bundle id (iOS) / package (Android) | `BUNDLE_ID`, e.g. `com.yourcompany.saferoute`. Choose it before the first store build; it can't change after publishing. |
 | Version | `VERSION` |
 | API URL | `API_BASE_URL`, or without editing: `$env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.20:4000"; npx expo start` (use your PC's LAN IP, not `localhost`, for a server running on your PC) |
-| App icon, splash | `assets/` (placeholders drawn by `scripts/make-icons.mjs`; replace the PNGs with the real logo, same sizes: 1024×1024; `icon.png` must have no transparency) |
+| App icon, splash | `assets/`: the SafeTurns icons and splash images, copied from `design-reference/brand/safeturns-logo/mobile/` (1024×1024). Replace them from there if the logo changes; `icon.png` must have no transparency |
 | Colors | `src/theme/tokens.ts` |
 
 ---

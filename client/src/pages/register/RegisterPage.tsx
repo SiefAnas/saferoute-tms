@@ -1,4 +1,5 @@
 import { Copyright } from '../../components/Copyright'
+import { Logo } from '../../components/Logo'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -169,9 +170,7 @@ export function RegisterPage() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-2 bg-surface p-4">
       <div className="flex w-full max-w-[480px] flex-col gap-6 rounded-card bg-surface shadow-card p-8">
         <div className="flex flex-col items-center gap-2 text-center">
-          <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-lg bg-primary-container">
-            <span className="material-symbols-outlined !text-[40px] text-on-primary-container">route</span>
-          </div>
+          <Logo kind="lockup" surface="auto" className="mb-2 h-10" />
           <h1 className="text-headline-md text-primary">Register your organization</h1>
           <p className="text-[13px] text-muted">Self-serve signup: no verification required for a new org</p>
         </div>
