@@ -25,19 +25,3 @@ export function downloadCsv<T>(filename: string, rows: T[], columns: CsvColumn<T
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
-
-// Parses a CSV File into header-keyed row objects (all values as strings — callers coerce
-// types as needed, since CSV has no native types). Uses papaparse rather than a hand-rolled
-// parser: real spreadsheets exported from Excel/Sheets routinely have quoted commas,
-// embedded newlines, and escaped quotes, which a naive split(',') would silently corrupt.
-export function parseCsvFile(file: File): Promise<Record<string, string>[]> {
-  return new Promise((resolve, reject) => {
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h) => h.trim(),
-      complete: (results) => resolve(results.data),
-      error: (err) => reject(err),
-    })
-  })
-}

@@ -23,7 +23,6 @@ const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
   { key: 'email', header: 'Email' },
   { key: 'phone', header: 'Phone' },
   { key: 'address', header: 'Address' },
-  { key: 'is_active', header: 'Active', value: (p) => (p.is_active ? 'true' : 'false') },
 ]
 
 const TEMPLATE = '1.8fr 1.2fr 1.8fr 1fr'

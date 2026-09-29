@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { downloadCsv, parseCsvFile, type CsvColumn } from '../lib/csv'
+import { downloadCsv, type CsvColumn } from '../lib/csv'
+import { parseSpreadsheetRecords, SPREADSHEET_ACCEPT } from '../lib/sheet'
 import { Button } from './Button'
 
 export interface CsvRowResult {
@@ -43,7 +44,7 @@ export function CsvImportExport<T>({
     setImporting(true)
     setResults(null)
     try {
-      const parsedRows = await parseCsvFile(file)
+      const parsedRows = await parseSpreadsheetRecords(file)
       const rowResults: CsvRowResult[] = []
       for (let i = 0; i < parsedRows.length; i++) {
         try {
@@ -72,7 +73,7 @@ export function CsvImportExport<T>({
         <span className="material-symbols-outlined !text-[18px]">upload_file</span>
         {importing ? 'Importing…' : 'CSV'}
       </Button>
-      <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
+      <input ref={fileInputRef} type="file" accept={SPREADSHEET_ACCEPT} className="hidden" onChange={handleFileChange} />
 
       {menuOpen && (
         <>
