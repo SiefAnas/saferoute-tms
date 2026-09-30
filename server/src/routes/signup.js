@@ -1,6 +1,7 @@
 // Thin routes over the signup/claim service. All unauthenticated (pre-tenant).
 const express = require('express');
 const { searchClaimable, signup } = require('../services/signup');
+const { createClaimRequest } = require('../services/claimRequests');
 const { searchLimiter, signupLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
@@ -15,7 +16,18 @@ router.get('/:kind/claimable', searchLimiter, async (req, res, next) => {
   }
 });
 
-// POST /signup/:kind  -> fresh org (immediately operational) OR claim (pending verification)
+// POST /signup/:kind/claim-requests { claimId, fullName, email, phone?, note? } -> 202
+// Asks the SafeTurns owner to hand a placeholder organization to the requester. Grants nothing.
+router.post('/:kind/claim-requests', signupLimiter, async (req, res, next) => {
+  try {
+    res.status(202).json(await createClaimRequest(req.params.kind, req.body || {}, { ip: req.ip }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /signup/:kind  -> fresh org (immediately operational). A claimId is refused (403):
+// claiming an existing placeholder goes through /claim-requests and owner approval.
 router.post('/:kind', signupLimiter, async (req, res, next) => {
   try {
     const result = await signup(req.params.kind, req.body || {});

@@ -36,8 +36,7 @@ async function searchClaimable(kind, name = '', address = '') {
   const { rows } = await pool.query(
     `SELECT id, name, address
        FROM ${table}
-      WHERE (claim_status = 'unclaimed'
-             OR (claim_status = 'pending_claim' AND claim_expires_at < now()))
+      WHERE claim_status IN ('unclaimed', 'pending_claim')
         AND ( ($1 <> '' AND similarity(name, $1) > 0.3)
               OR ($2 <> '' AND address ILIKE '%' || $2 || '%') )
       ORDER BY similarity(name, $1) DESC
@@ -83,59 +82,20 @@ async function signupFresh(kind, { orgName, address, zip, state, fullName, email
   return { mode: 'created', token, user: { id: user.id, email: user.email, role: user.role } };
 }
 
-// Claim signup: lock an existing placeholder, create an UNVERIFIED admin, email a token.
-// Not operational until POST /auth/verify-email finalizes the claim.
-async function signupClaim(kind, claimId, { fullName, email, password }) {
-  const cfg = kindConfig(kind);
-  const result = await withTx(async (client) => {
-    // Atomic lock: only if still unclaimed, or a previous pending claim has expired.
-    const locked = await client.query(
-      `UPDATE ${cfg.table}
-          SET claim_status = 'pending_claim',
-              claim_expires_at = now() + ${CLAIM_TTL},
-              claimed_by_user_id = NULL
-        WHERE id = $1
-          AND (claim_status = 'unclaimed'
-               OR (claim_status = 'pending_claim' AND claim_expires_at < now()))
-        RETURNING id, name`,
-      [claimId]
-    );
-    if (locked.rowCount === 0) {
-      throw new HttpError(409, 'this record is not available to claim (already claimed or a claim is in progress)');
-    }
-    const user = await createAdminUser(client, cfg, claimId, { fullName, email, password }, false);
-    await client.query(`UPDATE ${cfg.table} SET claimed_by_user_id = $1 WHERE id = $2`, [user.id, claimId]);
-
-    const { raw, hash } = generateToken();
-    await client.query(
-      `INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
-       VALUES ($1, $2, now() + ${CLAIM_TTL})`,
-      [user.id, hash]
-    );
-    return { user, raw, orgName: locked.rows[0].name };
-  });
-
-  // The claim is saved; sent after the response. If it fails the user can use "resend verification".
-  sendInBackground({
-    to: email,
-    subject: 'Verify your email to finish claiming ' + result.orgName,
-    text:
-      `You're claiming "${result.orgName}" on SafeTurns.\n` +
-      `Verify your email to activate the account:\n` +
-      `  token: ${result.raw}\n` +
-      `This link expires in 24 hours.`,
-  }, 'claim_verification');
-
-  return { mode: 'pending_claim', userId: result.user.id, email: result.user.email };
-}
-
 async function signup(kind, body = {}) {
   const { orgName, fullName, email, password, address, zip, state, claimId } = body;
   if (!fullName || !email || !password) throw new HttpError(400, 'fullName, email and password are required');
   assertValidEmail(email);
   assertPasswordStrength(password);
   assertMaxLength(fullName, 200, 'fullName');
-  if (claimId) return signupClaim(kind, claimId, { fullName, email, password });
+  // Self-service claiming is off (security fix 2026-09-30): verifying your own email proved
+  // nothing about working at that organization, and a claimed school sees every student other
+  // companies attached to it. Claims are requests now (services/claimRequests.js).
+  if (claimId) {
+    const err = new HttpError(403, 'Claiming an existing organization yourself is turned off. Send a claim request instead; SafeTurns will confirm it with you.');
+    err.code = 'CLAIM_REQUIRES_APPROVAL';
+    throw err;
+  }
   // Fresh (create-new-org) path only: address/zip/state are new required fields (the
   // "claim existing" path never collects org fields at all, so it's unaffected).
   if (!orgName) throw new HttpError(400, 'orgName is required for a new organization');
@@ -147,12 +107,14 @@ async function signup(kind, body = {}) {
   return signupFresh(kind, { orgName, address, zip, state: normalizedState, fullName, email, password });
 }
 
-// Verify email; if the user has a pending claim, finalize it and notify the placeholder creator.
+// Verify email. Only marks the address verified: it never finalizes a claim any more (claims are
+// approved by the SafeTurns owner, services/claimRequests.js). A verification link from a
+// self-claim started before that change therefore gives no access: the organization stays
+// unclaimed and requireOperable keeps refusing the account.
 async function verifyEmail(rawToken) {
   if (!rawToken) throw new HttpError(400, 'token is required');
   const tokenHash = hashToken(rawToken);
-
-  const claimedOrg = await withTx(async (client) => {
+  await withTx(async (client) => {
     const consumed = await client.query(
       `UPDATE email_verification_tokens
           SET consumed_at = now()
@@ -161,51 +123,9 @@ async function verifyEmail(rawToken) {
       [tokenHash]
     );
     if (consumed.rowCount === 0) throw new HttpError(400, 'invalid or expired token');
-    const userId = consumed.rows[0].user_id;
-
-    const u = (await client.query('UPDATE users SET email_verified_at = now() WHERE id = $1 RETURNING company_id, school_id', [userId])).rows[0];
-
-    // Finalize the pending claim in whichever org this user belongs to.
-    let claimed = null;
-    let orgCol = null;
-    for (const [col, table] of [['company_id', 'companies'], ['school_id', 'schools']]) {
-      if (!u[col]) continue;
-      const done = await client.query(
-        `UPDATE ${table}
-            SET claim_status = 'claimed', claimed_at = now(), claim_expires_at = NULL
-          WHERE id = $1 AND claim_status = 'pending_claim' AND claimed_by_user_id = $2
-          RETURNING id, name, created_by_user_id`,
-        [u[col], userId]
-      );
-      if (done.rowCount > 0) { claimed = done.rows[0]; orgCol = col; }
-    }
-
-    // Defense-in-depth (BACKLOG): a 24h-expiry takeover can leave a losing, never-verified
-    // claimant still attached to this org. requireOperable already blocks them (no
-    // email_verified_at), but deactivate them outright too, so they can't even authenticate.
-    if (claimed && orgCol) {
-      await client.query(
-        `UPDATE users SET is_active = false
-          WHERE ${orgCol} = $1 AND id <> $2 AND email_verified_at IS NULL AND is_active = true`,
-        [u[orgCol], userId]
-      );
-    }
-    return claimed;
+    await client.query('UPDATE users SET email_verified_at = now() WHERE id = $1', [consumed.rows[0].user_id]);
   });
-
-  // Notify the original placeholder creator (outside the tx).
-  if (claimedOrg && claimedOrg.created_by_user_id) {
-    const creator = (await pool.query('SELECT email FROM users WHERE id = $1', [claimedOrg.created_by_user_id])).rows[0];
-    if (creator) {
-      sendInBackground({
-        to: creator.email,
-        subject: `A placeholder you created was claimed: ${claimedOrg.name}`,
-        text: `The organization "${claimedOrg.name}" you added on SafeTurns has been claimed by its owner. You no longer have edit rights on its core details.`,
-      }, 'placeholder_claimed');
-    }
-  }
-
-  return { verified: true, claimFinalized: Boolean(claimedOrg) };
+  return { verified: true, claimFinalized: false };
 }
 
 async function resendVerification(email) {

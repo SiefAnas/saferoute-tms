@@ -79,8 +79,12 @@ async function main() {
         "INSERT INTO schools(name,address,claim_status,created_by_user_id) VALUES('Hygiene School','1 St','unclaimed',$1) RETURNING id",
         [adminUser.id],
       );
-      const claim = await api('POST', '/signup/school', { claimId: school.id, fullName: 'Claimant', email: 'claimant@x.com', password: PW });
-      eq('claim signup -> 201', claim.status, 201);
+      // Self-claim is refused since the 2026-09-30 fix, so the only pending claimants left are ones
+      // started before it: seed that state directly (placeholder pending_claim, unverified user).
+      eq('self-claim signup -> 403', (await api('POST', '/signup/school', { claimId: school.id, fullName: 'Claimant', email: 'claimant@x.com', password: PW })).status, 403);
+      await pool.query("UPDATE schools SET claim_status='pending_claim', claim_expires_at=now() + interval '1 day' WHERE id=$1", [school.id]);
+      await ins("INSERT INTO users(email,password_hash,full_name,role,school_id) VALUES('claimant@x.com',$1,'Claimant','school_admin',$2) RETURNING id", [hash, school.id]);
+      eq('resend for a leftover pending claimant -> 200', (await api('POST', '/auth/resend-verification', { email: 'claimant@x.com' })).status, 200);
       const firstToken = await tokenFor('claimant@x.com');
       firstToken ? ok('captured first verification token') : bad('no first token captured');
 
@@ -96,35 +100,16 @@ async function main() {
       eq('resend after already verified -> 200 (no-op)', (await api('POST', '/auth/resend-verification', { email: 'claimant@x.com' })).status, 200);
       eq('no new mail sent for an already-verified user', (await mailer._drained()).length, sentBefore);
 
-      console.log('\n--- Defense-in-depth: losing claimant deactivated on takeover ---');
+      console.log('\n--- Verifying never finalizes a claim ---');
+      eq('the verified leftover claimant still cannot operate (school not claimed)',
+        (await pool.query("SELECT claim_status FROM schools WHERE id=$1", [school.id])).rows[0].claim_status, 'pending_claim');
       const school2 = await ins(
         "INSERT INTO schools(name,address,claim_status,created_by_user_id) VALUES('Takeover School','1 St','unclaimed',$1) RETURNING id",
         [adminUser.id],
       );
-      eq(
-        'claimant A claims -> 201 pending',
-        (await api('POST', '/signup/school', { claimId: school2.id, fullName: 'Loser', email: 'loser@x.com', password: PW })).status,
-        201,
-      );
-      await pool.query("UPDATE schools SET claim_expires_at = now() - interval '1 hour' WHERE id = $1", [school2.id]);
-      eq(
-        'claimant B takes over expired pending claim -> 201',
-        (await api('POST', '/signup/school', { claimId: school2.id, fullName: 'Winner', email: 'winner@x.com', password: PW })).status,
-        201,
-      );
-      const winToken = await tokenFor('winner@x.com');
-      const verifyWin = await api('POST', '/auth/verify-email', { token: winToken });
-      eq('B verifies -> claim finalized', verifyWin.body?.claimFinalized, true);
-
-      const loserRow = (await pool.query("SELECT is_active FROM users WHERE email='loser@x.com'")).rows[0];
-      loserRow.is_active === false
-        ? ok('losing claimant A deactivated (is_active=false) on claim finalize')
-        : bad(`loser is_active=${loserRow.is_active}, expected false`);
-      eq(
-        'losing claimant cannot even authenticate anymore -> 401',
-        (await api('POST', '/auth/login', { email: 'loser@x.com', password: PW })).status,
-        401,
-      );
+      eq('self-claim of another placeholder -> 403',
+        (await api('POST', '/signup/school', { claimId: school2.id, fullName: 'Winner', email: 'winner@x.com', password: PW })).status, 403);
+      eq('and it created no account', (await pool.query("SELECT count(*)::int AS n FROM users WHERE email='winner@x.com'")).rows[0].n, 0);
 
       console.log('\n--- Rate limiting (force-enabled, tiny limits for this test) ---');
       let hit429 = false;

@@ -12,9 +12,10 @@ import { StateAutocomplete } from '../../components/StateAutocomplete'
 import { PasswordStrengthMeter } from '../../components/PasswordStrengthMeter'
 import type { ClaimCandidate, OrgKind, SignupResponse } from '../../types/api'
 
-// The "claim existing" flow is parked, not deleted: kept fully working server-side and in
-// this file (the search UI, the pending-claim screen, everything below still works) in
-// case it's needed again. This flag is the single switch to bring the toggle back.
+// The "claim existing" flow is parked. The server now REFUSES self-claims (403
+// CLAIM_REQUIRES_APPROVAL, security fix 2026-09-30): a claim is a request the SafeTurns owner
+// approves (POST /signup/:kind/claim-requests). Turning this flag on again would need the
+// submit below pointed at that endpoint first.
 const CLAIM_FLOW_ENABLED = false
 
 // Self-serve registration (§5.2/§5.3) — only Company and School orgs self-register
