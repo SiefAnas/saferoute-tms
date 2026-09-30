@@ -17,6 +17,7 @@ const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole, denyRoles, driverScope } = require('../middleware/authorize');
 const { HttpError } = require('../errors');
+const pool = require('../db/pool');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent', 'monitor'));
@@ -88,12 +89,29 @@ router.patch('/:id', companyAdmin, async (req, res, next) => {
   } catch (e) { next(mapVanError(e)); }
 });
 
+// A van any assignment (current or past) points at can't be deleted (assignments RESTRICT it; they
+// are the schedule and payroll history). Answer 409 with what blocks it and what to do instead.
 router.delete('/:id', companyAdmin, async (req, res, next) => {
   try {
     const row = await req.db.remove('vans', req.params.id);
     if (!row) throw new HttpError(404, 'van not found');
     res.status(204).end();
-  } catch (e) { next(e); }
+  } catch (e) {
+    if (e.code !== '23001' && e.code !== '23503') return next(e); // RESTRICT, or NO ACTION
+    try {
+      const { rows: [c] } = await pool.query(
+        `SELECT count(*)::int AS total, count(*) FILTER (WHERE end_date IS NULL OR end_date >= CURRENT_DATE)::int AS current
+           FROM assignments WHERE van_id = $1 AND company_id = $2`,
+        [req.params.id, req.auth.tenantId]
+      );
+      const what = c.current
+        ? `${c.current} current or upcoming assignment${c.current === 1 ? '' : 's'}${c.total > c.current ? ` and ${c.total - c.current} past one${c.total - c.current === 1 ? '' : 's'}` : ''}`
+        : `${c.total} past assignment${c.total === 1 ? '' : 's'}`;
+      const err = new HttpError(409, `This van can't be deleted: it is used by ${what}, which is kept as schedule and payroll history. Vans can't be deactivated yet; move current assignments to another van on the Assignments page and keep this one out of new assignments instead.`);
+      err.code = 'VAN_HAS_HISTORY';
+      next(err);
+    } catch (inner) { next(inner); }
+  }
 });
 
 module.exports = router;

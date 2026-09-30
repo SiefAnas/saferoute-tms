@@ -512,7 +512,7 @@ All scoped to the caller's own company or school; another tenant's ids return 40
 |---|---|
 | `GET/PATCH /companies/me` | PATCH: `name, address, zip_code, state, phone, email, city` (email/city optional, blank clears) |
 | `GET /users?role=driver\|parent\|monitor` · `POST /users` · `GET/PATCH /users/:id` · `POST /users/:id/reset-password` | POST body `{ role: 'driver'\|'parent'\|'monitor', fullName, email, phone, address, licenseNumber }` (driver and monitor: only name + email required; parent: phone + address required). Response adds `temporary_password` (once). PATCH / reset only by the admin who created the account. |
-| `GET/POST /vans`, `GET/PATCH/DELETE /vans/:id` | POST requires `license_plate, brand, model, year, color`; optional `number` (≤10 chars, unique in the company → 409) |
+| `GET/POST /vans`, `GET/PATCH/DELETE /vans/:id` | POST requires `license_plate, brand, model, year, color`; optional `number` (≤10 chars, unique in the company → 409). `DELETE` of a van any assignment (current or past) uses → `409 VAN_HAS_HISTORY`; `DELETE /students/:id` of a student with trips or schedule changes → `409 STUDENT_HAS_HISTORY`. Both messages say what blocks it and what to do instead. |
 | `GET/POST /students`, `GET/PATCH/DELETE /students/:id`, `POST/DELETE /students/:id/contacts[/:contactId]` | `POST` only accepts a `school_id` the company is linked to (it has students there, or created it via `POST /placeholders/school`); any other id, existing or not, is `403` "This school isn't linked to your company…"; a malformed id is `400`. |
 | `GET /schools` | id + name of schools the company works with (incl. own placeholders) |
 | `POST /placeholders/school` | `{ name, address }`: add a school that hasn't signed up |

@@ -158,12 +158,28 @@ router.patch('/:id', companyAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// A student with trips or schedule changes on record can't be deleted (those rows RESTRICT the
+// delete; they are the pickup and custody history). Answer 409 saying what blocks it and what to
+// do instead, rather than a 500 from the raw foreign-key error.
 router.delete('/:id', companyAdmin, async (req, res, next) => {
   try {
     const row = await req.db.remove('students', req.params.id);
     if (!row) throw new HttpError(404, 'student not found');
     res.status(204).end();
-  } catch (e) { next(e); }
+  } catch (e) {
+    if (e.code !== '23001' && e.code !== '23503') return next(e); // RESTRICT, or NO ACTION
+    try {
+      const { rows: [c] } = await pool.query(
+        `SELECT (SELECT count(*)::int FROM trips WHERE student_id = $1 AND company_id = $2) AS trips,
+                (SELECT count(*)::int FROM schedule_changes WHERE student_id = $1 AND company_id = $2) AS changes`,
+        [req.params.id, req.auth.tenantId]
+      );
+      const held = [c.trips ? `${c.trips} trip${c.trips === 1 ? '' : 's'}` : null, c.changes ? `${c.changes} schedule change${c.changes === 1 ? '' : 's'}` : null].filter(Boolean).join(' and ') || 'history';
+      const err = new HttpError(409, `This student can't be deleted: they have ${held} on record, which is kept as pickup history. Students can't be deactivated yet; to stop transporting them, end their assignments on the Assignments page instead.`);
+      err.code = 'STUDENT_HAS_HISTORY';
+      next(err);
+    } catch (inner) { next(inner); }
+  }
 });
 
 // Additional contacts beyond the student's primary parent_name/parent_phone (§ Driver
