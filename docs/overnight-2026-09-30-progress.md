@@ -131,3 +131,31 @@ Same rules. origin/main still at `71367cb` (none of the session-1 branches merge
 - Note: the README says almost nothing about planned features; it points to `V2_ROADMAP.md`
   ("features that are not in the MVP") and is stale (still says the client is "not started").
 - Next step: Task 12, `git switch -c fix-placeholder-claim origin/main` in the main checkout.
+
+### Task 12 — fix-placeholder-claim — in progress (code done, full suite running)
+- Branch `fix-placeholder-claim` from origin/main, commit `76338c6` (push after the suite passes).
+- Self-claim refused: `POST /signup/:kind` with `claimId` -> 403 `CLAIM_REQUIRES_APPROVAL`, no account.
+  `verify-email` no longer finalizes claims (a self-claim started before deploy can't finish; its
+  user stays blocked by requireOperable).
+- `POST /signup/:kind/claim-requests` {claimId, fullName, email, phone?, note?} -> 202, recorded in
+  `placeholder_claim_requests` (migration **1752624000028**): who (name, email, phone, IP), which
+  placeholder (kind + id), when, status pending. Grants nothing. One pending row per email+placeholder.
+- Tests: 03-claim rewritten (49 checks, incl. the owner script), 07-hardening adapted (18),
+  25-tenant-isolation cherry-picked from task 1 with gap 2 flipped to "FIXED 2" (29 checks).
+
+#### How to approve a claim request by hand (until there is a screen)
+Run from `server/` on a machine whose `server/.env` DATABASE_URL points at the production DB
+(the script prints the database host first; nothing happens without `--yes`):
+1. See what's waiting: `node scripts/claim-requests.js list`
+   (shows request id, school/company name + address, requester name, email, phone, IP, note, time).
+2. Verify the person really works there: call the organization's PUBLIC number (school office
+   from its website, not a number the requester gave you) and confirm the name and email.
+3. Approve: `node scripts/claim-requests.js approve <requestId> --by "Anas" --note "called office 9/30" --yes`
+   It creates their admin account, marks the organization claimed, rejects other pending requests
+   for it, deactivates any leftover self-claimant, and prints a **temporary password once**.
+4. Give that temporary password to the person by phone or a separate channel (not the same
+   email thread). They must choose their own password at first sign-in; it expires in 7 days
+   (reset it from their admin screen or re-approve if it lapses).
+5. Or reject: `node scripts/claim-requests.js reject <requestId> --by "Anas" --note "reason" --yes`
+6. History: `node scripts/claim-requests.js list --all`.
+Migration 028 must be applied first (it creates the table).
