@@ -199,10 +199,10 @@ mobile-account-lifecycle merged). New branches start from it.
 - MERGE NOTE: suite 25 is added by tenant-isolation-audit, fix-placeholder-claim (gap 2 flipped) and
   this branch (gap 1 flipped): merging the fixes gives a conflict in that file; keep both FIXED sections.
 
-### Task 14 — fix-delete-500s — in progress (code done, full suite running)
-- Branch `fix-delete-500s`, commit `ea7f55f` (push after the suite passes).
+### Task 14 — fix-delete-500s — DONE
+- Branch `fix-delete-500s`, commit `ea7f55f`, full suite 25/25, pushed.
 - DELETE /students/:id with trips or schedule changes, DELETE /vans/:id with any assignment:
-  RESTRICT raises Postgres **23001** (not 23503, which is what I assumed in repo-health.md), now
+  RESTRICT raises Postgres **23001** (not 23503, which my earlier plan assumed), now
   mapped to 409 STUDENT_HAS_HISTORY / VAN_HAS_HISTORY with counts and what to do instead.
   Error handler passes `code` through (identical edit to fix-placeholder-claim's app.js, merges cleanly).
 - Test `31-delete-conflicts` (14 checks, PG 5481, app 5988).
@@ -215,3 +215,42 @@ mobile-account-lifecycle merged). New branches start from it.
   command `npm run migrate:up && npm start`. Facts checked in node-pg-migrate 7.9.1: one transaction
   for the whole run by default; pg_try_advisory_lock fails fast rather than waiting.
 - Next: when the task-14 suite passes, push; then Task 15.
+
+### Environment incident (11:00)
+- Someone ran `git checkout main` + `git pull` in C:\Users\anas2\saferoute-tms at 11:00:11 while my
+  task-15 suite ran there (reflog). Not me. That run was discarded. From then on my build work uses a
+  separate worktree: **C:\Users\anas2\saferoute-build** (own node_modules). The main checkout is left alone.
+
+### Task 15 — student-id-scope-change — DONE
+- Branch `student-id-scope-change` = origin/main + cherry-pick of the student-id commit (`371decf`)
+  + `3d519a2`. Pushed. Full suite 24/25 first pass; 14-shift-period died silently after initdb
+  (environment flake), rerun alone 62/62.
+- Migration **1752624000029**: unique index now (company_id, school_id, lower(student_id)).
+- Import: new ID + exactly one same-name student without an ID -> "update" with note
+  "Adds Student ID … to the existing student"; two or more -> row error. Cross-company check removed.
+- Test 26 updated (28 checks); 01-schema expects 27 on this branch. Answers session-1 questions 0 and 1.
+- Merge this branch INSTEAD of `student-id`.
+
+### Task 17 — merge plan — DONE
+- `docs/merge-plan.md`: order, per-step conflicts with exact resolutions, migrations 026–029 in one run
+  after all merges (check-order trap if 028 is applied first), tests after each merge, fast path.
+
+### Task 18 — pilot readiness — DONE
+- `docs/pilot-readiness.md`: 20 items ranked; blockers: security fixes unmerged, no legal/privacy
+  groundwork, manual migrations, probable UTC timezone bug, unencrypted PII backups in GitHub,
+  drivers not told about changes in time.
+
+## SESSION 2 FINAL STATE — tasks 11–18 all done, stopped as asked
+| Task | Branch / file | Commit | Suite |
+|---|---|---|---|
+| 11 README snapshot | docs/readme-snapshot.md | — | — |
+| 12 Placeholder claim fix | `fix-placeholder-claim` | 76338c6 | 25/25 |
+| 13 Student school scope | `fix-student-school-scope` | 4799cef | 26/26 |
+| 14 Delete 500s -> 409 | `fix-delete-500s` | ea7f55f | 25/25 |
+| 15 Student ID per company | `student-id-scope-change` | 3d519a2 | 25/25 (14 rerun) |
+| 16 Migration deploy options | docs/migration-deploy-options.md | — | — |
+| 17 Merge plan | docs/merge-plan.md | — | — |
+| 18 Pilot readiness | docs/pilot-readiness.md | — | — |
+- Open question: students and vans have no archive/deactivate (task 14 messages say so).
+- Worktrees: C:\Users\anas2\saferoute-reports (overnight-reports), C:\Users\anas2\saferoute-build
+  (student-id-scope-change). Nothing in progress.
