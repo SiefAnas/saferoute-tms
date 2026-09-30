@@ -37,17 +37,34 @@ Live log for the 10-task overnight run. The **latest entry is at the bottom**; i
 - Migration `1752624000026_student-id`; test `26-student-id.test.cjs` (26 checks). Browser-checked.
 - Mobile admin screens not changed (task named the web list and detail pages).
 
-### Task 3 — duplicate-student-flag — in progress
-- Branch `duplicate-student-flag` from origin/main. Migration `1752624000027_duplicate-student-flag`
-  copied in (trigger-maintained students.duplicate_name, per company + school). 01-schema -> 26.
-- Decision (no cross-tenant leak): duplicates are counted within the same COMPANY at the same
-  school, so a flag never reveals another company's student. Students have no active flag and are
-  hard-deleted, so "active student" = any existing student. QUESTION 2 below.
-- Next step: server import result `duplicates`, client badge (company + school-admin lists and
-  drawer) + Import result banner, test `27-duplicate-student-flag.test.cjs` (PG 5477, app 5984), suite, push.
+### Task 3 — duplicate-student-flag — DONE
+- Branch `duplicate-student-flag`, commit `04689e1`, pushed. Full suite: 24/25 first pass; 16-parent-scope
+  died silently after initdb (environment flake), rerun alone 22/22.
+- Migration `1752624000027_duplicate-student-flag`: students.duplicate_name kept by two triggers
+  (BEFORE sets the written row's own flag so API responses are right; AFTER refreshes the others in
+  the old and new name groups). Name key: lower, trimmed, repeated spaces collapsed. Backfill included.
+- Import commit returns `duplicates`; Import page shows a banner. Badge "Possible duplicate" in the
+  company and school-admin student lists, plus a drawer row. Browser-checked all three.
+- Test `27-duplicate-student-flag.test.cjs` (18 checks, PG 5477, app 5984).
+- MERGE NOTE: student-id (026) and duplicate-student-flag (027) both touch bulkImport students,
+  both students pages and 01-schema; merge student-id first, then resolve (01-schema should expect 27).
 
 ### Task 4 — web-mobile parity report — DONE (written early, while suites ran)
 - `docs/web-mobile-parity.md` on overnight-reports.
+
+### Task 5 — mobile-account-lifecycle — next
+- Next step: `git switch -c mobile-account-lifecycle origin/main`; changes in mobile/src/api/client.ts,
+  api/index.ts, auth/auth.tsx, app/_layout.tsx, app/(company)/people.tsx, api/types.ts + jest tests.
+- Findings so far: forced change on login/app start exists; reset request flow matches web;
+  import is absent from mobile. Gaps: mid-session 403 PASSWORD_CHANGE_REQUIRED not handled,
+  mid-session TEMP_PASSWORD_EXPIRED / deactivation show a generic message, no foreground re-check,
+  People sheet lacks account status + bounce warning.
+
+### Task 6 — live tracking design — DONE (written early)
+- `docs/live-tracking-design.md` (real Neon/Render/Google/Mapbox/MapTiler prices, 10 decisions).
+
+### Task 7 — failure modes — DONE (written early)
+- `docs/failure-modes.md` (8 situations, worst first; top fix: idempotent writes + one trip per session/student/type).
 
 ## Questions for Anas
 0. (Task 2) Student IDs are unique per school across ALL companies (as specified). So a company
