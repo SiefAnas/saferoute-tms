@@ -44,6 +44,9 @@ async function main() {
       await pool.query("INSERT INTO students(company_id,school_id,full_name,student_id) VALUES($1,$2,'B Kid',NULL)", [B, s]);
     }
 
+    // Students can only be added at schools the company is linked to (fix-student-school-scope):
+    // company A created both schools; company B is linked through its seeded students.
+    await pool.query("UPDATE schools SET created_by_user_id = (SELECT id FROM users WHERE email = 'admin@a.test') WHERE id = ANY($1::uuid[])", [[S1, S2]]);
     const app = createApp();
     const server = app.listen(5983);
     try {
