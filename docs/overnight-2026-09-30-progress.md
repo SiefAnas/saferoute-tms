@@ -254,3 +254,25 @@ mobile-account-lifecycle merged). New branches start from it.
 - Open question: students and vans have no archive/deactivate (task 14 messages say so).
 - Worktrees: C:\Users\anas2\saferoute-reports (overnight-reports), C:\Users\anas2\saferoute-build
   (student-id-scope-change). Nothing in progress.
+
+---
+
+# SESSION 3 (tasks 19–21)
+### Task 19 — backup workflow — DONE (answered in chat)
+- `.github/workflows/db-backup.yml` (only workflow; identical on every branch; added b97ec2a 2026-08-25):
+  daily 08:00 UTC + manual; full `pg_dump --format=custom` of the live Neon DB (every table, every row),
+  uploaded as a GitHub Actions artifact `db-backup-<run_id>`, 90-day retention, NOT encrypted
+  (compressed only), downloadable by anyone with read access to the repo. Not committed to git.
+
+### Task 20 — prep-merges — in progress (all merges done, final full suite running)
+- Branch `prep-merges` (worktree C:\Users\anas2\saferoute-build) from origin/main `47dd95c`, merged in
+  plan order: fix-placeholder-claim, fix-student-school-scope, fix-delete-500s, resend-bounce-webhook,
+  payroll-currency-import, student-id-scope-change, duplicate-student-flag, overnight-reports.
+- Conflicts resolved as the plan said. Where the plan was wrong or incomplete:
+  1. Suite 25 conflict also covered the header comment (plan only described the Gap blocks) — combined.
+  2. **Plan missed a semantic break:** after fix-student-school-scope, suites 26 and 27 (no textual
+     conflict) failed with 403 because they add students at schools company A isn't linked to.
+     Fixed in `d33f078` (test-only: company A marked as creator of those schools).
+  3. Stale comment on `Student.student_id` type ("unique per school") updated to per company + school.
+- Client: tsc clean, 103 client checks, vite build OK. First server run: 28/30 (26, 27 as above).
+- Next step: when the rerun passes, `git push -u origin prep-merges` from the build worktree.
