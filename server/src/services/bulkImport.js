@@ -265,18 +265,6 @@ async function planStudents(req, def, rows) {
     byKey.set(k, [...(byKey.get(k) ?? []), s]);
     if (s.student_id) byStudentId.set(`${s.school_id}|${lc(s.student_id)}`, s);
   }
-  // Student IDs are unique per school across every company, so an ID another company's student
-  // already uses at that school can't be imported (the answer names no student or company).
-  const wantedIds = plans.filter((p) => p.action !== 'error' && p.row.student_id);
-  const takenElsewhere = new Set();
-  if (wantedIds.length) {
-    const { rows: taken } = await pool.query(
-      `SELECT school_id, lower(student_id) AS sid FROM students
-        WHERE company_id <> $1 AND student_id IS NOT NULL AND school_id = ANY($2::uuid[]) AND lower(student_id) = ANY($3::text[])`,
-      [req.auth.tenantId, [...new Set(wantedIds.map((p) => p.schoolId))], [...new Set(wantedIds.map((p) => lc(p.row.student_id)))]]
-    );
-    for (const t of taken) takenElsewhere.add(`${t.school_id}|${t.sid}`);
-  }
 
   // Parents: one lookup for every parent_email in the file.
   const parentEmails = [...new Set(plans.filter((p) => p.action !== 'error' && p.row.parent_email).map((p) => lc(p.row.parent_email)))];
@@ -293,11 +281,21 @@ async function planStudents(req, def, rows) {
       const idKey = `${p.schoolId}|${lc(p.row.student_id)}`;
       const byId = byStudentId.get(idKey);
       if (byId) { p.action = 'update'; p.existingId = byId.id; }
-      else if (takenElsewhere.has(idKey)) { err(p, 'Another student at this school already has this Student ID.'); continue; }
-      else if (sameName.some((s) => !s.student_id)) {
-        // Never attach an ID to an existing student by name, and never create a second one.
-        err(p, 'A student with this name at this school has no Student ID yet. Add the ID on their record first, then import again.');
-        continue;
+      else {
+        // First import with IDs over an existing roster: exactly one same-name student at this
+        // school without an ID is that child, so the row updates them and adds the ID (shown in
+        // the preview). Two or more is ambiguous: a row error, never a guess or a duplicate.
+        const noId = sameName.filter((s) => !s.student_id);
+        if (noId.length > 1) {
+          err(p, 'More than one student with this name at this school has no Student ID yet, so it is not clear which one this is. Add the ID on the right record first.');
+          continue;
+        }
+        if (noId.length === 1) {
+          p.action = 'update';
+          p.existingId = noId[0].id;
+          p.attachStudentId = true;
+          p.note = `Adds Student ID ${p.row.student_id} to the existing student`;
+        }
       }
     } else {
       if (sameName.length > 1) { err(p, 'More than one existing student has this name at this school, so it is not clear which to update.'); continue; }
@@ -329,7 +327,13 @@ async function execStudent(req, def, plan, credentials) {
       street_address: row.street_address, city: row.city, state: row.state, zip_code: row.zip_code, notes: row.notes || 'None',
     };
     if (plan.action === 'update') {
-      await updateFields(c, 'students', studentId, 'company_id', tenantId, { full_name: row.full_name, ...fields });
+      await updateFields(c, 'students', studentId, 'company_id', tenantId, {
+        full_name: row.full_name,
+        ...fields,
+        // Only when the preview said so (an existing student getting their first ID); an ID match
+        // never rewrites the stored ID.
+        ...(plan.attachStudentId ? { student_id: row.student_id } : {}),
+      });
     } else {
       const { rows } = await c.query(
         `INSERT INTO students (company_id, school_id, full_name, grade, age, parent_name, parent_phone, street_address, city, state, zip_code, notes, student_id)
@@ -379,7 +383,7 @@ async function preview(req, type, rawRows) {
 function friendlyDbError(e) {
   if (e.code === '23505') {
     if (String(e.constraint).includes('vans_company_number_unique')) return 'Another van already has this number.';
-    if (String(e.constraint).includes('students_school_student_id_unique')) return 'Another student at this school already has this Student ID.';
+    if (String(e.constraint).includes('student_id_unique')) return 'Another of your students at this school already has this Student ID.';
     if (String(e.constraint).includes('email')) return 'This email is already registered to another account.';
     return 'This record already exists.';
   }

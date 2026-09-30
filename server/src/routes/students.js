@@ -18,7 +18,7 @@ const companyAdmin = requireRole('company_admin');
 
 const mapFk = (err) => mapMissingRefError(err, 'school_id not found');
 
-// Optional school-issued Student ID: trimmed, blank means none, unique per school (any case).
+// Optional school-issued Student ID: trimmed, blank means none, unique per company + school (any case).
 function normalizeStudentId(value) {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -30,8 +30,8 @@ function normalizeStudentId(value) {
 }
 
 function mapStudentError(err) {
-  if (err.code === '23505' && String(err.constraint || '').includes('students_school_student_id_unique')) {
-    return new HttpError(409, 'another student at this school already has this Student ID');
+  if (err.code === '23505' && String(err.constraint || '').includes('student_id_unique')) {
+    return new HttpError(409, 'another of your students at this school already has this Student ID');
   }
   return mapFk(err);
 }

@@ -1,4 +1,4 @@
-// Student ID: an optional school-issued id on students, unique per school (any case) when present.
+// Student ID: an optional school-issued id on students, unique per company + school (any case).
 // The import matches on Student ID + school when a row has one, and on name + school otherwise.
 const PG_PORT = 5476;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
@@ -61,7 +61,7 @@ async function main() {
       eq('blank Student ID is stored as none', `${noId.status} ${noId.body?.student_id}`, '201 null');
       eq('any number of students without an ID', (await api('POST', '/students', tA, body({ full_name: 'Ed' }))).status, 201);
       eq('ID over 50 characters -> 400', (await api('POST', '/students', tA, body({ full_name: 'Fi', student_id: 'x'.repeat(51) }))).status, 400);
-      eq('another company, same school, same ID -> 409 (unique per school)', (await api('POST', '/students', tB, body({ full_name: 'Gus', student_id: 'S-001' }))).status, 409);
+      eq('another company, same school, same ID -> 201 (unique per company + school)', (await api('POST', '/students', tB, body({ full_name: 'Gus', student_id: 'S-001' }))).status, 201);
       const setId = await api('PATCH', `/students/${noId.body.id}`, tA, { student_id: 'S-002' });
       eq('edit adds an ID', setId.body?.student_id, 'S-002');
       eq('edit to a used ID -> 409', (await api('PATCH', `/students/${noId.body.id}`, tA, { student_id: 'S-001' })).status, 409);
@@ -90,19 +90,23 @@ async function main() {
         row({ full_name: 'Cy', school: 'Grant', student_id: 'S-200' }), // 9 same ID as rows 2/3 but another school: fine... (Cy has S-001 at Grant, so this is a new ID there)
       ];
       await pool.query("INSERT INTO students(company_id,school_id,full_name) VALUES($1,$2,'No Id Yet')", [A, S1]);
-      rows.push(row({ full_name: 'No Id Yet', student_id: 'S-500' })); // 10 same-name student without an ID -> row error
+      rows.push(row({ full_name: 'No Id Yet', student_id: 'S-500' })); // 10 exactly one same-name student without an ID -> update, adds the ID
       await pool.query("INSERT INTO students(company_id,school_id,full_name,student_id) VALUES($1,$2,'Other Co Kid','S-999')", [B, S1]);
-      rows.push(row({ full_name: 'Mine', student_id: 'S-999' })); // 11 ID used by another company at this school -> row error
+      rows.push(row({ full_name: 'Mine', student_id: 'S-999' })); // 11 ID another company uses at this school -> fine, create
+      await pool.query("INSERT INTO students(company_id,school_id,full_name) VALUES($1,$2,'Twin No Id'),($1,$2,'Twin No Id')", [A, S1]);
+      rows.push(row({ full_name: 'Twin No Id', student_id: 'S-600' })); // 12 two same-name students without an ID -> ambiguous, row error
       const pv = await api('POST', '/imports/preview', tA, { type: 'students', rows });
-      eq('preview actions', pv.body.rows.map((r) => r.action).join(), 'update,create,error,error,create,create,update,create,update,create,error,error');
+      eq('preview actions', pv.body.rows.map((r) => r.action).join(), 'update,create,error,error,create,create,update,create,update,create,update,create,error');
       ok(/Duplicate Student ID/.test(pv.body.rows[2].reason) && /Duplicate Student ID/.test(pv.body.rows[3].reason) ? 'both rows with the same Student ID are errors' : bad(`dup: ${pv.body.rows[2].reason}`));
-      ok(/no Student ID yet/.test(pv.body.rows[10].reason) ? 'a new ID over a same-name student without one is an error, not a second student' : bad(pv.body.rows[10].reason));
-      ok(/already has this Student ID/.test(pv.body.rows[11].reason) && !/Other Co/.test(pv.body.rows[11].reason) ? "another company's ID at this school is an error that names nobody" : bad(pv.body.rows[11].reason));
+      eq('the preview says the existing student gets the ID (never silent)', pv.body.rows[10].note, 'Adds Student ID S-500 to the existing student');
+      ok(/More than one student with this name/.test(pv.body.rows[12].reason) ? 'two same-name students without an ID: a row error, no guess' : bad(pv.body.rows[12].reason));
 
       const before = (await pool.query('SELECT count(*)::int AS n FROM students WHERE company_id=$1', [A])).rows[0].n;
       const cm = await api('POST', '/imports/commit', tA, { type: 'students', rows });
-      eq('commit counts', JSON.stringify(cm.body.counts), '{"created":5,"updated":3,"error":4}');
-      eq('5 new students', (await pool.query('SELECT count(*)::int AS n FROM students WHERE company_id=$1', [A])).rows[0].n - before, 5);
+      eq('commit counts', JSON.stringify(cm.body.counts), '{"created":6,"updated":4,"error":3}');
+      eq('6 new students', (await pool.query('SELECT count(*)::int AS n FROM students WHERE company_id=$1', [A])).rows[0].n - before, 6);
+      eq('the existing student now carries the new ID (no second student)', JSON.stringify((await pool.query("SELECT student_id FROM students WHERE company_id=$1 AND full_name='No Id Yet'", [A])).rows), '[{"student_id":"S-500"}]');
+      eq("company A's S-999 sits next to company B's", (await pool.query("SELECT count(*)::int AS n FROM students WHERE school_id=$1 AND student_id='S-999'", [S1])).rows[0].n, 2);
       const ann = (await pool.query('SELECT full_name, grade, student_id FROM students WHERE id=$1', [a1.body.id])).rows[0];
       eq('matched by ID: renamed and updated, ID kept', `${ann.full_name} ${ann.grade} ${ann.student_id}`, 'Ann Renamed 4 S-001');
       eq('two children with one name and different IDs both exist', (await pool.query("SELECT count(*)::int AS n FROM students WHERE company_id=$1 AND full_name='Same Name'", [A])).rows[0].n, 2);
