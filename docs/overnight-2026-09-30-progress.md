@@ -159,3 +159,26 @@ Run from `server/` on a machine whose `server/.env` DATABASE_URL points at the p
 5. Or reject: `node scripts/claim-requests.js reject <requestId> --by "Anas" --note "reason" --yes`
 6. History: `node scripts/claim-requests.js list --all`.
 Migration 028 must be applied first (it creates the table).
+
+### STOPPED HERE (usage limit reached) — resume from this entry
+- Task 12: code committed on `fix-placeholder-claim` (`76338c6`), NOT pushed. A full suite run was
+  in progress (log: scratchpad `suite-task12.log`). Resume: in the main checkout (on branch
+  fix-placeholder-claim) run `cd server && npm test`; if all pass, `git push -u origin fix-placeholder-claim`.
+  Kill stray embedded postgres.exe (io_worker) processes first if a suite stalls.
+- Task 13 (fix-student-school-scope), plan: `git switch -c fix-student-school-scope origin/main`;
+  add `isCompanySchool(companyId, schoolId)` in services/schools.js sharing listCompanySchools' SQL;
+  POST /students -> 403 "This school isn't linked to your company..." when not linked (400 for a
+  malformed id); new test `30-student-school-scope` (PG 5480, app 5987) incl. import by an unlinked
+  school name; cherry-pick 1929feb (suite 25) and flip KNOWN GAP 1 to FIXED 1.
+- Task 14 (fix-delete-500s), plan: catch 23503 on DELETE /students/:id (trips, schedule_changes
+  RESTRICT) and DELETE /vans/:id (assignments RESTRICT) -> 409 naming the blocker and what to do.
+  QUESTION: students and vans have no "deactivate" today; message will say "end their assignments"
+  unless an archive/deactivate feature is wanted.
+- Task 15 (student-id-scope-change), plan: branch from origin/main, cherry-pick 5b82c0a (student-id),
+  new migration 029 swapping the unique index to (company_id, school_id, lower(student_id)); drop the
+  cross-company taken check; import: ID row whose name+school matches exactly one no-ID student ->
+  "update" with note "adds Student ID"; update test 26.
+- Task 16 (migration-deploy-options), research started: Render services are configured in the
+  dashboard (no render.yaml), `start` = `node src/index.js`, no migration step; node-pg-migrate 7.9.1;
+  daily Neon pg_dump backup exists in .github/workflows/db-backup.yml.
+- Tasks 17, 18: not started.
