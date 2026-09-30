@@ -71,16 +71,27 @@ Live log for the 10-task overnight run. The **latest entry is at the bottom**; i
 ### Task 7 — failure modes — DONE (written early)
 - `docs/failure-modes.md` (8 situations, worst first; top fix: idempotent writes + one trip per session/student/type).
 
-### Task 8 — resend-bounce-webhook — in progress (code done, suite running)
-- Branch `resend-bounce-webhook`, commit `c5fc2ab` (push after the suite passes).
+### Task 8 — resend-bounce-webhook — DONE
+- Branch `resend-bounce-webhook`, commit `c5fc2ab`, pushed. Full suite 25/25.
 - ENV VAR: **`RESEND_WEBHOOK_SECRET`** = the `whsec_...` signing secret shown on the Resend webhook's
   page (webhook subscribed to `email.bounced`, URL `https://<api>/webhooks/email-bounce`).
-  `BOUNCE_WEBHOOK_SECRET` and the `x-webhook-secret` header are gone. Nothing configured on Resend.
+  `BOUNCE_WEBHOOK_SECRET` and the `x-webhook-secret` header are removed. Nothing configured on Resend.
+  Documented in API_CONTRACT.md, server/.env.example, docs/bulk-import-implementation-notes.md.
 - Verification: svix-id / svix-timestamp / svix-signature, HMAC-SHA256 of `id.timestamp.rawBody`
-  with the base64 part of the secret, timing-safe, 5-minute window, multiple v1 signatures allowed.
+  keyed with the base64 part of the secret, timing-safe, 5-minute window, several v1 signatures ok.
   Router mounted before express.json(). 404 unset, 401 bad/missing/stale, 400 non-JSON body.
-- Test `28-resend-webhook.test.cjs` (18 checks, PG 5478, app 5985); suite 24 bounce test now signs.
-- Next step: when the suite passes, push; then Task 9 (parser drafted in scratchpad task9/).
+- Test `28-resend-webhook.test.cjs` (18 checks); suite 24's bounce test now signs its request.
+
+### Task 9 — payroll-currency-import — in progress (code done, suite running)
+- Branch `payroll-currency-import`, commit `01ea786` (push after the suite passes).
+- `client/src/lib/money.ts` parseDollarAmount: "$12.50", "12,50", "$1,234.50", "1.234,50", "12 USD"
+  accepted; "1,234"/"1.234" (ambiguous), >2 decimals, negatives, other text refused with a reason.
+  Payroll CSV/Excel rate import uses it. `client/test/money.test.ts` (28 checks) in `npm test`.
+  Browser-checked with an Excel currency cell, a decimal comma and an ambiguous value.
+- Next step: when the suite passes, push; then commit docs/repo-health.md (Task 10, already written) and stop.
+
+### Task 10 — repo health — written, committing now
+- `docs/repo-health.md`.
 
 ## Questions for Anas
 0. (Task 2) Student IDs are unique per school across ALL companies (as specified). So a company
