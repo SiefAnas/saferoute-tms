@@ -79,6 +79,7 @@ export function CompanyStudentsPage() {
   const csvColumns: CsvColumn<Student>[] = useMemo(
     () => [
       { key: 'full_name', header: 'Full Name' },
+      { key: 'student_id', header: 'Student ID' },
       { key: 'grade', header: 'Grade' },
       { key: 'age', header: 'Age' },
       { key: 'parent_name', header: 'Parent Name' },
@@ -134,6 +135,7 @@ export function CompanyStudentsPage() {
   const [stateCode, setStateCode] = useState('')
   const [zipCode, setZipCode] = useState('')
   const [notes, setNotes] = useState('')
+  const [studentIdCode, setStudentIdCode] = useState('')
 
   const [schoolMode, setSchoolMode] = useState<'existing' | 'new'>('existing')
   const [schoolId, setSchoolId] = useState('')
@@ -179,6 +181,7 @@ export function CompanyStudentsPage() {
     setStateCode('')
     setZipCode('')
     setNotes('')
+    setStudentIdCode('')
     setNewSchoolName('')
     setNewSchoolAddress('')
     setSchoolId('')
@@ -207,6 +210,7 @@ export function CompanyStudentsPage() {
     setStateCode(s.state ?? '')
     setZipCode(s.zip_code ?? '')
     setNotes(s.notes ?? '')
+    setStudentIdCode(s.student_id ?? '')
     setFormError(null)
     setShowModal(true)
   }
@@ -254,6 +258,7 @@ export function CompanyStudentsPage() {
     const zipCode = row['Zip Code']?.trim()
     const schoolNameInput = row['School']?.trim()
     const notes = row['Notes']?.trim()
+    const studentIdValue = row['Student ID']?.trim()
 
     if (!fullName || !grade || !ageRaw || !parentName || !parentPhone || !streetAddress || !city || !state || !zipCode) {
       return { ok: false, message: 'Full Name, Grade, Age, Parent Name, Parent Phone, Street Address, City, State and Zip Code are all required' }
@@ -266,6 +271,7 @@ export function CompanyStudentsPage() {
       await api.post('/students', {
         full_name: fullName, grade, age: Number(ageRaw), parent_name: parentName, parent_phone: parentPhone,
         street_address: streetAddress, city, state, zip_code: zipCode, notes: notes || undefined, school_id: school.id,
+        student_id: studentIdValue || undefined,
       })
       return { ok: true, message: 'Created' }
     } catch (err) {
@@ -324,6 +330,7 @@ export function CompanyStudentsPage() {
         zip_code: zipCode,
         notes: notes || undefined,
         school_id: targetSchoolId,
+        student_id: studentIdCode.trim() || undefined,
       })
 
       for (const g of extraFilled) {
@@ -366,6 +373,7 @@ export function CompanyStudentsPage() {
         state: stateCode,
         zip_code: zipCode,
         notes: notes || null,
+        student_id: studentIdCode.trim() || null,
       })
       // Split students (separate morning + afternoon assignments) are left alone here —
       // this form only knows how to manage one driver+van pair, and could clobber one of
@@ -421,7 +429,7 @@ export function CompanyStudentsPage() {
   const needAssignment = students.filter((s) => activeAssignmentsFor(s.id).length === 0)
   const absent = absentQuery.data ?? []
   const schoolCount = new Set(students.map((s) => s.school_id)).size
-  const visible = students.filter((s) => matches(q, s.full_name, s.parent_name, s.parent_phone, schoolName(s.school_id), driverCell(s.id).main))
+  const visible = students.filter((s) => matches(q, s.full_name, s.student_id, s.parent_name, s.parent_phone, schoolName(s.school_id), driverCell(s.id).main))
   const detail = students.find((s) => s.id === detailId) ?? null
   const TEMPLATE = '1.6fr 1.3fr 1.6fr 1.4fr 1.1fr'
 
@@ -476,7 +484,7 @@ export function CompanyStudentsPage() {
             const drv = driverCell(s.id)
             return (
               <TableRow key={s.id} template={TEMPLATE} selected={detailId === s.id} onClick={() => setDetailId(s.id)}>
-                <NameCell name={s.full_name} sub={s.grade ? `Grade ${s.grade}` : undefined} />
+                <NameCell name={s.full_name} sub={[s.grade ? `Grade ${s.grade}` : null, s.student_id ? `ID ${s.student_id}` : null].filter(Boolean).join(' · ') || undefined} />
                 <span className="truncate text-ink-sub">{schoolsQuery.isLoading ? '…' : schoolName(s.school_id)}</span>
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate font-medium text-ink">{s.parent_name ?? '—'}</span>
@@ -518,6 +526,7 @@ export function CompanyStudentsPage() {
           <DetailRows
             rows={[
               { k: 'Status', v: <StatusBadge tone={statusFor(detail).tone} label={statusFor(detail).label} /> },
+              { k: 'Student ID', v: detail.student_id ?? '—' },
               { k: 'Driver · van', v: [driverCell(detail.id).main, driverCell(detail.id).sub].filter(Boolean).join(' · ') },
               { k: 'Parent / guardian', v: detail.parent_name ?? '—' },
               { k: 'Phone', v: <ContactLink type="phone" value={detail.parent_phone} /> },
@@ -534,6 +543,7 @@ export function CompanyStudentsPage() {
         <Modal title={editingId ? 'Edit student' : 'Add student'} onClose={resetForm}>
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
             <Input required placeholder="Full name (as it should appear in the app)" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <Input placeholder="Student ID from the school (optional)" maxLength={50} value={studentIdCode} onChange={(e) => setStudentIdCode(e.target.value)} />
             <div className="flex gap-2">
               <Input required placeholder="Grade (e.g. 3)" value={grade} onChange={(e) => setGrade(e.target.value)} />
               <Input required type="number" placeholder="Age (years)" value={age} onChange={(e) => setAge(e.target.value)} />

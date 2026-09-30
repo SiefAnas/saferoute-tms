@@ -31,8 +31,8 @@ const TYPES = {
   parents: { label: 'Parents', side: 'company', role: 'parent', key: 'email', fields: [f('full_name', 'Full name', true), f('email', 'Email', true), f('phone', 'Phone', true), f('address', 'Address', true)] },
   vans: { label: 'Vans', side: 'company', key: 'license_plate', fields: [f('license_plate', 'License plate', true), f('brand', 'Brand', true), f('model', 'Model', true), f('year', 'Year', true), f('color', 'Color', true), f('number', 'Van number')] },
   students: {
-    label: 'Students', side: 'company', key: 'full_name + school',
-    fields: [f('full_name', 'Student name', true), f('school', 'School (exact name)', true), f('grade', 'Grade', true), f('age', 'Age', true), f('parent_name', 'Parent name', true), f('parent_phone', 'Parent phone', true), f('parent_email', 'Parent email'), f('street_address', 'Street address', true), f('city', 'City', true), f('state', 'State (2 letters)', true), f('zip_code', 'Zip code', true), f('notes', 'Notes')],
+    label: 'Students', side: 'company', key: 'Student ID + school (else name + school)',
+    fields: [f('full_name', 'Student name', true), f('school', 'School (exact name)', true), f('student_id', 'Student ID'), f('grade', 'Grade', true), f('age', 'Age', true), f('parent_name', 'Parent name', true), f('parent_phone', 'Parent phone', true), f('parent_email', 'Parent email'), f('street_address', 'Street address', true), f('city', 'City', true), f('state', 'State (2 letters)', true), f('zip_code', 'Zip code', true), f('notes', 'Notes')],
   },
   staff: { label: 'School staff', side: 'school', role: 'school_staff', key: 'email', fields: [f('full_name', 'Full name', true), f('email', 'Email', true), f('phone', 'Phone')] },
 };
@@ -246,18 +246,36 @@ async function planStudents(req, def, rows) {
     if (r.parent_email) {
       try { assertValidEmail(r.parent_email); } catch { return err(p, `"${r.parent_email}" is not a valid parent email address`); }
     }
+    if (r.student_id.length > 50) return err(p, 'Student ID must be 50 characters or fewer');
     const matches = schoolsByName.get(lc(r.school));
     if (!matches) return err(p, `School "${r.school}" was not found. Add the school first, then import the students.`);
     if (matches.length > 1) return err(p, `More than one school is named "${r.school}".`);
     p.schoolId = matches[0].id;
   });
-  flagDuplicates(plans, (p) => (p.action === 'error' && !/Duplicate/.test(p.reason ?? '') ? null : (p.schoolId ? `${p.schoolId}|${lc(p.row.full_name)}` : null)), 'student');
+  // With a Student ID, the ID is the key (two children may share a name); without one, the name is.
+  const stillOpen = (p) => !(p.action === 'error' && !/Duplicate/.test(p.reason ?? ''));
+  flagDuplicates(plans, (p) => (stillOpen(p) && p.schoolId && p.row.student_id ? `${p.schoolId}|${lc(p.row.student_id)}` : null), 'Student ID at this school');
+  flagDuplicates(plans, (p) => (stillOpen(p) && p.schoolId && !p.row.student_id ? `${p.schoolId}|${lc(p.row.full_name)}` : null), 'student');
 
-  const { rows: existing } = await pool.query('SELECT id, school_id, full_name FROM students WHERE company_id = $1', [req.auth.tenantId]);
+  const { rows: existing } = await pool.query('SELECT id, school_id, full_name, student_id FROM students WHERE company_id = $1', [req.auth.tenantId]);
   const byKey = new Map();
+  const byStudentId = new Map();
   for (const s of existing) {
     const k = `${s.school_id}|${lc(s.full_name.trim())}`;
     byKey.set(k, [...(byKey.get(k) ?? []), s]);
+    if (s.student_id) byStudentId.set(`${s.school_id}|${lc(s.student_id)}`, s);
+  }
+  // Student IDs are unique per school across every company, so an ID another company's student
+  // already uses at that school can't be imported (the answer names no student or company).
+  const wantedIds = plans.filter((p) => p.action !== 'error' && p.row.student_id);
+  const takenElsewhere = new Set();
+  if (wantedIds.length) {
+    const { rows: taken } = await pool.query(
+      `SELECT school_id, lower(student_id) AS sid FROM students
+        WHERE company_id <> $1 AND student_id IS NOT NULL AND school_id = ANY($2::uuid[]) AND lower(student_id) = ANY($3::text[])`,
+      [req.auth.tenantId, [...new Set(wantedIds.map((p) => p.schoolId))], [...new Set(wantedIds.map((p) => lc(p.row.student_id)))]]
+    );
+    for (const t of taken) takenElsewhere.add(`${t.school_id}|${t.sid}`);
   }
 
   // Parents: one lookup for every parent_email in the file.
@@ -270,9 +288,21 @@ async function planStudents(req, def, rows) {
   const willCreate = new Set();
   for (const p of plans) {
     if (p.action === 'error') continue;
-    const matches = byKey.get(`${p.schoolId}|${lc(p.row.full_name)}`) ?? [];
-    if (matches.length > 1) { err(p, 'More than one existing student has this name at this school, so it is not clear which to update.'); continue; }
-    if (matches.length === 1) { p.action = 'update'; p.existingId = matches[0].id; }
+    const sameName = byKey.get(`${p.schoolId}|${lc(p.row.full_name)}`) ?? [];
+    if (p.row.student_id) {
+      const idKey = `${p.schoolId}|${lc(p.row.student_id)}`;
+      const byId = byStudentId.get(idKey);
+      if (byId) { p.action = 'update'; p.existingId = byId.id; }
+      else if (takenElsewhere.has(idKey)) { err(p, 'Another student at this school already has this Student ID.'); continue; }
+      else if (sameName.some((s) => !s.student_id)) {
+        // Never attach an ID to an existing student by name, and never create a second one.
+        err(p, 'A student with this name at this school has no Student ID yet. Add the ID on their record first, then import again.');
+        continue;
+      }
+    } else {
+      if (sameName.length > 1) { err(p, 'More than one existing student has this name at this school, so it is not clear which to update.'); continue; }
+      if (sameName.length === 1) { p.action = 'update'; p.existingId = sameName[0].id; }
+    }
     if (p.row.parent_email) {
       const k = lc(p.row.parent_email);
       const u = parents.get(k);
@@ -302,9 +332,9 @@ async function execStudent(req, def, plan, credentials) {
       await updateFields(c, 'students', studentId, 'company_id', tenantId, { full_name: row.full_name, ...fields });
     } else {
       const { rows } = await c.query(
-        `INSERT INTO students (company_id, school_id, full_name, grade, age, parent_name, parent_phone, street_address, city, state, zip_code, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
-        [tenantId, plan.schoolId, row.full_name, fields.grade, fields.age, fields.parent_name, fields.parent_phone, fields.street_address, fields.city, fields.state, fields.zip_code, fields.notes]
+        `INSERT INTO students (company_id, school_id, full_name, grade, age, parent_name, parent_phone, street_address, city, state, zip_code, notes, student_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+        [tenantId, plan.schoolId, row.full_name, fields.grade, fields.age, fields.parent_name, fields.parent_phone, fields.street_address, fields.city, fields.state, fields.zip_code, fields.notes, row.student_id || null]
       );
       studentId = rows[0].id;
     }
@@ -349,6 +379,7 @@ async function preview(req, type, rawRows) {
 function friendlyDbError(e) {
   if (e.code === '23505') {
     if (String(e.constraint).includes('vans_company_number_unique')) return 'Another van already has this number.';
+    if (String(e.constraint).includes('students_school_student_id_unique')) return 'Another student at this school already has this Student ID.';
     if (String(e.constraint).includes('email')) return 'This email is already registered to another account.';
     return 'This record already exists.';
   }
