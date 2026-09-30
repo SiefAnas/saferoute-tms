@@ -120,3 +120,14 @@ Live log for the 10-task overnight run. The **latest entry is at the bottom**; i
 2. (Task 3) Should a possible-duplicate flag also consider students of OTHER companies at the same
    school? Today it doesn't: that would tell company B that company A transports a child with that
    name. The school admin (who sees all companies' students) therefore only sees per-company flags.
+
+---
+
+# SESSION 2 (tasks 11–18) — started 2026-09-30
+Same rules. origin/main still at `71367cb` (none of the session-1 branches merged). Latest entry at the bottom.
+
+### Task 11 — README snapshot — DONE
+- `docs/readme-snapshot.md` = README.md on origin/main (71367cb), verbatim under a one-line header.
+- Note: the README says almost nothing about planned features; it points to `V2_ROADMAP.md`
+  ("features that are not in the MVP") and is stale (still says the client is "not started").
+- Next step: Task 12, `git switch -c fix-placeholder-claim origin/main` in the main checkout.
