@@ -1,0 +1,61 @@
+> Snapshot of `README.md` on `origin/main` at `71367cb`, taken 2026-09-30. Everything below the line is the file, unchanged.
+
+---
+
+# SafeTurns
+
+© 2026 Anas Sief. All rights reserved.
+
+SafeTurns is a multi-tenant school transportation management system: transport companies run
+drivers, monitors, vans and routes; schools confirm pickups and drop-offs; parents follow their
+children's rides. Web app (React), mobile app (Expo), API (Node/Express + PostgreSQL).
+
+(Formerly "SafeRoute TMS". Technical names keep `saferoute`: the GitHub repo, the Render
+service URLs, the database names, the mobile bundle id / Expo slug / link scheme and the
+browser storage keys, so nothing breaks and nobody is signed out.)
+Single source of truth for scope/architecture: `TMS_PROJECT_SPEC_1.md` (v2).
+
+> Fresh rewrite of an earlier native-Android prototype, rebuilt as a multi-tenant web SaaS.
+
+## Key docs
+- `PENDING.md`: what's left to do right now.
+- `V2_ROADMAP.md`: features that are **not** in the MVP (shown as "Coming soon" in the app) and what each needs.
+- `API_CONTRACT.md`: the REST API as the code implements it, for the mobile app.
+- `BACKLOG.md`: detailed history of decisions and deferred items.
+
+## Repo layout
+
+```
+saferoute-tms/
+  docker-compose.yml   # local Postgres for development
+  server/              # Node/Express API + node-pg-migrate migrations
+    migrations/        # STEP 1 — schema (this is what exists so far)
+  client/              # React frontend (STEP 4 — not started yet)
+```
+
+## Getting a database
+
+You need a running PostgreSQL 13+ (for `gen_random_uuid()` / trigram search). Pick one:
+
+- **Docker (recommended):** `docker compose up -d db` — starts Postgres 16 on `localhost:5432`
+  with db/user/password `saferoute` (matches `server/.env.example`).
+- **Local install:** install PostgreSQL, then create a db and user and point `DATABASE_URL` at it.
+- **Hosted dev db:** e.g. Neon / Supabase — paste its connection string into `DATABASE_URL`.
+
+## Running migrations (STEP 1)
+
+```bash
+cd server
+cp .env.example .env          # then edit DATABASE_URL if needed
+npm install
+npm run migrate:up            # apply all migrations
+npm run migrate:down          # roll back the most recent migration
+```
+
+## Build order (per spec §13)
+
+1. **Schema & migrations** ← current step
+2. Auth & RBAC middleware (tenant scoping by `company_id` / `school_id`)
+3. Core Express API routes
+4. React frontend (reusing the Stitch design system)
+  
