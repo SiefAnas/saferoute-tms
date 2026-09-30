@@ -32,17 +32,22 @@ Live log for the 10-task overnight run. The **latest entry is at the bottom**; i
   and stall initdb. A reaper loop (scratchpad `reap-orphans.ps1`, background) now kills only io_workers
   whose parent is gone.
 
-### Task 2 — student-id — in progress (code done, full suite running)
-- Branch `student-id` from origin/main, commit `5b82c0a` (not pushed until the suite passes).
-- Migration `1752624000026_student-id` (students.student_id text, 1-50 chars, unique index
-  `students_school_student_id_unique` on (school_id, lower(student_id)) where not null).
-- Server: POST/PATCH /students accept student_id (409 on a used ID). Import: "Student ID" column,
-  ID+school match, duplicate ID in file = row error, name+school fallback, no case rewrite on match.
-- Client: company + school-admin list ("Grade 3 · ID S-001"), drawers, search, company form field,
-  students CSV column. Browser-checked both admin screens and the 409 message.
-- Test: `server/test/26-student-id.test.cjs` (26 checks, PG 5476, app 5983). 01-schema expects 26 migrations.
-- Not done on purpose: mobile admin screens unchanged (task named web list/detail; mobile untouched).
-- Next step: when the suite passes, `git push -u origin student-id`, then Task 3.
+### Task 2 — student-id — DONE
+- Branch `student-id`, commit `5b82c0a`, pushed. Full suite 25/25 pass.
+- Migration `1752624000026_student-id`; test `26-student-id.test.cjs` (26 checks). Browser-checked.
+- Mobile admin screens not changed (task named the web list and detail pages).
+
+### Task 3 — duplicate-student-flag — in progress
+- Branch `duplicate-student-flag` from origin/main. Migration `1752624000027_duplicate-student-flag`
+  copied in (trigger-maintained students.duplicate_name, per company + school). 01-schema -> 26.
+- Decision (no cross-tenant leak): duplicates are counted within the same COMPANY at the same
+  school, so a flag never reveals another company's student. Students have no active flag and are
+  hard-deleted, so "active student" = any existing student. QUESTION 2 below.
+- Next step: server import result `duplicates`, client badge (company + school-admin lists and
+  drawer) + Import result banner, test `27-duplicate-student-flag.test.cjs` (PG 5477, app 5984), suite, push.
+
+### Task 4 — web-mobile parity report — DONE (written early, while suites ran)
+- `docs/web-mobile-parity.md` on overnight-reports.
 
 ## Questions for Anas
 0. (Task 2) Student IDs are unique per school across ALL companies (as specified). So a company
@@ -51,3 +56,6 @@ Live log for the 10-task overnight run. The **latest entry is at the bottom**; i
 1. (Task 2) First import with Student IDs over an existing roster: should a row whose ID is new but
    whose name + school match an existing student without an ID attach that ID to the existing
    student? Today it is a row error so nothing is duplicated or attached by guess.
+2. (Task 3) Should a possible-duplicate flag also consider students of OTHER companies at the same
+   school? Today it doesn't: that would tell company B that company A transports a child with that
+   name. The school admin (who sees all companies' students) therefore only sees per-company flags.
