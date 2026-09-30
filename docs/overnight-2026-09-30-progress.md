@@ -82,16 +82,33 @@ Live log for the 10-task overnight run. The **latest entry is at the bottom**; i
   Router mounted before express.json(). 404 unset, 401 bad/missing/stale, 400 non-JSON body.
 - Test `28-resend-webhook.test.cjs` (18 checks); suite 24's bounce test now signs its request.
 
-### Task 9 — payroll-currency-import — in progress (code done, suite running)
-- Branch `payroll-currency-import`, commit `01ea786` (push after the suite passes).
-- `client/src/lib/money.ts` parseDollarAmount: "$12.50", "12,50", "$1,234.50", "1.234,50", "12 USD"
-  accepted; "1,234"/"1.234" (ambiguous), >2 decimals, negatives, other text refused with a reason.
-  Payroll CSV/Excel rate import uses it. `client/test/money.test.ts` (28 checks) in `npm test`.
-  Browser-checked with an Excel currency cell, a decimal comma and an ambiguous value.
-- Next step: when the suite passes, push; then commit docs/repo-health.md (Task 10, already written) and stop.
+### Task 9 — payroll-currency-import — DONE
+- Branch `payroll-currency-import`, commit `01ea786`, pushed. Server suite 24/24; client `npm test` incl. 28 new checks.
+- `client/src/lib/money.ts` parseDollarAmount used by the Payroll rate import. Browser-checked.
 
-### Task 10 — repo health — written, committing now
-- `docs/repo-health.md`.
+### Task 10 — repo health — DONE
+- `docs/repo-health.md` (overnight-reports).
+
+## FINAL STATE (2026-09-30) — all 10 tasks done, stopped as asked
+| Task | Kind | Branch / file | Commit | Suite |
+|---|---|---|---|---|
+| 1 Tenant isolation | report + tests | `tenant-isolation-audit` + docs/tenant-isolation-audit.md | 1929feb | 25/25 (10 rerun) |
+| 2 Student ID | build | `student-id` | 5b82c0a | 25/25 |
+| 3 Duplicate student flag | build | `duplicate-student-flag` | 04689e1 | 25/25 (16 rerun) |
+| 4 Web/mobile parity | report | docs/web-mobile-parity.md | — | — |
+| 5 Mobile account lifecycle | build | `mobile-account-lifecycle` | 41ea905 | 24/24 + mobile jest 94/94 |
+| 6 Live tracking design | report | docs/live-tracking-design.md | — | — |
+| 7 Failure modes | report | docs/failure-modes.md | — | — |
+| 8 Resend bounce webhook | build | `resend-bounce-webhook` | c5fc2ab | 25/25 |
+| 9 Payroll currency import | build | `payroll-currency-import` | 01ea786 | 24/24 + client tests |
+| 10 Repo health | report | docs/repo-health.md | — | — |
+- Nothing merged, no PRs, main untouched, no branch deleted, no remote DB or API touched
+  (all local testing on embedded Postgres; browser checks against a throwaway local API).
+- Merge notes: student-id (migration 026) before duplicate-student-flag (027); both touch
+  bulkImport students, both students pages and 01-schema's migration count. The tenant suite (25)
+  and later suites (26–28) use distinct ports and file numbers, so they coexist.
+- Deploy notes: migrations 026/027 when merged; set RESEND_WEBHOOK_SECRET for the bounce webhook.
+- If resuming: nothing is in progress. Wait for Anas.
 
 ## Questions for Anas
 0. (Task 2) Student IDs are unique per school across ALL companies (as specified). So a company
