@@ -220,7 +220,13 @@ the server gets rows keyed by SafeTurns field names and checks everything itself
   credentials: [{ full_name, email, role, temporary_password }] }`. Plans again, then imports each good
   row in its own transaction; bad rows are skipped. `credentials` is the only time those temporary
   passwords are ever returned (`Cache-Control: no-store`).
-- Matching: email (people), license plate (vans), student name + school (students). Existing records are
+- Students have an optional `student_id` (the school's own ID, ≤50 chars), unique per company +
+  school regardless of case; `POST`/`PATCH /students` take it (`409` if another of the company's
+  students at that school has it). The import's "Student ID" column matches on ID + school; a new
+  ID whose name + school matches exactly one student without an ID updates that student and adds
+  the ID (preview row: `action: "update"`, `note: "Adds Student ID … to the existing student"`);
+  two or more such students is a row error.
+- Matching: email (people), license plate (vans), Student ID + school, else student name + school (students). Existing records are
   updated, never duplicated, never deactivated. Duplicate keys inside one file are errors on every such row.
 - `400`: unknown type, no rows, more than 100 rows. `403`: a type your role can't import.
 
