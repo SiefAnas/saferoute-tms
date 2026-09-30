@@ -200,6 +200,8 @@ async function main() {
       await pool.query('DELETE FROM assignments WHERE driver_user_id=$1', [busyId]);
       eq('after reassigning, deactivate works', (await api('PATCH', `/users/${busyId}`, tA, { is_active: false })).status, 200);
       eq('deactivated user cannot log in', (await login('busy@a.test')).status, 401);
+      const gone = await api('GET', '/auth/me', tDriver);
+      eq("the deactivated user's open session ends with code ACCOUNT_INACTIVE", `${gone.status} ${gone.body?.code}`, '401 ACCOUNT_INACTIVE');
       eq('but the row is kept', await count("SELECT count(*)::int AS n FROM users WHERE id=$1 AND NOT is_active", [busyId]), 1);
       eq('an import cannot reactivate or edit them', (await api('POST', '/imports/preview', tA, { type: 'drivers', rows: [{ full_name: 'x', email: 'busy@a.test' }] })).body.rows[0].action, 'error');
       const mo = (await pool.query("SELECT id FROM users WHERE email='mo@a.test'")).rows[0];

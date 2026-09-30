@@ -22,13 +22,23 @@ export class NetworkError extends Error {
   }
 }
 
+// What the server said when it ended a session (a 401): `code` is set for the cases the app
+// words differently, e.g. TEMP_PASSWORD_EXPIRED or ACCOUNT_INACTIVE.
+export interface UnauthorizedInfo {
+  code?: string
+  message?: string
+}
+
 export interface ApiDeps {
   baseUrl: string
   // Read the bearer token. Async because it lives in the device keychain.
   getToken: () => Promise<string | null>
   // Called on any 401 that isn't the login call itself: the token is dead and there is no
   // refresh token (API_CONTRACT.md §2), so the session has to be torn down.
-  onUnauthorized: () => void
+  onUnauthorized: (info: UnauthorizedInfo) => void
+  // Called on a 403 PASSWORD_CHANGE_REQUIRED: the account is on a temporary password and must set
+  // its own before anything else (same rule the website follows).
+  onPasswordChangeRequired?: () => void
   fetchImpl?: typeof fetch
   // Render can spin the API down; the first call after a quiet period is slow, so this is
   // generous on purpose. Better a long spinner than a false "no connection".
@@ -74,20 +84,22 @@ export function createApi(deps: ApiDeps): Api {
       clearTimeout(timer)
     }
 
-    // A 401 on a normal call means the 12-hour token expired or the account was deactivated.
-    // Login's own 401 is "invalid credentials" and must not clear an existing session.
-    if (res.status === 401 && !isLogin) deps.onUnauthorized()
-
     let payload: unknown = null
     try {
       payload = await res.json()
     } catch {
       // No JSON body (204, or an HTML error page from a proxy) — leave it null.
     }
+    const errorBody = payload as { error?: string; code?: string } | null
+
+    // A 401 on a normal call means the 12-hour token expired, the account was deactivated, its
+    // password was reset, or its temporary password expired. Login's own 401 is "invalid
+    // credentials" (or an expired temporary password) and must not clear an existing session.
+    if (res.status === 401 && !isLogin) deps.onUnauthorized({ code: errorBody?.code, message: errorBody?.error })
+    if (res.status === 403 && errorBody?.code === 'PASSWORD_CHANGE_REQUIRED') deps.onPasswordChangeRequired?.()
 
     if (!res.ok) {
-      const message = (payload as { error?: string } | null)?.error
-      throw new ApiError(res.status, message ?? fallbackMessage(res.status))
+      throw new ApiError(res.status, errorBody?.error ?? fallbackMessage(res.status))
     }
     return payload as T
   }

@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AppState } from 'react-native'
 import { useQueryClient } from '@tanstack/react-query'
-import { api, ApiError, NetworkError, setAuthToken, setUnauthorizedHandler } from '@/api'
+import { api, ApiError, NetworkError, setAuthToken, setPasswordChangeRequiredHandler, setUnauthorizedHandler } from '@/api'
 import type { AuthUser, LoginResponse, MeResponse } from '@/api/types'
+import { sessionEndedMessage } from './sessionMessages'
 import { clearSession, loadSession, saveSession } from './storage'
 
 type Status = 'loading' | 'signedOut' | 'signedIn'
@@ -29,6 +31,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [expiredMessage, setExpiredMessage] = useState<string | null>(null)
   // Guards against several in-flight requests all 401-ing and each tearing down the session.
   const tearingDown = useRef(false)
+  // The live token, for re-saving the session when only the user record changes.
+  const tokenRef = useRef<string | null>(null)
 
   // Drop everything that belonged to the signed-out user: the token, the cached user record
   // and every cached query result. Without the cache clear the next person to sign in on this
@@ -36,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const teardown = useCallback(
     async (message: string | null) => {
       setAuthToken(null)
+      tokenRef.current = null
       setUser(null)
       setStatus('signedOut')
       setExpiredMessage(message)
@@ -47,14 +52,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   useEffect(() => {
-    setUnauthorizedHandler(() => {
+    setUnauthorizedHandler((info) => {
       if (tearingDown.current) return
       tearingDown.current = true
-      void teardown('Your session has ended. Please sign in again.').finally(() => {
+      // Deactivated, password reset, temporary password expired or plain expiry: say which.
+      void teardown(sessionEndedMessage(info)).finally(() => {
         tearingDown.current = false
       })
     })
+    // The server says this account is on a temporary password (e.g. just reset): flag the session
+    // so the root layout sends the user to "set your password", the same rule as the website.
+    setPasswordChangeRequiredHandler(() => {
+      setUser((u) => {
+        if (!u || u.must_change_password) return u
+        const next = { ...u, must_change_password: true }
+        if (tokenRef.current) void saveSession({ token: tokenRef.current, user: next })
+        return next
+      })
+    })
   }, [teardown])
+
+  // Back to the foreground: prove the session again, so a deactivated or reset account is signed
+  // out when the phone is picked up, not only on its next action. No signal: keep the session.
+  useEffect(() => {
+    if (status !== 'signedIn') return
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return
+      api.get<MeResponse>('/auth/me').catch(() => {
+        // A 401 already tore the session down (unauthorized handler); anything else is ignored.
+      })
+    })
+    return () => sub.remove()
+  }, [status])
 
   // App start: read the stored session, then prove it with GET /auth/me. The token lasts 12
   // hours with no refresh, so a stale one is normal and just means "sign in again".
@@ -68,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
       setAuthToken(stored.token)
+      tokenRef.current = stored.token
       try {
         await api.get<MeResponse>('/auth/me')
         if (cancelled) return
@@ -83,7 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setStatus('signedIn')
           return
         }
-        await teardown(err instanceof ApiError && err.status === 401 ? 'Your session has ended. Please sign in again.' : null)
+        // A 401 here already went through the unauthorized handler with the specific reason.
+        if (!(err instanceof ApiError && err.status === 401)) await teardown(null)
       }
     })()
     return () => {
@@ -97,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Start from an empty cache: this may be a different person on a shared phone.
       queryClient.clear()
       setAuthToken(res.token)
+      tokenRef.current = res.token
       await saveSession({ token: res.token, user: res.user })
       setUser(res.user)
       setExpiredMessage(null)
@@ -109,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     const res = await api.post<LoginResponse>('/auth/change-password', { currentPassword, newPassword })
     setAuthToken(res.token)
+    tokenRef.current = res.token
     await saveSession({ token: res.token, user: res.user })
     setUser(res.user)
     return res.user
