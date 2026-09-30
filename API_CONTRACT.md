@@ -201,8 +201,11 @@ token, or weak password. `429` rate limited.
   corrected, which clears the flag), `account_status` (`created` = temporary password not replaced
   yet, `never_logged_in` = temporary password expired unused, `active`) and
   `temp_password_expires_at`.
-- `POST /webhooks/email-bounce` (mail provider only, header `x-webhook-secret: $BOUNCE_WEBHOOK_SECRET`;
-  `404` when unset or wrong): body `{ "email": "…" }` or a Resend `email.bounced` event. Flags the address.
+- `POST /webhooks/email-bounce` (Resend only): verified with Resend's Svix signature headers
+  (`svix-id`, `svix-timestamp`, `svix-signature`) against `RESEND_WEBHOOK_SECRET` (`whsec_…`, from the
+  webhook's page in the Resend dashboard). `404` when the secret is unset; `401` when the signature is
+  missing, wrong, or its timestamp is more than 5 minutes off; `400` if the signed body isn't JSON.
+  An `email.bounced` event flags every address in `data.to`; other event types answer `200` and change nothing.
 
 ### Bulk import (company admin, school admin; website only)
 Full design: `docs/bulk-import-spec.md`. The website reads the spreadsheet and maps its columns;

@@ -86,4 +86,5 @@ Auto-detecting the file type, multi-file upload, rolling back a completed import
   Two existing students with the same name at one school make that row an error.
 - Students need the school to exist already (matched by exact name among the company's schools).
 - Deploy: migration `1752624000025_bulk-import-lifecycle` must be applied to Neon; set
-  `BOUNCE_WEBHOOK_SECRET` and point the mail provider's bounce webhook at `/webhooks/email-bounce`.
+  `RESEND_WEBHOOK_SECRET` (the `whsec_…` signing secret of a Resend webhook for `email.bounced`
+  pointed at `/webhooks/email-bounce`; requests are verified with Resend's Svix signature).
