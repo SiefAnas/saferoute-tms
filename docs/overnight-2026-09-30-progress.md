@@ -264,7 +264,7 @@ mobile-account-lifecycle merged). New branches start from it.
   uploaded as a GitHub Actions artifact `db-backup-<run_id>`, 90-day retention, NOT encrypted
   (compressed only), downloadable by anyone with read access to the repo. Not committed to git.
 
-### Task 20 — prep-merges — in progress (all merges done, final full suite running)
+### Task 20 — prep-merges — DONE, pushed (head `d33f078`, 8 merges)
 - Branch `prep-merges` (worktree C:\Users\anas2\saferoute-build) from origin/main `47dd95c`, merged in
   plan order: fix-placeholder-claim, fix-student-school-scope, fix-delete-500s, resend-bounce-webhook,
   payroll-currency-import, student-id-scope-change, duplicate-student-flag, overnight-reports.
@@ -275,4 +275,13 @@ mobile-account-lifecycle merged). New branches start from it.
      Fixed in `d33f078` (test-only: company A marked as creator of those schools).
   3. Stale comment on `Student.student_id` type ("unique per school") updated to per company + school.
 - Client: tsc clean, 103 client checks, vite build OK. First server run: 28/30 (26, 27 as above).
-- Next step: when the rerun passes, `git push -u origin prep-merges` from the build worktree.
+- Final full suite on prep-merges: **30/30 suites, 959 checks, 0 failed**. Pushed. Ready for Anas to merge on GitHub.
+- After merging: apply migrations 026, 027, 028, 029 in one `npm run migrate:up` (see merge-plan.md step 9); set RESEND_WEBHOOK_SECRET.
+
+### Task 21 — timezone check — DONE (answered in chat; nothing changed)
+- SQL: `SHOW timezone;` plus database/role defaults from pg_db_role_setting. UTC/GMT/Etc/UTC = problem.
+- Effects if UTC for a Boston school: skip-pickup cutoff 4-5 h early, "today" flips at 8 PM (7 PM in
+  winter), overrides/schedule changes/absences land on the wrong date in the evening, payroll period
+  boundaries shift 4-5 h. Fix: `ALTER DATABASE neondb SET timezone = 'America/New_York';` (single-region pilot).
+
+## SESSION 3 FINAL STATE — tasks 19–21 done; nothing in progress.
