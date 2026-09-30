@@ -12,11 +12,12 @@ import { ActionError, ErrorState, Loading, messageFor } from '@/components/State
 import { Text } from '@/components/Text'
 import { PersonRow, SearchBox, Segmented, TemporaryPasswordPanel, WebsiteRow } from '@/features/admin/components'
 import { useCompanyAssignments, useCompanySessions, useCompanyVans, useDrivers, useMonitors, useParents } from '@/features/admin/companyData'
-import { matches, WEBSITE_PAGES } from '@/features/admin/logic'
+import { accountStatusText, matches, WEBSITE_PAGES } from '@/features/admin/logic'
 import { currentAssignmentBy, vanLabel } from '@/lib/fleet'
 import { formatClock } from '@/lib/format'
 import { formatWeekdays } from '@/lib/weekdays'
 import { useColors } from '@/theme/theme'
+import { radius } from '@/theme/tokens'
 
 type Kind = 'driver' | 'monitor' | 'parent'
 const SHIFT_TEXT = { morning: 'Mornings', afternoon: 'Afternoons', both: 'Mornings and afternoons' } as const
@@ -197,8 +198,15 @@ function PersonSheet({ person, onClose }: { person: Person; onClose: () => void 
             {person.lines.map((l) => (
               <KeyValueRow key={l.label} label={l.label} value={l.value} first={false} />
             ))}
-            {user.must_change_password ? <KeyValueRow label="Password" value="Temporary (not changed yet)" first={false} /> : null}
+            <KeyValueRow label="Account" value={accountStatusText(user)} first={false} />
           </Card>
+          {user.email_bounced ? (
+            <View style={{ backgroundColor: colors.cautionBg, borderRadius: radius.row, paddingHorizontal: 12, paddingVertical: 10 }}>
+              <Text size={13} color={colors.cautionFg} style={{ lineHeight: 18 }}>
+                Email to {user.email} bounced, so SafeTurns has stopped sending to it. Correct the address on the website to start again.
+              </Text>
+            </View>
+          ) : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {user.phone ? (
               <Button

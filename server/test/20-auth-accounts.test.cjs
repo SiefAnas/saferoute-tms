@@ -152,7 +152,8 @@ async function main() {
       (reset.status === 200 && reset.body.temporary_password && reset.body.user.must_change_password === true && !('password_hash' in reset.body.user))
         ? ok('creating admin resets -> 200, new temporary password, never the old one')
         : bad(`reset: ${reset.status} ${JSON.stringify(reset.body)}`);
-      eq("the driver's current session is signed out -> 401", (await api('GET', '/auth/me', drvTok)).status, 401);
+      const signedOut = await api('GET', '/auth/me', drvTok);
+      eq("the driver's current session is signed out -> 401 PASSWORD_CHANGED", `${signedOut.status} ${signedOut.body?.code}`, '401 PASSWORD_CHANGED');
       const afterReset = await login('new@a.com', reset.body.temporary_password);
       eq('driver logs in with the new temporary password and must change it', afterReset.body?.user?.must_change_password, true);
       eq('same-company admin who did not create the account -> 403', (await api('POST', `/users/${mk.body.id}/reset-password`, tA2)).status, 403);

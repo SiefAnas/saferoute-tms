@@ -253,6 +253,10 @@ export interface PublicUser {
   email_verified_at: string | null
   created_by_user_id: string | null
   must_change_password: boolean
+  // Account lifecycle (same fields the website shows). Optional: older API versions omit them.
+  email_bounced?: boolean
+  account_status?: 'created' | 'never_logged_in' | 'active'
+  temp_password_expires_at?: string | null
 }
 
 // POST /users: the new account, with its temporary password (shown once).

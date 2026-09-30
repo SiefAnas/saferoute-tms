@@ -19,6 +19,7 @@ function setup(
 ) {
   const calls: { url: string; init: RequestInit }[] = []
   const onUnauthorized = jest.fn()
+  const onPasswordChangeRequired = jest.fn()
   const fetchImpl = ((url: string, init: RequestInit) => {
     calls.push({ url, init })
     if (typeof response === 'function') return response()
@@ -29,9 +30,10 @@ function setup(
     baseUrl: 'https://api.test',
     getToken: async () => options.token ?? null,
     onUnauthorized,
+    onPasswordChangeRequired,
     fetchImpl,
   })
-  return { api, calls, onUnauthorized }
+  return { api, calls, onUnauthorized, onPasswordChangeRequired }
 }
 
 describe('request building', () => {
@@ -141,5 +143,38 @@ describe('401 handling', () => {
     const { api, onUnauthorized } = setup(jsonResponse(403, { error: 'forbidden' }), { token: 't' })
     await expect(api.get('/students')).rejects.toThrow('forbidden')
     expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+})
+
+describe('account lifecycle signals', () => {
+  it("passes the server's code and message to the 401 handler", async () => {
+    const { api, onUnauthorized } = setup(
+      jsonResponse(401, { error: 'This temporary password has expired. Ask your admin to reset it.', code: 'TEMP_PASSWORD_EXPIRED' }),
+      { token: 't' },
+    )
+    await expect(api.get('/schedule/today')).rejects.toThrow('This temporary password has expired')
+    expect(onUnauthorized).toHaveBeenCalledWith({ code: 'TEMP_PASSWORD_EXPIRED', message: 'This temporary password has expired. Ask your admin to reset it.' })
+  })
+
+  it('reports a deactivated account as ACCOUNT_INACTIVE', async () => {
+    const { api, onUnauthorized } = setup(jsonResponse(401, { error: 'account inactive or not found', code: 'ACCOUNT_INACTIVE' }), { token: 't' })
+    await api.get('/sessions').catch(() => undefined)
+    expect(onUnauthorized).toHaveBeenCalledWith({ code: 'ACCOUNT_INACTIVE', message: 'account inactive or not found' })
+  })
+
+  it('signals a required password change on a 403 PASSWORD_CHANGE_REQUIRED, without ending the session', async () => {
+    const { api, onUnauthorized, onPasswordChangeRequired } = setup(
+      jsonResponse(403, { error: 'set a new password before continuing', code: 'PASSWORD_CHANGE_REQUIRED' }),
+      { token: 't' },
+    )
+    await expect(api.get('/schedule/today')).rejects.toThrow('set a new password before continuing')
+    expect(onPasswordChangeRequired).toHaveBeenCalledTimes(1)
+    expect(onUnauthorized).not.toHaveBeenCalled()
+  })
+
+  it('does not signal a password change on any other 403', async () => {
+    const { api, onPasswordChangeRequired } = setup(jsonResponse(403, { error: 'forbidden' }), { token: 't' })
+    await api.get('/students').catch(() => undefined)
+    expect(onPasswordChangeRequired).not.toHaveBeenCalled()
   })
 })

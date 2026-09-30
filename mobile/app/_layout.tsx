@@ -51,7 +51,7 @@ export default function RootLayout() {
 }
 
 function Root({ fontsReady }: { fontsReady: boolean }) {
-  const { status } = useAuth()
+  const { status, user } = useAuth()
   const { colors, isDark } = useTheme()
   const router = useRouter()
   const segments = useSegments()
@@ -71,6 +71,13 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
       router.replace('/login')
     }
   }, [status, segments, router])
+
+  // On a temporary password (new account, or reset by the admin mid-session): nothing but
+  // "set your password" until it is changed. The server refuses every other call anyway.
+  useEffect(() => {
+    if (status !== 'signedIn' || !user?.must_change_password) return
+    if (segments[0] !== 'set-password') router.replace('/set-password')
+  }, [status, user?.must_change_password, segments, router])
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }} onLayout={onLayout}>

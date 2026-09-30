@@ -92,3 +92,20 @@ export function runsOn(a: { start_date: string; end_date: string | null; days_of
   if (a.end_date && a.end_date.slice(0, 10) < today) return false
   return (a.days_of_week ?? [1, 2, 3, 4, 5]).includes(isoDow)
 }
+
+// Account status line on a person's details, in the website's words (EditAccountModal):
+// Active / Created (temporary password not changed yet, until <date>) / Never logged in.
+// `account_status` comes from the API; an API without it falls back to must_change_password.
+export function accountStatusText(
+  u: Pick<PublicUser, 'is_active' | 'must_change_password' | 'account_status' | 'temp_password_expires_at'>,
+  formatDate: (iso: string) => string = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+): string {
+  if (!u.is_active) return 'Deactivated'
+  if (u.account_status === 'never_logged_in') return 'Never logged in. The temporary password expired; reset it to give a new one.'
+  if (u.account_status === 'created' || (u.account_status === undefined && u.must_change_password)) {
+    return u.temp_password_expires_at
+      ? `Created. Temporary password not changed yet (works until ${formatDate(u.temp_password_expires_at)}).`
+      : 'Created. Temporary password not changed yet.'
+  }
+  return 'Active'
+}

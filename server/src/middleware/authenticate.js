@@ -39,10 +39,10 @@ async function check(req, res, next, allowPasswordChange) {
     );
     const user = rows[0];
     if (!user || !user.is_active) {
-      return res.status(401).json({ error: 'account inactive or not found' });
+      return res.status(401).json({ error: 'account inactive or not found', code: 'ACCOUNT_INACTIVE' });
     }
     if (user.password_changed_at && claims.iat < Math.floor(new Date(user.password_changed_at).getTime() / 1000)) {
-      return res.status(401).json({ error: 'your password was changed, please log in again' });
+      return res.status(401).json({ error: 'your password was changed, please log in again', code: 'PASSWORD_CHANGED' });
     }
     if (tempPasswordExpired(user)) {
       return res.status(401).json({ error: 'This temporary password has expired. Ask your admin to reset it.', code: 'TEMP_PASSWORD_EXPIRED' });
