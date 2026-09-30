@@ -180,3 +180,21 @@ Migration 028 must be applied first (it creates the table).
   dashboard (no render.yaml), `start` = `node src/index.js`, no migration step; node-pg-migrate 7.9.1;
   daily Neon pg_dump backup exists in .github/workflows/db-backup.yml.
 - Tasks 17, 18: not started.
+
+### Session 2 resumed (2026-09-30). origin/main is now `47dd95c` (PR #6 overnight-reports, PR #7
+mobile-account-lifecycle merged). New branches start from it.
+
+### Task 13 — fix-student-school-scope — in progress (code done, full suite running)
+- Branch `fix-student-school-scope`, commit `4799cef` (push after the suite passes).
+- POST /students: school_id must be linked to the company (students there, or a placeholder it
+  created) -> else 403 "This school isn't linked to your company. Pick one of your schools, or add
+  it as a new school first." (same answer whether the id exists); malformed id 400.
+  One SQL definition `LINKED_TO_COMPANY_SQL` in services/schools.js (picker, route, import).
+- Tests: `30-student-school-scope` (14 checks, PG 5480, app 5987) incl. import; suite 25 included
+  with gap 1 flipped to FIXED 1 (27). Suites 04/09/10/13/18 now mark their seeded school as created
+  by the company admin (they created a first student at an unlinked school via the API).
+- Note: the web UI already only offered linked schools or "add a new school"; only direct API calls
+  reached unlinked schools. There is still no way for a company to link to an EXISTING claimed school
+  except by adding a duplicate placeholder (pre-existing product gap, see pilot-readiness).
+- MERGE NOTE: suite 25 is added by tenant-isolation-audit, fix-placeholder-claim (gap 2 flipped) and
+  this branch (gap 1 flipped): merging the fixes gives a conflict in that file; keep both FIXED sections.
