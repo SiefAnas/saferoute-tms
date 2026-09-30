@@ -131,3 +131,126 @@ Same rules. origin/main still at `71367cb` (none of the session-1 branches merge
 - Note: the README says almost nothing about planned features; it points to `V2_ROADMAP.md`
   ("features that are not in the MVP") and is stale (still says the client is "not started").
 - Next step: Task 12, `git switch -c fix-placeholder-claim origin/main` in the main checkout.
+
+### Task 12 — fix-placeholder-claim — in progress (code done, full suite running)
+- Branch `fix-placeholder-claim` from origin/main, commit `76338c6` (push after the suite passes).
+- Self-claim refused: `POST /signup/:kind` with `claimId` -> 403 `CLAIM_REQUIRES_APPROVAL`, no account.
+  `verify-email` no longer finalizes claims (a self-claim started before deploy can't finish; its
+  user stays blocked by requireOperable).
+- `POST /signup/:kind/claim-requests` {claimId, fullName, email, phone?, note?} -> 202, recorded in
+  `placeholder_claim_requests` (migration **1752624000028**): who (name, email, phone, IP), which
+  placeholder (kind + id), when, status pending. Grants nothing. One pending row per email+placeholder.
+- Tests: 03-claim rewritten (49 checks, incl. the owner script), 07-hardening adapted (18),
+  25-tenant-isolation cherry-picked from task 1 with gap 2 flipped to "FIXED 2" (29 checks).
+
+#### How to approve a claim request by hand (until there is a screen)
+Run from `server/` on a machine whose `server/.env` DATABASE_URL points at the production DB
+(the script prints the database host first; nothing happens without `--yes`):
+1. See what's waiting: `node scripts/claim-requests.js list`
+   (shows request id, school/company name + address, requester name, email, phone, IP, note, time).
+2. Verify the person really works there: call the organization's PUBLIC number (school office
+   from its website, not a number the requester gave you) and confirm the name and email.
+3. Approve: `node scripts/claim-requests.js approve <requestId> --by "Anas" --note "called office 9/30" --yes`
+   It creates their admin account, marks the organization claimed, rejects other pending requests
+   for it, deactivates any leftover self-claimant, and prints a **temporary password once**.
+4. Give that temporary password to the person by phone or a separate channel (not the same
+   email thread). They must choose their own password at first sign-in; it expires in 7 days
+   (reset it from their admin screen or re-approve if it lapses).
+5. Or reject: `node scripts/claim-requests.js reject <requestId> --by "Anas" --note "reason" --yes`
+6. History: `node scripts/claim-requests.js list --all`.
+Migration 028 must be applied first (it creates the table).
+
+### STOPPED HERE (usage limit reached) — resume from this entry
+- Task 12: DONE. `fix-placeholder-claim` (`76338c6`) full suite 25/25, pushed.
+  Next step on resume: Task 13.
+- Task 13 (fix-student-school-scope), plan: `git switch -c fix-student-school-scope origin/main`;
+  add `isCompanySchool(companyId, schoolId)` in services/schools.js sharing listCompanySchools' SQL;
+  POST /students -> 403 "This school isn't linked to your company..." when not linked (400 for a
+  malformed id); new test `30-student-school-scope` (PG 5480, app 5987) incl. import by an unlinked
+  school name; cherry-pick 1929feb (suite 25) and flip KNOWN GAP 1 to FIXED 1.
+- Task 14 (fix-delete-500s), plan: catch 23503 on DELETE /students/:id (trips, schedule_changes
+  RESTRICT) and DELETE /vans/:id (assignments RESTRICT) -> 409 naming the blocker and what to do.
+  QUESTION: students and vans have no "deactivate" today; message will say "end their assignments"
+  unless an archive/deactivate feature is wanted.
+- Task 15 (student-id-scope-change), plan: branch from origin/main, cherry-pick 5b82c0a (student-id),
+  new migration 029 swapping the unique index to (company_id, school_id, lower(student_id)); drop the
+  cross-company taken check; import: ID row whose name+school matches exactly one no-ID student ->
+  "update" with note "adds Student ID"; update test 26.
+- Task 16 (migration-deploy-options), research started: Render services are configured in the
+  dashboard (no render.yaml), `start` = `node src/index.js`, no migration step; node-pg-migrate 7.9.1;
+  daily Neon pg_dump backup exists in .github/workflows/db-backup.yml.
+- Tasks 17, 18: not started.
+
+### Session 2 resumed (2026-09-30). origin/main is now `47dd95c` (PR #6 overnight-reports, PR #7
+mobile-account-lifecycle merged). New branches start from it.
+
+### Task 13 — fix-student-school-scope — DONE
+- Branch `fix-student-school-scope`, commit `4799cef`, full suite 26/26, pushed.
+- POST /students: school_id must be linked to the company (students there, or a placeholder it
+  created) -> else 403 "This school isn't linked to your company. Pick one of your schools, or add
+  it as a new school first." (same answer whether the id exists); malformed id 400.
+  One SQL definition `LINKED_TO_COMPANY_SQL` in services/schools.js (picker, route, import).
+- Tests: `30-student-school-scope` (14 checks, PG 5480, app 5987) incl. import; suite 25 included
+  with gap 1 flipped to FIXED 1 (27). Suites 04/09/10/13/18 now mark their seeded school as created
+  by the company admin (they created a first student at an unlinked school via the API).
+- Note: the web UI already only offered linked schools or "add a new school"; only direct API calls
+  reached unlinked schools. There is still no way for a company to link to an EXISTING claimed school
+  except by adding a duplicate placeholder (pre-existing product gap, see pilot-readiness).
+- MERGE NOTE: suite 25 is added by tenant-isolation-audit, fix-placeholder-claim (gap 2 flipped) and
+  this branch (gap 1 flipped): merging the fixes gives a conflict in that file; keep both FIXED sections.
+
+### Task 14 — fix-delete-500s — DONE
+- Branch `fix-delete-500s`, commit `ea7f55f`, full suite 25/25, pushed.
+- DELETE /students/:id with trips or schedule changes, DELETE /vans/:id with any assignment:
+  RESTRICT raises Postgres **23001** (not 23503, which my earlier plan assumed), now
+  mapped to 409 STUDENT_HAS_HISTORY / VAN_HAS_HISTORY with counts and what to do instead.
+  Error handler passes `code` through (identical edit to fix-placeholder-claim's app.js, merges cleanly).
+- Test `31-delete-conflicts` (14 checks, PG 5481, app 5988).
+- QUESTION (still open): students and vans have no deactivate/archive; the messages say so and
+  point to ending/moving assignments. Want an archive feature?
+
+### Task 16 — migration deploy options — DONE
+- `docs/migration-deploy-options.md`. Recommendation: pending-migration check on /health (503) now;
+  then Render Pre-Deploy Command `npm run migrate:up` if the API is on a paid instance, else start
+  command `npm run migrate:up && npm start`. Facts checked in node-pg-migrate 7.9.1: one transaction
+  for the whole run by default; pg_try_advisory_lock fails fast rather than waiting.
+- Next: when the task-14 suite passes, push; then Task 15.
+
+### Environment incident (11:00)
+- Someone ran `git checkout main` + `git pull` in C:\Users\anas2\saferoute-tms at 11:00:11 while my
+  task-15 suite ran there (reflog). Not me. That run was discarded. From then on my build work uses a
+  separate worktree: **C:\Users\anas2\saferoute-build** (own node_modules). The main checkout is left alone.
+
+### Task 15 — student-id-scope-change — DONE
+- Branch `student-id-scope-change` = origin/main + cherry-pick of the student-id commit (`371decf`)
+  + `3d519a2`. Pushed. Full suite 24/25 first pass; 14-shift-period died silently after initdb
+  (environment flake), rerun alone 62/62.
+- Migration **1752624000029**: unique index now (company_id, school_id, lower(student_id)).
+- Import: new ID + exactly one same-name student without an ID -> "update" with note
+  "Adds Student ID … to the existing student"; two or more -> row error. Cross-company check removed.
+- Test 26 updated (28 checks); 01-schema expects 27 on this branch. Answers session-1 questions 0 and 1.
+- Merge this branch INSTEAD of `student-id`.
+
+### Task 17 — merge plan — DONE
+- `docs/merge-plan.md`: order, per-step conflicts with exact resolutions, migrations 026–029 in one run
+  after all merges (check-order trap if 028 is applied first), tests after each merge, fast path.
+
+### Task 18 — pilot readiness — DONE
+- `docs/pilot-readiness.md`: 20 items ranked; blockers: security fixes unmerged, no legal/privacy
+  groundwork, manual migrations, probable UTC timezone bug, unencrypted PII backups in GitHub,
+  drivers not told about changes in time.
+
+## SESSION 2 FINAL STATE — tasks 11–18 all done, stopped as asked
+| Task | Branch / file | Commit | Suite |
+|---|---|---|---|
+| 11 README snapshot | docs/readme-snapshot.md | — | — |
+| 12 Placeholder claim fix | `fix-placeholder-claim` | 76338c6 | 25/25 |
+| 13 Student school scope | `fix-student-school-scope` | 4799cef | 26/26 |
+| 14 Delete 500s -> 409 | `fix-delete-500s` | ea7f55f | 25/25 |
+| 15 Student ID per company | `student-id-scope-change` | 3d519a2 | 25/25 (14 rerun) |
+| 16 Migration deploy options | docs/migration-deploy-options.md | — | — |
+| 17 Merge plan | docs/merge-plan.md | — | — |
+| 18 Pilot readiness | docs/pilot-readiness.md | — | — |
+- Open question: students and vans have no archive/deactivate (task 14 messages say so).
+- Worktrees: C:\Users\anas2\saferoute-reports (overnight-reports), C:\Users\anas2\saferoute-build
+  (student-id-scope-change). Nothing in progress.
