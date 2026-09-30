@@ -13,16 +13,26 @@ const { assignmentNotEndedSql } = require('../db/scoped');
 // /placeholders/school), even before any student is added there, so a stub the company just
 // made shows up in its picker. Same invariant: the company already has a relationship with
 // the school (it created it), so this still can't enumerate unrelated schools.
+// "This company is linked to school s": it already has a student there, or one of its users
+// created the school (a placeholder). The one definition, used by the school picker, the
+// student create route and the bulk import.
+const LINKED_TO_COMPANY_SQL = `(EXISTS (SELECT 1 FROM students st WHERE st.school_id = s.id AND st.company_id = $1)
+         OR EXISTS (SELECT 1 FROM users u WHERE u.id = s.created_by_user_id AND u.company_id = $1))`;
+
 async function listCompanySchools(companyId) {
   const { rows } = await pool.query(
     `SELECT s.id, s.name
        FROM schools s
-      WHERE EXISTS (SELECT 1 FROM students st WHERE st.school_id = s.id AND st.company_id = $1)
-         OR EXISTS (SELECT 1 FROM users u WHERE u.id = s.created_by_user_id AND u.company_id = $1)
+      WHERE ${LINKED_TO_COMPANY_SQL}
       ORDER BY s.name`,
     [companyId],
   );
   return rows;
+}
+
+async function isCompanySchool(companyId, schoolId) {
+  const { rows } = await pool.query(`SELECT 1 FROM schools s WHERE s.id = $2 AND ${LINKED_TO_COMPANY_SQL}`, [companyId, schoolId]);
+  return rows.length > 0;
 }
 
 // Full school detail (name/address/zip/state/phone/hours/website) for a company-side
@@ -55,4 +65,4 @@ async function getDriverSchool(companyId, driverId, schoolId) {
   return rows[0] ?? null;
 }
 
-module.exports = { listCompanySchools, getCompanySchool, getDriverSchool };
+module.exports = { listCompanySchools, isCompanySchool, getCompanySchool, getDriverSchool };
