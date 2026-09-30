@@ -32,17 +32,22 @@ Live log for the 10-task overnight run. The **latest entry is at the bottom**; i
   and stall initdb. A reaper loop (scratchpad `reap-orphans.ps1`, background) now kills only io_workers
   whose parent is gone.
 
-### Task 2 — student-id — in progress
-- Next step: `git switch -c student-id origin/main` in the main checkout, then migration
-  `1752624000026_student-id` (students.student_id text, unique on (school_id, lower(student_id)) where not null).
-- Plan: routes/students POST/PATCH accept student_id; import field "Student ID"; match on
-  student_id+school when given, name+school otherwise; duplicate IDs in a file = row error;
-  show in company + school-admin lists and drawers; editable in the company student form.
-- Decision taken (no guess on data): a row WITH an ID that matches no ID but matches a same-name
-  student at that school who has NO ID yet is a row error ("add the ID on their record first"),
-  never a silent duplicate and never an automatic attach. QUESTION for Anas below.
+### Task 2 — student-id — in progress (code done, full suite running)
+- Branch `student-id` from origin/main, commit `5b82c0a` (not pushed until the suite passes).
+- Migration `1752624000026_student-id` (students.student_id text, 1-50 chars, unique index
+  `students_school_student_id_unique` on (school_id, lower(student_id)) where not null).
+- Server: POST/PATCH /students accept student_id (409 on a used ID). Import: "Student ID" column,
+  ID+school match, duplicate ID in file = row error, name+school fallback, no case rewrite on match.
+- Client: company + school-admin list ("Grade 3 · ID S-001"), drawers, search, company form field,
+  students CSV column. Browser-checked both admin screens and the 409 message.
+- Test: `server/test/26-student-id.test.cjs` (26 checks, PG 5476, app 5983). 01-schema expects 26 migrations.
+- Not done on purpose: mobile admin screens unchanged (task named web list/detail; mobile untouched).
+- Next step: when the suite passes, `git push -u origin student-id`, then Task 3.
 
 ## Questions for Anas
+0. (Task 2) Student IDs are unique per school across ALL companies (as specified). So a company
+   entering an ID another company's student already has at that school gets "already has this
+   Student ID": that reveals the ID is in use there (never who). OK, or unique per company+school?
 1. (Task 2) First import with Student IDs over an existing roster: should a row whose ID is new but
    whose name + school match an existing student without an ID attach that ID to the existing
    student? Today it is a row error so nothing is duplicated or attached by guess.
