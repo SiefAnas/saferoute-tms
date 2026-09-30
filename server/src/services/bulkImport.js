@@ -319,7 +319,7 @@ async function planStudents(req, def, rows) {
 
 async function execStudent(req, def, plan, credentials) {
   const { row } = plan;
-  await withTx(async (c) => {
+  return withTx(async (c) => {
     const tenantId = req.auth.tenantId;
     let studentId = plan.existingId;
     const fields = {
@@ -342,7 +342,7 @@ async function execStudent(req, def, plan, credentials) {
       );
       studentId = rows[0].id;
     }
-    if (!row.parent_email) return;
+    if (!row.parent_email) return studentId;
 
     // Find the parent again now (an earlier row of this same file may have just created them).
     let parent = (await c.query('SELECT id FROM users WHERE lower(email) = lower($1) AND company_id = $2 AND role = \'parent\' AND is_active', [row.parent_email, tenantId])).rows[0];
@@ -356,6 +356,7 @@ async function execStudent(req, def, plan, credentials) {
       'INSERT INTO parent_students (parent_user_id, student_id, company_id, created_by_user_id) VALUES ($1,$2,$3,$4) ON CONFLICT (parent_user_id, student_id) DO NOTHING',
       [parent.id, studentId, tenantId, req.auth.userId]
     );
+    return studentId;
   });
 }
 
@@ -394,12 +395,13 @@ async function commit(req, type, rawRows) {
   const { def, plans } = await plan(req, type, rawRows);
   const credentials = [];
   const results = [];
+  const studentIds = new Map(); // row index -> student id
   for (let i = 0; i < plans.length; i++) {
     const p = plans[i];
     if (p.action === 'error') { results.push({ index: i, status: 'error', reason: p.reason }); continue; }
     try {
       if (type === 'vans') await execVan(req, p);
-      else if (type === 'students') await execStudent(req, def, p, credentials);
+      else if (type === 'students') studentIds.set(i, await execStudent(req, def, p, credentials));
       else await execPerson(req, def, p, credentials);
       results.push({ index: i, status: p.action === 'create' ? 'created' : 'updated', reason: null });
     } catch (e) {
@@ -407,8 +409,22 @@ async function commit(req, type, rawRows) {
       results.push({ index: i, status: 'error', reason: friendlyDbError(e) });
     }
   }
+  // Imported students that now share a name with another of this company's students at the same
+  // school (students.duplicate_name, kept by a DB trigger). They are saved; this is only a warning.
+  const duplicates = [];
+  if (studentIds.size) {
+    const { rows: flagged } = await pool.query(
+      'SELECT id FROM students WHERE id = ANY($1::uuid[]) AND company_id = $2 AND duplicate_name',
+      [[...studentIds.values()], req.auth.tenantId]
+    );
+    const ids = new Set(flagged.map((r) => r.id));
+    for (const [index, id] of studentIds) {
+      if (ids.has(id)) duplicates.push({ index, full_name: plans[index].row.full_name, status: plans[index].action === 'create' ? 'created' : 'updated' });
+    }
+  }
   return {
     type,
+    duplicates,
     counts: {
       created: results.filter((r) => r.status === 'created').length,
       updated: results.filter((r) => r.status === 'updated').length,

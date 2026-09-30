@@ -299,6 +299,13 @@ export function ImportPage() {
           </CardHeader>
           <div className="flex flex-col gap-4 px-5 py-4">
             <Counts items={[['Created', result.counts.created], ['Updated', result.counts.updated], ['Not imported', result.counts.error]]} />
+            {(result.duplicates?.length ?? 0) > 0 && (
+              <p role="status" className="rounded-row bg-caution-bg px-3 py-2 text-[13px] text-caution-fg">
+                {result.duplicates!.length === 1
+                  ? `1 student now shares a name with another student at the same school: ${result.duplicates![0].full_name}. It was saved and is marked "Possible duplicate" on the Students page. Check it is not the same child.`
+                  : `${result.duplicates!.length} students now share a name with another student at the same school: ${result.duplicates!.map((d) => d.full_name).join(', ')}. They were saved and are marked "Possible duplicate" on the Students page. Check they are not the same child.`}
+              </p>
+            )}
             {result.counts.error > 0 && (
               <div className="flex flex-wrap items-center gap-3">
                 <Button type="button" variant="outline" onClick={downloadErrors}>

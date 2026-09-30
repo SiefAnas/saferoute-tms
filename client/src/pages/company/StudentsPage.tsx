@@ -484,7 +484,15 @@ export function CompanyStudentsPage() {
             const drv = driverCell(s.id)
             return (
               <TableRow key={s.id} template={TEMPLATE} selected={detailId === s.id} onClick={() => setDetailId(s.id)}>
-                <NameCell name={s.full_name} sub={[s.grade ? `Grade ${s.grade}` : null, s.student_id ? `ID ${s.student_id}` : null].filter(Boolean).join(' · ') || undefined} />
+                <NameCell
+                  name={s.full_name}
+                  sub={
+                    <span className="inline-flex items-center gap-1.5">
+                      {[s.grade ? `Grade ${s.grade}` : null, s.student_id ? `ID ${s.student_id}` : null].filter(Boolean).join(' · ') || null}
+                      {s.duplicate_name && <StatusBadge tone="caution" label="Possible duplicate" />}
+                    </span>
+                  }
+                />
                 <span className="truncate text-ink-sub">{schoolsQuery.isLoading ? '…' : schoolName(s.school_id)}</span>
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate font-medium text-ink">{s.parent_name ?? '—'}</span>
@@ -527,6 +535,9 @@ export function CompanyStudentsPage() {
             rows={[
               { k: 'Status', v: <StatusBadge tone={statusFor(detail).tone} label={statusFor(detail).label} /> },
               { k: 'Student ID', v: detail.student_id ?? '—' },
+              ...(detail.duplicate_name
+                ? [{ k: 'Possible duplicate', v: 'Another student at this school has the same name. Check they are not the same child.' }]
+                : []),
               { k: 'Driver · van', v: [driverCell(detail.id).main, driverCell(detail.id).sub].filter(Boolean).join(' · ') },
               { k: 'Parent / guardian', v: detail.parent_name ?? '—' },
               { k: 'Phone', v: <ContactLink type="phone" value={detail.parent_phone} /> },

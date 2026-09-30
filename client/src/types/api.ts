@@ -155,7 +155,9 @@ export interface Student {
   company_id: string
   school_id: string
   full_name: string
-  student_id: string | null // optional school-issued ID, unique per school
+  student_id: string | null // optional school-issued ID, unique per company + school
+  // Another student of the same company at the same school has the same name (kept by the server).
+  duplicate_name?: boolean
   grade: string | null
   parent_name: string | null
   parent_phone: string | null
@@ -549,4 +551,6 @@ export interface ImportCommitResult {
   counts: { created: number; updated: number; error: number }
   rows: { index: number; status: 'created' | 'updated' | 'error'; reason: string | null }[]
   credentials: ImportCredential[]
+  // Students import only: saved rows whose student now shares a name with another at the same school.
+  duplicates?: { index: number; full_name: string; status: 'created' | 'updated' }[]
 }

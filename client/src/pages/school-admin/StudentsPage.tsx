@@ -156,7 +156,15 @@ export function StudentsPage() {
             const t = todayFor(s)
             return (
               <TableRow key={s.id} template={TEMPLATE} selected={detailId === s.id} onClick={() => setDetailId(s.id)}>
-                <NameCell name={s.full_name} sub={[s.grade ? `Grade ${s.grade}` : null, s.student_id ? `ID ${s.student_id}` : null].filter(Boolean).join(' · ') || undefined} />
+                <NameCell
+                  name={s.full_name}
+                  sub={
+                    <span className="inline-flex items-center gap-1.5">
+                      {[s.grade ? `Grade ${s.grade}` : null, s.student_id ? `ID ${s.student_id}` : null].filter(Boolean).join(' · ') || null}
+                      {s.duplicate_name && <StatusBadge tone="caution" label="Possible duplicate" />}
+                    </span>
+                  }
+                />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate font-medium text-ink">{cd.main}</span>
                   {cd.sub && <span className="truncate text-[12px] text-muted">{cd.sub}</span>}
@@ -190,6 +198,9 @@ export function StudentsPage() {
             rows={[
               { k: 'Today', v: <StatusBadge tone={todayFor(detail).tone} label={todayFor(detail).label} /> },
               { k: 'Student ID', v: detail.student_id ?? '—' },
+              ...(detail.duplicate_name
+                ? [{ k: 'Possible duplicate', v: 'The transport company has another student at this school with the same name. Check they are not the same child.' }]
+                : []),
               { k: 'Guardian', v: detail.parent_name ?? '—' },
               { k: 'Phone', v: <ContactLink type="phone" value={detail.parent_phone} /> },
               { k: 'Notes', v: detail.notes ?? '—' },
