@@ -184,8 +184,8 @@ Migration 028 must be applied first (it creates the table).
 ### Session 2 resumed (2026-09-30). origin/main is now `47dd95c` (PR #6 overnight-reports, PR #7
 mobile-account-lifecycle merged). New branches start from it.
 
-### Task 13 — fix-student-school-scope — in progress (code done, full suite running)
-- Branch `fix-student-school-scope`, commit `4799cef` (push after the suite passes).
+### Task 13 — fix-student-school-scope — DONE
+- Branch `fix-student-school-scope`, commit `4799cef`, full suite 26/26, pushed.
 - POST /students: school_id must be linked to the company (students there, or a placeholder it
   created) -> else 403 "This school isn't linked to your company. Pick one of your schools, or add
   it as a new school first." (same answer whether the id exists); malformed id 400.
@@ -198,3 +198,20 @@ mobile-account-lifecycle merged). New branches start from it.
   except by adding a duplicate placeholder (pre-existing product gap, see pilot-readiness).
 - MERGE NOTE: suite 25 is added by tenant-isolation-audit, fix-placeholder-claim (gap 2 flipped) and
   this branch (gap 1 flipped): merging the fixes gives a conflict in that file; keep both FIXED sections.
+
+### Task 14 — fix-delete-500s — in progress (code done, full suite running)
+- Branch `fix-delete-500s`, commit `ea7f55f` (push after the suite passes).
+- DELETE /students/:id with trips or schedule changes, DELETE /vans/:id with any assignment:
+  RESTRICT raises Postgres **23001** (not 23503, which is what I assumed in repo-health.md), now
+  mapped to 409 STUDENT_HAS_HISTORY / VAN_HAS_HISTORY with counts and what to do instead.
+  Error handler passes `code` through (identical edit to fix-placeholder-claim's app.js, merges cleanly).
+- Test `31-delete-conflicts` (14 checks, PG 5481, app 5988).
+- QUESTION (still open): students and vans have no deactivate/archive; the messages say so and
+  point to ending/moving assignments. Want an archive feature?
+
+### Task 16 — migration deploy options — DONE
+- `docs/migration-deploy-options.md`. Recommendation: pending-migration check on /health (503) now;
+  then Render Pre-Deploy Command `npm run migrate:up` if the API is on a paid instance, else start
+  command `npm run migrate:up && npm start`. Facts checked in node-pg-migrate 7.9.1: one transaction
+  for the whole run by default; pg_try_advisory_lock fails fast rather than waiting.
+- Next: when the task-14 suite passes, push; then Task 15.
