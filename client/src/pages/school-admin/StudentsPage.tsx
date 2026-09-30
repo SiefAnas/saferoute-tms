@@ -66,7 +66,7 @@ export function StudentsPage() {
   }
 
   const visible = students.filter(
-    (s) => (!gradeFilter || s.grade === gradeFilter) && matches(q, s.full_name, s.parent_name, s.parent_phone, companyDriver(s).main, companyDriver(s).sub),
+    (s) => (!gradeFilter || s.grade === gradeFilter) && matches(q, s.full_name, s.student_id, s.parent_name, s.parent_phone, companyDriver(s).main, companyDriver(s).sub),
   )
   const detail = students.find((s) => s.id === detailId) ?? null
 
@@ -156,7 +156,7 @@ export function StudentsPage() {
             const t = todayFor(s)
             return (
               <TableRow key={s.id} template={TEMPLATE} selected={detailId === s.id} onClick={() => setDetailId(s.id)}>
-                <NameCell name={s.full_name} sub={s.grade ? `Grade ${s.grade}` : undefined} />
+                <NameCell name={s.full_name} sub={[s.grade ? `Grade ${s.grade}` : null, s.student_id ? `ID ${s.student_id}` : null].filter(Boolean).join(' · ') || undefined} />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate font-medium text-ink">{cd.main}</span>
                   {cd.sub && <span className="truncate text-[12px] text-muted">{cd.sub}</span>}
@@ -189,6 +189,7 @@ export function StudentsPage() {
           <DetailRows
             rows={[
               { k: 'Today', v: <StatusBadge tone={todayFor(detail).tone} label={todayFor(detail).label} /> },
+              { k: 'Student ID', v: detail.student_id ?? '—' },
               { k: 'Guardian', v: detail.parent_name ?? '—' },
               { k: 'Phone', v: <ContactLink type="phone" value={detail.parent_phone} /> },
               { k: 'Notes', v: detail.notes ?? '—' },

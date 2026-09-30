@@ -155,6 +155,7 @@ export interface Student {
   company_id: string
   school_id: string
   full_name: string
+  student_id: string | null // optional school-issued ID, unique per school
   grade: string | null
   parent_name: string | null
   parent_phone: string | null

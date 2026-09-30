@@ -18,6 +18,24 @@ const companyAdmin = requireRole('company_admin');
 
 const mapFk = (err) => mapMissingRefError(err, 'school_id not found');
 
+// Optional school-issued Student ID: trimmed, blank means none, unique per school (any case).
+function normalizeStudentId(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string' && typeof value !== 'number') throw new HttpError(400, 'student_id must be text');
+  const v = String(value).trim();
+  if (!v) return null;
+  if (v.length > 50) throw new HttpError(400, 'student_id must be 50 characters or fewer');
+  return v;
+}
+
+function mapStudentError(err) {
+  if (err.code === '23505' && String(err.constraint || '').includes('students_school_student_id_unique')) {
+    return new HttpError(409, 'another student at this school already has this Student ID');
+  }
+  return mapFk(err);
+}
+
 // school_staff -> only students granted via staff_student_access (§7.4); driver -> only
 // students on their own not-ended assignments (driverScope); company_admin and school_admin
 // get the full tenant scope. Same pattern as Trips' readScope.
@@ -104,13 +122,14 @@ router.post('/', companyAdmin, async (req, res, next) => {
     if (!notes) throw new HttpError(400, 'notes is required');
     assertValidZip(zip_code);
     const normalizedState = assertValidState(state);
+    const studentId = normalizeStudentId(req.body?.student_id);
     const row = await req.db.insert('students', {
       full_name, grade, parent_name, parent_phone, school_id, age,
       street_address, city, state: normalizedState, zip_code,
-      notes,
+      notes, ...(studentId ? { student_id: studentId } : {}),
     });
     res.status(201).json(row);
-  } catch (e) { next(mapFk(e)); }
+  } catch (e) { next(mapStudentError(e)); }
 });
 
 router.get('/', async (req, res, next) => {
@@ -142,11 +161,12 @@ router.patch('/:id', companyAdmin, async (req, res, next) => {
     }
     if (req.body?.zip_code !== undefined && req.body.zip_code !== null) assertValidZip(req.body.zip_code);
     if (req.body?.state !== undefined && req.body.state !== null) patch.state = assertValidState(req.body.state);
+    if (req.body?.student_id !== undefined) patch.student_id = normalizeStudentId(req.body.student_id);
     if (!Object.keys(patch).length) throw new HttpError(400, 'nothing to update');
     const row = await req.db.update('students', req.params.id, patch);
     if (!row) throw new HttpError(404, 'student not found');
     res.json(row);
-  } catch (e) { next(e); }
+  } catch (e) { next(mapStudentError(e)); }
 });
 
 router.delete('/:id', companyAdmin, async (req, res, next) => {
