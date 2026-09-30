@@ -11,6 +11,7 @@ const { HttpError, mapMissingRefError } = require('../errors');
 const { assertValidZip, assertValidState } = require('../validate');
 const pool = require('../db/pool');
 const { listExtraAddresses, createExtraAddress, updateExtraAddress, deleteExtraAddress } = require('../services/stops');
+const { isCompanySchool } = require('../services/schools');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent', 'monitor'));
@@ -102,6 +103,14 @@ router.post('/', companyAdmin, async (req, res, next) => {
       throw new HttpError(400, 'street_address, city, state and zip_code are required');
     }
     if (!notes) throw new HttpError(400, 'notes is required');
+    // Only a school this company is linked to (it has students there, or created it as a new
+    // school). Any other id, real or not, gets the same answer, so nothing is learned about it.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(school_id))) {
+      throw new HttpError(400, 'school_id is not valid');
+    }
+    if (!(await isCompanySchool(req.auth.tenantId, school_id))) {
+      throw new HttpError(403, "This school isn't linked to your company. Pick one of your schools, or add it as a new school first.");
+    }
     assertValidZip(zip_code);
     const normalizedState = assertValidState(state);
     const row = await req.db.insert('students', {

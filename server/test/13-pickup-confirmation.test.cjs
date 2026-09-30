@@ -49,6 +49,9 @@ async function main() {
     const parent = await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,phone,address,email_verified_at) VALUES('parent@co.com',$1,'Parent One','parent',$2,'555-0300','9 Home St, Boston, MA 02139',now()) RETURNING id", [hash, A.id]);
     const van = await ins("INSERT INTO vans(company_id,license_plate,brand,model,year) VALUES($1,'AAA-1','Ford','Transit',2022) RETURNING id", [A.id]);
 
+    // The company must be linked to a school before adding students there (fix-student-school-scope):
+    // here the company admin created the school, one of the two ways to be linked.
+    await pool.query("UPDATE schools SET created_by_user_id = (SELECT id FROM users WHERE email = 'admin@co.com') WHERE id = $1", [S.id]);
     const app = createApp();
     const server = app.listen(5300);
     try {

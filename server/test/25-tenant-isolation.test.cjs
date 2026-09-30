@@ -7,8 +7,9 @@
 //
 // The "KNOWN GAP" section at the end does NOT pass a check that isolation holds: it proves gaps
 // found by the audit still exist (asserting today's behavior), so the suite stays green while they
-// are open. When a gap is fixed, that section's assertions flip and must be updated (gap 2, the
-// placeholder claim takeover, is fixed on this branch and now asserts the attack fails).
+// are open. When a gap is fixed, that section's assertions flip and must be updated (gap 1, a
+// student at any school id, and gap 2, the placeholder claim takeover, are fixed and now assert
+// the attack fails).
 const PG_PORT = 5475;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
 process.env.JWT_SECRET = 'test-secret-25';
@@ -233,17 +234,17 @@ async function main() {
       after === before ? ok('every B / S2 row is unchanged after all attempts') : bad('B / S2 data changed during the attempts');
 
       console.log('\n--- KNOWN GAPS (asserting current behavior; see docs/tenant-isolation-audit.md) ---');
-      // Gap 1: a company can attach a student to any school id it sends, with no existing relationship.
+      // Gap 1 — FIXED (branch fix-student-school-scope): a company can only attach a student to a
+      // school it is linked to, so it can't plant one at school S2 or read S2's details.
       const tA = tok.company_admin;
       const planted = await api('POST', '/students', tA, {
         full_name: 'Planted Kid', grade: '1', age: 6, parent_name: 'P', parent_phone: '1', school_id: S2,
         street_address: '1 X', city: 'C', state: 'IL', zip_code: '60601', notes: 'None',
       });
-      eq('KNOWN GAP 1: company A creates a student at unrelated school S2 (currently 201)', planted.status, 201);
+      eq('FIXED 1: company A creating a student at unrelated school S2 -> 403', planted.status, 403);
       const tS2 = await login('sadmin@s2.test');
-      eq("KNOWN GAP 1: S2's admin now sees company A's student in their list", (await api('GET', '/students', tS2)).body.some((s) => s.id === planted.body?.id), true);
-      const s2Detail = await api('GET', `/schools/${S2}`, tA);
-      eq("KNOWN GAP 1: and company A can now read S2's address and phone (currently 200)", `${s2Detail.status} ${s2Detail.body?.phone}`, '200 555-0202');
+      eq("FIXED 1: S2's admin sees no student from company A", (await api('GET', '/students', tS2)).body.some((s) => s.full_name === 'Planted Kid'), false);
+      eq("FIXED 1: company A still can't read S2's details", (await api('GET', `/schools/${S2}`, tA)).status, 404);
 
       // Gap 2 — FIXED (branch fix-placeholder-claim): self-claiming a placeholder is refused, a claim
       // is only a request, and nothing is readable until the SafeTurns owner approves it.

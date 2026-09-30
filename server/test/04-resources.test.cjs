@@ -39,6 +39,9 @@ async function main() {
     await ins("INSERT INTO users(email,password_hash,full_name,role,company_id,email_verified_at) VALUES('b@co.com',$1,'Admin B','company_admin',$2,now()) RETURNING id", [hash, B.id]);
     await ins("INSERT INTO users(email,password_hash,full_name,role,school_id,email_verified_at) VALUES('sa@sch.com',$1,'School Admin','school_admin',$2,now()) RETURNING id", [hash, S.id]);
 
+    // The company must be linked to a school before adding students there (fix-student-school-scope):
+    // here the company admin created the school, one of the two ways to be linked.
+    await pool.query("UPDATE schools SET created_by_user_id = (SELECT id FROM users WHERE email = 'a@co.com') WHERE id = $1", [S.id]);
     const app = createApp();
     const server = app.listen(4400);
     try {
@@ -110,7 +113,7 @@ async function main() {
         (await api('POST', '/students', adminA, { full_name: 'x', school_id: S.id, ...studentFields, parent_phone: undefined })).status,
         400
       );
-      eq('student with bogus school_id -> 400 (FK)', (await api('POST', '/students', adminA, { full_name: 'x', school_id: '00000000-0000-0000-0000-000000000000', ...studentFields })).status, 400);
+      eq('student at a school id the company is not linked to (here: none) -> 403', (await api('POST', '/students', adminA, { full_name: 'x', school_id: '00000000-0000-0000-0000-000000000000', ...studentFields })).status, 403);
       eq(
         'student create missing notes -> 400 (§7 item 6: no more optional fields)',
         (await api('POST', '/students', adminA, { full_name: 'x', school_id: S.id, ...studentFields, notes: undefined })).status,
@@ -163,7 +166,7 @@ async function main() {
 
       // A school where ONLY Company B has a student, plus a placeholder Company B created:
       // Company A must see neither.
-      const onlyB = await ins("INSERT INTO schools(name,claim_status,claimed_at) VALUES('Only-B School','claimed',now()) RETURNING id");
+      const onlyB = await ins("INSERT INTO schools(name,claim_status,claimed_at,created_by_user_id) VALUES('Only-B School','claimed',now(),(SELECT id FROM users WHERE email='b@co.com')) RETURNING id");
       eq('company B adds a student at Only-B School -> 201', (await api('POST', '/students', adminB, { full_name: 'Kid B', school_id: onlyB.id, ...studentFields })).status, 201);
       const phB = await api('POST', '/placeholders/school', adminB, { name: 'B Placeholder Academy', address: '2 Rd' });
       const schoolsA2 = (await api('GET', '/schools', adminA)).body;
