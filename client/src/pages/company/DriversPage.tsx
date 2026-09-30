@@ -25,7 +25,6 @@ const CSV_COLUMNS: CsvColumn<PublicUser>[] = [
   { key: 'phone', header: 'Phone' },
   { key: 'address', header: 'Address' },
   { key: 'license_number', header: 'License Number' },
-  { key: 'is_active', header: 'Active', value: (d) => (d.is_active ? 'true' : 'false') },
 ]
 
 const TEMPLATE = '2fr 1.2fr 1fr 1.1fr 1fr'

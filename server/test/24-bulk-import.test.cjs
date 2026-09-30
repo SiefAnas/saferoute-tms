@@ -52,6 +52,10 @@ async function main() {
     await user('sadmin@s.test', 'school_admin', null, S.id);
     await user('busy@a.test', 'driver', A.id);
     await user('other@b.test', 'driver', B.id);
+    // Accounts as they look right after migration 025: no last_login_at, no temp expiry date.
+    await user('legacy@a.test', 'driver', A.id);
+    await user('legacytemp@a.test', 'driver', A.id);
+    await pool.query("UPDATE users SET must_change_password = true WHERE email = 'legacytemp@a.test'");
     const busy = (await pool.query("SELECT id FROM users WHERE email='busy@a.test'")).rows[0];
     const stu = (await pool.query("SELECT id FROM students WHERE full_name='Seed Kid'")).rows[0];
     const van = await ins("INSERT INTO vans(company_id,license_plate,brand,model,year,number,color) VALUES($1,'OLD-1','Ford','Transit',2020,'01','White') RETURNING id", [A.id]);
@@ -124,7 +128,12 @@ async function main() {
       eq('other routes are blocked until it is changed', (await api('GET', '/schedule/today', first.body.token)).status, 403);
       const users = (await api('GET', '/users', tA)).body;
       eq('account status after first login: created (password not yet changed)', users.find((u) => u.email === 'new@a.test').account_status, 'created');
+      const legacy = users.find((u) => u.email === 'legacy@a.test');
+      eq('pre-migration account that set its password (never logged in since): active', legacy.account_status, 'active');
+      eq('pre-migration account on a temporary password with no expiry date: created', users.find((u) => u.email === 'legacytemp@a.test').account_status, 'created');
+      eq('and that old temporary password still logs in (it has no expiry)', (await login('legacytemp@a.test')).status, 200);
       await pool.query("UPDATE users SET temp_password_expires_at = now() - interval '1 minute' WHERE email='new@a.test'");
+      eq('an expired, unused temporary password: never_logged_in', (await api('GET', '/users', tA)).body.find((u) => u.email === 'new@a.test').account_status, 'never_logged_in');
       const exp = await login('new@a.test', cred.temporary_password);
       eq('expired temp password -> 401', exp.status, 401);
       eq('with a clear code', exp.body.code, 'TEMP_PASSWORD_EXPIRED');

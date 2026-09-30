@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { downloadCsv, parseCsvFile, type CsvColumn } from '../lib/csv'
+import { downloadCsv, type CsvColumn } from '../lib/csv'
+import { parseSpreadsheetRecords, SPREADSHEET_ACCEPT } from '../lib/sheet'
 import { Button } from './Button'
 
 export interface CsvRowResult {
@@ -43,7 +44,7 @@ export function CsvImportExport<T>({
     setImporting(true)
     setResults(null)
     try {
-      const parsedRows = await parseCsvFile(file)
+      const parsedRows = await parseSpreadsheetRecords(file)
       const rowResults: CsvRowResult[] = []
       for (let i = 0; i < parsedRows.length; i++) {
         try {
@@ -64,15 +65,15 @@ export function CsvImportExport<T>({
   const succeeded = results?.filter((r) => r.ok).length ?? 0
   const failed = results?.filter((r) => !r.ok).length ?? 0
 
-  // Refresh (3b top bar): one ghost "CSV" button; export/import live in its menu, and the
+  // Refresh (3b top bar): one ghost "Import" button; export/import live in its menu, and the
   // import results float under it instead of pushing the top bar around.
   return (
     <div className="relative">
       <Button variant="ghost" disabled={importing} onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen}>
         <span className="material-symbols-outlined !text-[18px]">upload_file</span>
-        {importing ? 'Importing…' : 'CSV'}
+        {importing ? 'Importing…' : 'Import'}
       </Button>
-      <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
+      <input ref={fileInputRef} type="file" accept={SPREADSHEET_ACCEPT} className="hidden" onChange={handleFileChange} />
 
       {menuOpen && (
         <>
@@ -95,10 +96,13 @@ export function CsvImportExport<T>({
                 setMenuOpen(false)
                 fileInputRef.current?.click()
               }}
-              className="flex h-9 cursor-pointer items-center gap-2 rounded-row px-2.5 text-left text-[13px] text-ink hover:bg-surface-2"
+              className="flex cursor-pointer items-center gap-2 rounded-row px-2.5 py-1.5 text-left text-[13px] text-ink hover:bg-surface-2"
             >
               <span className="material-symbols-outlined !text-[18px] text-muted">upload</span>
-              Import from CSV
+              <span className="flex flex-col">
+                Import
+                <span className="text-[11px] text-muted">CSV or Excel file</span>
+              </span>
             </button>
           </div>
         </>

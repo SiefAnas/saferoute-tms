@@ -15,7 +15,7 @@ const { hashPassword } = require('../auth/password');
 const { HttpError } = require('../errors');
 const { assertValidEmail, assertMaxLength } = require('../validate');
 const { assignmentNotEndedSql } = require('../db/scoped');
-const { TEMP_PASSWORD_DAYS, generateTempPassword, setPassword, logPasswordReset } = require('./passwords');
+const { TEMP_PASSWORD_DAYS, tempPasswordExpired, generateTempPassword, setPassword, logPasswordReset } = require('./passwords');
 
 // Which roles a given admin role may create (same tenant side).
 const CREATABLE = {
@@ -160,13 +160,13 @@ async function assertNoActiveAssignments(req, user) {
   }
 }
 
-// Created: temporary password issued, not used yet. Never logged in: no sign-in on record and
-// the temporary password has expired (or the account predates tracking). Active: has signed in.
+// Active: has set their own password. Created: still on a temporary password that works. Never
+// logged in: the temporary password expired unused. Derived from the same fields login enforces,
+// not last_login_at, so accounts from before that column existed read correctly (an old
+// temporary password has no expiry date and never expires).
 function accountStatus(u) {
-  if (u.last_login_at && !u.must_change_password) return 'active';
-  if (!u.last_login_at && u.must_change_password && !(u.temp_password_expires_at && new Date(u.temp_password_expires_at) < new Date())) return 'created';
-  if (u.last_login_at) return 'created';
-  return 'never_logged_in';
+  if (!u.must_change_password) return 'active';
+  return tempPasswordExpired(u) ? 'never_logged_in' : 'created';
 }
 
 // Creator-only rule shared by edit and password reset (see updateUser above for the

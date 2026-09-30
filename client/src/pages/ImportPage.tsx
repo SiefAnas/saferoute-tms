@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Papa from 'papaparse'
-import * as XLSX from 'xlsx'
 import { api, ApiError } from '../lib/api'
 import { downloadCsv } from '../lib/csv'
+import { parseSpreadsheet, SPREADSHEET_ACCEPT } from '../lib/sheet'
 import { Button } from '../components/Button'
 import { Card, CardHeader, CardTitle } from '../components/Card'
 import { Field, Select } from '../components/Input'
@@ -24,25 +24,10 @@ interface Sheet {
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
 
-// Every cell as text (raw:false), dates as dates, first sheet only, trimmed headers, empty rows skipped.
+// Same reader as the per-page imports (lib/sheet.ts), plus this page's empty-file errors.
 async function readSheet(file: File): Promise<Sheet> {
-  const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true })
-  const ws = wb.Sheets[wb.SheetNames[0]]
-  if (!ws) throw new Error('This file has no sheets.')
-  // Blank rows are kept here (and skipped below) so each row's spreadsheet line number is known.
-  const all = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: '', blankrows: true })
-  const firstLine = XLSX.utils.decode_range(ws['!ref'] ?? 'A1').s.r + 1
-  const [head, ...body] = all
-  const headers = (head ?? []).map((h) => String(h ?? '').trim())
+  const { headers, rows, rowNumbers } = await parseSpreadsheet(file)
   if (!headers.some(Boolean)) throw new Error('This file has no header row. The first row must name the columns, like "Full name" and "Email".')
-  const rows: string[][] = []
-  const rowNumbers: number[] = []
-  body.forEach((r, i) => {
-    const cells = headers.map((_, c) => String(r[c] ?? ''))
-    if (!cells.some((c) => c.trim() !== '')) return
-    rows.push(cells)
-    rowNumbers.push(firstLine + 1 + i)
-  })
   if (rows.length === 0) throw new Error('This file has a header row but no data rows.')
   return { fileName: file.name, headers, rows, rowNumbers }
 }
@@ -235,7 +220,7 @@ export function ImportPage() {
             <input
               key={fileKey}
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept={SPREADSHEET_ACCEPT}
               onChange={onFile}
               className="text-[13px] text-ink file:mr-3 file:h-[38px] file:cursor-pointer file:rounded-btn file:border file:border-outline file:bg-outline-bg file:px-3.5 file:text-[13px] file:font-semibold file:text-ink"
             />
