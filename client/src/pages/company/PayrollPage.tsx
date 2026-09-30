@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { formatMoney, formatDuration, formatMonthDay, formatCalendarMonthDay, formatRate } from '../../lib/format'
+import { parseDollarAmount } from '../../lib/money'
 import { isOnOrAfterCycleStart } from '../../lib/payrollCycle'
 import { currentAssignmentBy, vanLabel } from '../../lib/fleet'
 import { Button } from '../../components/Button'
@@ -120,11 +121,11 @@ export function PayrollPage() {
     if (!driver) return { ok: false, message: `No driver or monitor found with email ${email}` }
     const rateTypeInput = row['Rate Type']?.trim().toLowerCase()
     if (rateTypeInput !== 'hourly' && rateTypeInput !== 'daily') return { ok: false, message: 'Rate Type must be "hourly" or "daily"' }
-    const rateDollarsInput = row['Rate (Dollars)']?.trim()
-    const dollars = Number(rateDollarsInput)
-    if (!rateDollarsInput || Number.isNaN(dollars) || dollars < 0) return { ok: false, message: 'Rate (Dollars) must be a non-negative number' }
+    // Spreadsheet cells can arrive as currency text ("$12.50") or with a decimal comma ("12,50").
+    const rate = parseDollarAmount(row['Rate (Dollars)'])
+    if (!rate.ok) return { ok: false, message: `Rate (Dollars): ${rate.reason}` }
     try {
-      await api.put(`/payroll/rules/${driver.id}`, { rate_type: rateTypeInput, rate_cents: Math.round(dollars * 100) })
+      await api.put(`/payroll/rules/${driver.id}`, { rate_type: rateTypeInput, rate_cents: rate.cents })
       return { ok: true, message: 'Rate set' }
     } catch (err) {
       return { ok: false, message: err instanceof ApiError ? err.message : 'Import failed' }
