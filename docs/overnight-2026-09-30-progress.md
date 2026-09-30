@@ -52,19 +52,35 @@ Live log for the 10-task overnight run. The **latest entry is at the bottom**; i
 ### Task 4 — web-mobile parity report — DONE (written early, while suites ran)
 - `docs/web-mobile-parity.md` on overnight-reports.
 
-### Task 5 — mobile-account-lifecycle — next
-- Next step: `git switch -c mobile-account-lifecycle origin/main`; changes in mobile/src/api/client.ts,
-  api/index.ts, auth/auth.tsx, app/_layout.tsx, app/(company)/people.tsx, api/types.ts + jest tests.
-- Findings so far: forced change on login/app start exists; reset request flow matches web;
-  import is absent from mobile. Gaps: mid-session 403 PASSWORD_CHANGE_REQUIRED not handled,
-  mid-session TEMP_PASSWORD_EXPIRED / deactivation show a generic message, no foreground re-check,
-  People sheet lacks account status + bounce warning.
+### Task 5 — mobile-account-lifecycle — DONE
+- Branch `mobile-account-lifecycle`, commit `41ea905`, pushed. Server suite 24/24; mobile jest 94/94;
+  mobile tsc + eslint clean on changed files. NOT run on a device/emulator (none here; the app has
+  no web target) — verified by unit tests and typecheck only.
+- 1 forced change: 403 PASSWORD_CHANGE_REQUIRED mid-session flags the session; root layout keeps a
+  signed-in user on a temporary password on /set-password (login + app start already did).
+- 2/5 messages: login screen says why a session ended (TEMP_PASSWORD_EXPIRED, ACCOUNT_INACTIVE,
+  PASSWORD_CHANGED). Server adds codes ACCOUNT_INACTIVE / PASSWORD_CHANGED to those 401s (messages
+  unchanged; asserted in suites 20 and 24). Session re-checked on app foreground.
+- 3 reset request flow already matched web (same copy, single-use 60-min link); no change.
+- 4 People details sheet: account status line + bounced-email warning (web EditAccountModal wording).
+- 6 import absent from mobile; `mobile/tests/accountLifecycle.test.ts` fails if it ever appears.
 
 ### Task 6 — live tracking design — DONE (written early)
 - `docs/live-tracking-design.md` (real Neon/Render/Google/Mapbox/MapTiler prices, 10 decisions).
 
 ### Task 7 — failure modes — DONE (written early)
 - `docs/failure-modes.md` (8 situations, worst first; top fix: idempotent writes + one trip per session/student/type).
+
+### Task 8 — resend-bounce-webhook — in progress (code done, suite running)
+- Branch `resend-bounce-webhook`, commit `c5fc2ab` (push after the suite passes).
+- ENV VAR: **`RESEND_WEBHOOK_SECRET`** = the `whsec_...` signing secret shown on the Resend webhook's
+  page (webhook subscribed to `email.bounced`, URL `https://<api>/webhooks/email-bounce`).
+  `BOUNCE_WEBHOOK_SECRET` and the `x-webhook-secret` header are gone. Nothing configured on Resend.
+- Verification: svix-id / svix-timestamp / svix-signature, HMAC-SHA256 of `id.timestamp.rawBody`
+  with the base64 part of the secret, timing-safe, 5-minute window, multiple v1 signatures allowed.
+  Router mounted before express.json(). 404 unset, 401 bad/missing/stale, 400 non-JSON body.
+- Test `28-resend-webhook.test.cjs` (18 checks, PG 5478, app 5985); suite 24 bounce test now signs.
+- Next step: when the suite passes, push; then Task 9 (parser drafted in scratchpad task9/).
 
 ## Questions for Anas
 0. (Task 2) Student IDs are unique per school across ALL companies (as specified). So a company
