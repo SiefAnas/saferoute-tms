@@ -49,6 +49,8 @@ function createApp() {
   // (web service) across origins, so ALLOWED_ORIGINS (comma-separated, set in Render env)
   // opts in specific origins rather than reflecting every Origin header.
   app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true }));
+  // Before the JSON parser: the Resend webhook verifies its signature over the raw body bytes.
+  app.use('/webhooks', webhookRoutes);
   app.use(express.json());
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -72,7 +74,6 @@ function createApp() {
   app.use('/companies', companyRoutes);
   app.use('/monitors', monitorRoutes.admin);
   app.use('/monitor', monitorRoutes.self);
-  app.use('/webhooks', webhookRoutes);
   app.use('/imports', importRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'not found' }));

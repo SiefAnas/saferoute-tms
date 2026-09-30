@@ -9,7 +9,7 @@ process.env.RATE_LIMIT_FORCE = '1';
 process.env.RATE_LIMIT_LOGIN_MAX = '1000';
 process.env.RATE_LIMIT_RESET_MAX = '1000';
 process.env.RATE_LIMIT_RESET_EMAIL_MAX = '2';
-process.env.BOUNCE_WEBHOOK_SECRET = 'hook-secret';
+process.env.RESEND_WEBHOOK_SECRET = `whsec_${Buffer.from('bounce-test-key-24').toString('base64')}`;
 
 const { createRecorder, startEmbeddedPostgres, runMigrateUp } = require('./lib/testkit.cjs');
 const createApp = require('../src/app.js');
@@ -207,9 +207,13 @@ async function main() {
       eq('monitor with an assignment cannot be deactivated', (await api('PATCH', `/users/${mo.id}`, tA, { is_active: false })).status, 409);
 
       console.log('\n--- email bounce ---');
-      eq('bounce webhook without the secret -> 404', (await api('POST', '/webhooks/email-bounce', null, { email: 'pia@a.test' })).status, 404);
-      const bounce = await api('POST', '/webhooks/email-bounce', null, { email: 'pia@a.test' }, { 'x-webhook-secret': 'hook-secret' });
-      eq('bounce webhook with the secret -> 2xx', bounce.status < 300, true);
+      const bounceBody = { type: 'email.bounced', data: { to: ['pia@a.test'] } };
+      eq('unsigned bounce webhook -> 401', (await api('POST', '/webhooks/email-bounce', null, bounceBody)).status, 401);
+      // Svix signature, as Resend sends it (see 28-resend-webhook.test.cjs).
+      const ts = String(Math.floor(Date.now() / 1000));
+      const sig = require('crypto').createHmac('sha256', Buffer.from('bounce-test-key-24')).update(`msg_24.${ts}.${JSON.stringify(bounceBody)}`).digest('base64');
+      const bounce = await api('POST', '/webhooks/email-bounce', null, bounceBody, { 'svix-id': 'msg_24', 'svix-timestamp': ts, 'svix-signature': `v1,${sig}` });
+      eq('signed bounce webhook -> 2xx', bounce.status < 300, true);
       const flagged = (await api('GET', '/users', tA)).body.find((u) => u.email === 'pia@a.test');
       eq('the account shows email_bounced', flagged.email_bounced, true);
       const mailer = require('../src/mail/mailer.js');
