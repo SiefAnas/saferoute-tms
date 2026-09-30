@@ -540,6 +540,14 @@ All scoped to the caller's own company or school; another tenant's ids return 40
 **Public**: `POST /signup/company|school` (`{ orgName, address, zip, state, fullName, email, password }`),
 `GET /signup/:kind/claimable`, `POST /auth/verify-email`, `POST /auth/resend-verification`.
 
+**Claiming a placeholder organization** (one another org added before it joined): self-claim is
+off. `POST /signup/:kind` with a `claimId` answers `403 {"code":"CLAIM_REQUIRES_APPROVAL"}`.
+Instead `POST /signup/:kind/claim-requests` `{ claimId, fullName, email, phone?, note? }` → `202
+{ status: "pending" }`: records the request, creates no account, changes nothing (`409` if the
+organization isn't claimable). The SafeTurns owner approves or rejects it
+(`server/scripts/claim-requests.js`); approval creates the admin account with a temporary password.
+`POST /auth/verify-email` only marks an email verified; it never finalizes a claim.
+
 ---
 
 ## 6. CORS and networking notes for mobile

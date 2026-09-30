@@ -82,7 +82,9 @@ function createApp() {
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     if (err && Number.isInteger(err.status)) {
-      return res.status(err.status).json({ error: err.message });
+      // A machine-readable code, when the thrower set one (e.g. CLAIM_REQUIRES_APPROVAL).
+      const code = typeof err.code === 'string' && /^[A-Z_]+$/.test(err.code) ? { code: err.code } : {};
+      return res.status(err.status).json({ error: err.message, ...code });
     }
     console.error(err);
     res.status(500).json({ error: 'internal server error' });
