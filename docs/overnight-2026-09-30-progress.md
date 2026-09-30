@@ -161,10 +161,8 @@ Run from `server/` on a machine whose `server/.env` DATABASE_URL points at the p
 Migration 028 must be applied first (it creates the table).
 
 ### STOPPED HERE (usage limit reached) — resume from this entry
-- Task 12: code committed on `fix-placeholder-claim` (`76338c6`), NOT pushed. A full suite run was
-  in progress (log: scratchpad `suite-task12.log`). Resume: in the main checkout (on branch
-  fix-placeholder-claim) run `cd server && npm test`; if all pass, `git push -u origin fix-placeholder-claim`.
-  Kill stray embedded postgres.exe (io_worker) processes first if a suite stalls.
+- Task 12: DONE. `fix-placeholder-claim` (`76338c6`) full suite 25/25, pushed.
+  Next step on resume: Task 13.
 - Task 13 (fix-student-school-scope), plan: `git switch -c fix-student-school-scope origin/main`;
   add `isCompanySchool(companyId, schoolId)` in services/schools.js sharing listCompanySchools' SQL;
   POST /students -> 403 "This school isn't linked to your company..." when not linked (400 for a
