@@ -203,6 +203,14 @@ token, or weak password. `429` rate limited.
   used or expired link, or account deactivated; `409` the address was registered by someone else
   in the meantime.
 
+### Usage and billing (company_admin, read only, branch `account-settings`)
+- `GET /companies/me/usage` → `{ students, drivers, monitors, vans, schools }` for the caller's
+  company. Drivers / monitors: active accounts only. Schools: the same list as `GET /schools`.
+- `GET /companies/me/billing` → `{ plan: "pilot", status: "free" | "closing", trial_ends_at, usage }`.
+  No payment data exists. Other roles → `403`.
+- `server/scripts/snapshot-usage.js [--dry-run]` stores the same counts once per company per day in
+  `usage_snapshots` (not scheduled yet).
+
 ### How accounts are created
 - Company admins and school admins sign up themselves (`POST /signup/company|school`).
 - **Drivers, monitors and parents are created by a company admin, school staff by a school admin**

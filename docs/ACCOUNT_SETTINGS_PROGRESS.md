@@ -22,8 +22,8 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 |---|---|---|---|
 | 1 | Migration 030 | done | `0cf5280` |
 | 2 | Own account API | done | `0e6ab8a` |
-| 3 | My account page | done | see log |
-| 4 | Usage + billing (read only) | todo | |
+| 3 | My account page | done | `c3f9aae` |
+| 4 | Usage + billing (read only) | done | see log |
 | 5 | Legal pages + acceptance | todo | |
 | 6 | Closure, request side only | todo | |
 | - | Final report | todo | |
@@ -58,3 +58,11 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
   Profile tab now points to My account instead of "contact your company". Checked live on the
   local DB as driver (phone shell): request -> pending state -> link from dev mail log ->
   "Email changed" -> signed out. Admin: sidebar link + page, no console errors. `tsc -b` clean.
+- **Task 4 done.** `server/src/services/usage.js` (one SQL for the counts, shared with the
+  script), `GET /companies/me/usage` + `/me/billing` in `routes/companies.js` (router is already
+  company_admin only). `server/scripts/snapshot-usage.js [--dry-run]`: claimed companies only,
+  `ON CONFLICT (company_id, captured_on) DO UPDATE`, so a re-run the same day refreshes the row.
+  Not scheduled. Client `pages/company/BillingPage.tsx` at `/company/billing`, Settings nav
+  "Billing". Suite `33-usage-billing` (ports 5491 / 5992): 24 passed. Script run on the local DB:
+  dry run (nothing written), then twice for real (3 rows, no duplicates). Page checked live.
+  Note: restart the hand-started API after adding routes (now started with `node --watch`).

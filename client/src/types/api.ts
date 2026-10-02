@@ -465,6 +465,23 @@ export interface Company {
   created_by_user_id: string | null
 }
 
+// GET /companies/me/usage (account-settings): what the company has in SafeTurns right now.
+export interface CompanyUsage {
+  students: number
+  drivers: number // active accounts only
+  monitors: number // active accounts only
+  vans: number
+  schools: number
+}
+
+// GET /companies/me/billing: read only, no payments. Every company is on the free pilot.
+export interface CompanyBilling {
+  plan: 'pilot'
+  status: 'free' | 'closing'
+  trial_ends_at: string | null
+  usage: CompanyUsage
+}
+
 export type ScheduleChangeType = 'left_early' | 'staying_later'
 
 // POST /schedule-changes/students/:id, GET /schedule-changes — school_staff/school_admin's

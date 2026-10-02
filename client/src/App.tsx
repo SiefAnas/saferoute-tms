@@ -28,6 +28,7 @@ const AssignmentsPage = lazy(() => import('./pages/company/AssignmentsPage').the
 const PayrollPage = lazy(() => import('./pages/company/PayrollPage').then((m) => ({ default: m.PayrollPage })))
 const CompanyStudentsPage = lazy(() => import('./pages/company/StudentsPage').then((m) => ({ default: m.CompanyStudentsPage })))
 const CompanyProfilePage = lazy(() => import('./pages/company/CompanyProfilePage').then((m) => ({ default: m.CompanyProfilePage })))
+const BillingPage = lazy(() => import('./pages/company/BillingPage').then((m) => ({ default: m.BillingPage })))
 const StudentsPage = lazy(() => import('./pages/school-admin/StudentsPage').then((m) => ({ default: m.StudentsPage })))
 const StaffAccessPage = lazy(() => import('./pages/school-admin/StaffAccessPage').then((m) => ({ default: m.StaffAccessPage })))
 const SchoolProfilePage = lazy(() => import('./pages/school-admin/SchoolProfilePage').then((m) => ({ default: m.SchoolProfilePage })))
@@ -64,6 +65,7 @@ const COMPANY_NAV: NavGroup[] = [
     items: [
       { to: '/company/import', label: 'Import', icon: 'upload_file' },
       { to: '/company/profile', label: 'Company profile', icon: 'apartment' },
+      { to: '/company/billing', label: 'Billing', icon: 'receipt_long' },
     ],
   },
 ]
@@ -161,6 +163,7 @@ function App() {
             <Route path="/company/parents" element={<ParentsPage />} />
             <Route path="/company/profile" element={<CompanyProfilePage />} />
             <Route path="/company/import" element={<ImportPage />} />
+            <Route path="/company/billing" element={<BillingPage />} />
           </Route>
         </Route>
 

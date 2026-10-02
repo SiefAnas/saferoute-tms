@@ -49,3 +49,18 @@ Branch `account-settings`.
 13. **Parent Profile tab** said "to change your details, contact your company". That was no
    longer true, so it now links to My account. The tab itself is unchanged otherwise.
 
+## Usage + billing (task 4)
+
+14. **What counts.** Drivers and monitors: active accounts only (a deactivated one can't sign in).
+   Students and vans: every row (neither has a soft delete). Schools: the same rule as
+   `GET /schools` for a company (a school one of its students attends, or a placeholder school it
+   created). Parents are not counted (not in the list you gave). Say if billing should count
+   differently, e.g. only students with an active assignment.
+15. **Snapshot covers claimed companies only.** Unclaimed placeholder companies have no users and
+   nobody to bill. Closing companies are still snapshotted.
+16. **Re-running the same day overwrites that day's row** with the current numbers (idempotent
+   in the "one row per company per day" sense). If you'd rather keep the first capture of the day,
+   change `DO UPDATE` to `DO NOTHING`.
+17. **"Free through the end of the year"** is a fixed label in the client (`PLAN_LABEL`), not a date
+   from the DB. `trial_ends_at` stays null; set it if the end date should be real data.
+

@@ -65,4 +65,4 @@ async function getDriverSchool(companyId, driverId, schoolId) {
   return rows[0] ?? null;
 }
 
-module.exports = { listCompanySchools, isCompanySchool, getCompanySchool, getDriverSchool };
+module.exports = { LINKED_TO_COMPANY_SQL, listCompanySchools, isCompanySchool, getCompanySchool, getDriverSchool };
