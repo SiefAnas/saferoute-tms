@@ -7,6 +7,7 @@ const { verifyEmail, resendVerification } = require('../services/signup');
 const { loginLimiter, verifyLimiter, passwordResetLimiter, passwordResetEmailLimiter } = require('../middleware/rateLimit');
 const { tempPasswordExpired } = require('../services/passwords');
 const { changePassword, requestPasswordReset, resetPassword, loginPayload } = require('../services/passwords');
+const { confirmEmailChange } = require('../services/account');
 
 const router = express.Router();
 
@@ -63,6 +64,16 @@ router.post('/forgot-password', passwordResetLimiter, passwordResetEmailLimiter,
 router.post('/reset-password', passwordResetLimiter, async (req, res, next) => {
   try {
     res.json(await resetPassword(req.body || {}));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The link from the "confirm your new email" message (services/account.js). Public: the person
+// may open it on a device where they aren't signed in. Signs out every session of that user.
+router.post('/confirm-email-change', verifyLimiter, async (req, res, next) => {
+  try {
+    res.json(await confirmEmailChange(req.body || {}));
   } catch (err) {
     next(err);
   }

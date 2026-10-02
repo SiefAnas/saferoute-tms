@@ -20,8 +20,8 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 
 | # | Task | Status | Commit |
 |---|---|---|---|
-| 1 | Migration 030 | done | see log |
-| 2 | Own account API | todo | |
+| 1 | Migration 030 | done | `0cf5280` |
+| 2 | Own account API | done | see log |
 | 3 | My account page | todo | |
 | 4 | Usage + billing (read only) | todo | |
 | 5 | Legal pages + acceptance | todo | |
@@ -36,3 +36,7 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 - Local DB note: the helper is `devdb.cjs` in the session scratchpad (embedded Postgres,
   persistent data dir). If that's gone, any embedded Postgres on 5499 with db `saferoute_dev`,
   user/password `saferoute` works.
+- **Task 2 done.** `server/src/services/account.js`; routes in `routes/users.js` (`/me…`, declared
+  before `/:id`) and `routes/auth.js` (`/confirm-email-change`). `passwordChangedNow` now exported
+  from `services/passwords.js`. New suite `test/32-own-account.test.cjs` (ports 5490 / 5991):
+  70 passed. Suites 02, 09, 20 still pass. API_CONTRACT.md "Own account" section added.

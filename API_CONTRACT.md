@@ -70,7 +70,7 @@ itself (`GET /students/:id`) is then `404`.
 | Production base URL | `https://saferoute-tms-api.onrender.com` (no `/api` prefix; the web client adds `/api` only for its local Vite proxy) |
 | Local dev | `http://localhost:4000` |
 | Format | JSON in and out. Send `Content-Type: application/json` on requests with a body. |
-| Auth | `Authorization: Bearer <token>` on every endpoint except `/health`, `/auth/login`, `/auth/verify-email`, `/auth/resend-verification`, `/signup/*` |
+| Auth | `Authorization: Bearer <token>` on every endpoint except `/health`, `/auth/login`, `/auth/verify-email`, `/auth/resend-verification`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/confirm-email-change`, `/signup/*` |
 | Health check | `GET /health` → `200 {"status":"ok"}` |
 
 ### Errors
@@ -182,6 +182,26 @@ flagged `email_bounced`. Every completed reset (self service or admin) is record
 Body `{ "token": "…", "newPassword": "…" }` (the website's reset page sends this). `200
 {"ok": true}`; every existing session of that user is signed out. `400` wrong, used or expired
 token, or weak password. `429` rate limited.
+
+### Own account (every role, branch `account-settings`)
+- `GET /users/me` → the caller's user object (same shape as admin `GET /users/:id`) plus
+  `pending_email` and `pending_email_sent_at` (both `null` unless an email change is waiting).
+- `PATCH /users/me` body: any of `full_name`, `phone`, `address` (text; blank or `null` clears
+  `phone` / `address`). Anything else in the body (role, is_active, email, password, company_id…)
+  → `400` and nothing is saved. `full_name` can't be blank. Parents can't clear phone or address.
+  Same length limits as the admin edit. Returns the same shape as `GET /users/me`.
+- `POST /users/me/email-change` body `{ "newEmail", "currentPassword" }` → `200` own account with
+  `pending_email` set. The email doesn't change yet: a link `<website>/confirm-email-change?token=…`
+  goes to the **new** address (24 hours, only the newest link works). `400` wrong password,
+  invalid email, or same as the current one; `409 "email already registered"` if any account
+  uses it. Rate limited with the verify endpoints (`429`).
+- `POST /users/me/email-change/resend` → a new link to the same pending address (`409` when
+  nothing is pending or the address was taken meanwhile). `DELETE /users/me/email-change` cancels.
+- `POST /auth/confirm-email-change` (public) body `{ "token" }` → `200 {"ok": true, "email": "…"}`.
+  The new email is the login from now on, and **every session of that user is signed out**
+  (old tokens get `401 PASSWORD_CHANGED`, the same code a password change uses). `400` wrong,
+  used or expired link, or account deactivated; `409` the address was registered by someone else
+  in the meantime.
 
 ### How accounts are created
 - Company admins and school admins sign up themselves (`POST /signup/company|school`).
