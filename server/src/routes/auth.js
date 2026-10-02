@@ -8,6 +8,7 @@ const { loginLimiter, verifyLimiter, passwordResetLimiter, passwordResetEmailLim
 const { tempPasswordExpired } = require('../services/passwords');
 const { changePassword, requestPasswordReset, resetPassword, loginPayload } = require('../services/passwords');
 const { confirmEmailChange } = require('../services/account');
+const { closingError } = require('../services/closure');
 
 const router = express.Router();
 
@@ -28,6 +29,12 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     }
     if (tempPasswordExpired(user)) {
       return res.status(401).json({ error: 'This temporary password has expired. Ask your admin to reset it.', code: 'TEMP_PASSWORD_EXPIRED' });
+    }
+    // Closing company (services/closure.js): refused after the password check, so the message
+    // (with the undo instructions) only reaches someone who knows the password.
+    if (user.company_id) {
+      const company = (await pool.query('SELECT billing_status, closure_purge_at FROM companies WHERE id = $1', [user.company_id])).rows[0];
+      if (company?.billing_status === 'closing') throw closingError(company.closure_purge_at, 403);
     }
     await pool.query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
 

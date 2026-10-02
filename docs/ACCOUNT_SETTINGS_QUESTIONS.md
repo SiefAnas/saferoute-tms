@@ -87,3 +87,68 @@ Branch `account-settings`.
 23. **IP behind Render.** Recorded as `req.ip`, which uses the app's existing `trust proxy 3`
    setting (verified earlier in BACKLOG #9). Locally it's `::1`.
 
+## Closure, request side (task 6)
+
+24. **`/company/account` is a new page** (Settings > "Company account"), holding only the danger
+   zone. No such route existed; the company's profile is `/company/profile`, which you asked to
+   keep as it is. If you meant the danger zone to sit on the profile page, it's a move of one card.
+25. **"Everyone is signed out now" is real, also after an undo.** The request bumps
+   `password_changed_at` for every user of the company, so tokens issued before it never work
+   again, even if the closure is undone. People sign in again after an undo. (Without this, a
+   12-hour token issued before the closure would start working again after an undo.)
+26. **Refusal codes.** Login: `403 ACCOUNT_CLOSING` (only after a correct password, so the message
+   doesn't reveal to strangers that a company is closing). Any other request: `401 ACCOUNT_CLOSING`
+   (the web and mobile clients already drop to login on 401). Message names the purge date and
+   says the admin who closed it can use the undo link.
+27. **Only the requesting admin gets the undo email.** Other company admins aren't told, and they
+   can't undo (they can't sign in). If that email is lost, undo is a manual SQL update today.
+   Should all company admins be emailed? Should SafeTurns support have an undo script?
+28. **The undo token is in the URL query** (`DELETE /companies/me/closure?token=…`), as the task
+   specified. Query strings end up in proxy / access logs (Render, Cloudflare). The token is
+   single use and only useful for 30 days, but a POST body would be safer. Your call.
+29. **Undo restores `billing_status` to `free`** (see question 2).
+30. **What keeps running for a closing company:** the trip auto-complete sweep and its notification
+   emails (for trips left open), and nothing tells schools or parents that the company is
+   closing. Schools still see the company's students (their own school's students). Should
+   schools / parents be notified, and should the sweep skip closing companies?
+31. **School closure** isn't covered (the task was company only).
+
+## What the purge would have to do (NOT built, for the retention design)
+
+A job (cron, like the planned snapshot schedule) that, for each company with
+`billing_status = 'closing' AND closure_purge_at <= now()`:
+
+1. **Re-checks under a row lock** (`SELECT … FOR UPDATE`) that the company is still closing and
+   past its date, so an undo racing the job wins. One transaction per company; a `--dry-run`
+   that prints the row counts it would remove; logs counts only, never names or emails.
+2. **Deletes or anonymises, in foreign-key order** (child tables first), everything scoped to the
+   company: `trips`, `sessions` (driver shifts + GPS), `pickup_skips`, `pickup_no_shows`,
+   `schedule_changes`, `assignment_schedule_overrides`, `assignments`, `monitor_assignments`,
+   `parent_students`, `staff_student_access` rows for its students, `student_contacts`,
+   `student_extra_addresses`, `students`, `pay_adjustments`, `pay_rules`, `vans`,
+   `import_mappings`, `password_reset_tokens`, `password_reset_log`, `email_verification_tokens`,
+   `usage_snapshots`, `legal_acceptances`, `users`, and finally the `companies` row (or a tombstone).
+   The FKs are mixed: some `company_id` / student references are `ON DELETE CASCADE`, others
+   aren't (e.g. `legal_acceptances.user_id`). A bare `DELETE FROM companies` would silently cascade
+   into some tables and be blocked by others, so the job must delete table by table, on purpose.
+
+Decisions needed first (the retention rules):
+
+- **Shared records with schools.** A student belongs to the company AND a school. Trips carry
+  both, `schedule_changes` and `staff_student_access` are written by the school. Deleting the
+  company's students removes them from the school's view and history too. Does the school keep
+  anything (e.g. trip confirmations), anonymised?
+- **Placeholder schools the company created** (`schools.created_by_user_id`): delete if no other
+  company has students there and nobody claimed it; keep (and null the creator) otherwise.
+  `placeholder_claim_requests.created_user_id` is already `SET NULL`.
+- **Payroll records** (`sessions`, `pay_rules`, `pay_adjustments`): employment / tax rules may
+  require keeping hours and pay for years. Probably keep anonymised, or offer an export first.
+- **Legal acceptances**: keep as proof of consent (anonymised) or delete with the user?
+- **Usage snapshots**: billing history, likely keep (they hold no personal data).
+- **Backups.** The daily Neon backup workflow keeps artifacts for 90 days, so purged data lives on
+  in backups for up to 90 days after the purge. The Privacy Policy should say so.
+- **Export before purge.** Offer the admin a download (students, drivers, trips, payroll) during
+  the 30 days?
+- **Emails already sent** (notifications containing student names) can't be recalled.
+- **Audit.** Record that the purge ran (company id, date, counts) somewhere that survives it.
+

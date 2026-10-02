@@ -211,6 +211,19 @@ token, or weak password. `429` rate limited.
 - `server/scripts/snapshot-usage.js [--dry-run]` stores the same counts once per company per day in
   `usage_snapshots` (not scheduled yet).
 
+### Closing a company account (company_admin, branch `account-settings`)
+- `POST /companies/me/closure` body `{ "currentPassword", "confirmName" }` (the company name typed
+  exactly, same case and spaces) → `200 { closure_requested_at, closure_purge_at }` (purge 30 days
+  out). Every session of every user of the company is signed out at once, and the admin gets an
+  email with an undo link `<website>/company-closure/undo?token=…`. `400` wrong password or name,
+  `409` already closing, `403` other roles. Nothing is deleted (the purge isn't built).
+- While closing, **every user of that company** gets `403 {"code":"ACCOUNT_CLOSING"}` at login
+  (after a correct password) and `401 {"code":"ACCOUNT_CLOSING"}` on any other request. Show
+  `error` as-is: it gives the purge date and says how to undo.
+- `DELETE /companies/me/closure?token=…` (public: nobody in the company can sign in) → `200
+  {"ok": true, "company": "…"}`; clears the closure while the purge date is in the future.
+  `400` wrong, used or expired link. Old sessions stay signed out; people sign in again.
+
 ### How accounts are created
 - Company admins and school admins sign up themselves (`POST /signup/company|school`).
   The body must include `acceptLegal: { "terms": "<version>", "privacy": "<version>" }`, the

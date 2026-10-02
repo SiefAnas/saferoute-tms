@@ -13,6 +13,7 @@ import { DriverLayout } from './layouts/DriverLayout'
 import { MonitorLayout } from './layouts/MonitorLayout'
 import { ConfirmEmailChangePage } from './pages/account/ConfirmEmailChangePage'
 import { LegalPage } from './pages/legal/LegalPage'
+import { UndoClosurePage } from './pages/company/UndoClosurePage'
 
 // Each role's screens load on demand, so a driver's phone never downloads the admin pages.
 const DriverTodayPage = lazy(() => import('./pages/driver/DriverTodayPage').then((m) => ({ default: m.DriverTodayPage })))
@@ -29,6 +30,7 @@ const AssignmentsPage = lazy(() => import('./pages/company/AssignmentsPage').the
 const PayrollPage = lazy(() => import('./pages/company/PayrollPage').then((m) => ({ default: m.PayrollPage })))
 const CompanyStudentsPage = lazy(() => import('./pages/company/StudentsPage').then((m) => ({ default: m.CompanyStudentsPage })))
 const CompanyProfilePage = lazy(() => import('./pages/company/CompanyProfilePage').then((m) => ({ default: m.CompanyProfilePage })))
+const CompanyAccountPage = lazy(() => import('./pages/company/CompanyAccountPage').then((m) => ({ default: m.CompanyAccountPage })))
 const BillingPage = lazy(() => import('./pages/company/BillingPage').then((m) => ({ default: m.BillingPage })))
 const StudentsPage = lazy(() => import('./pages/school-admin/StudentsPage').then((m) => ({ default: m.StudentsPage })))
 const StaffAccessPage = lazy(() => import('./pages/school-admin/StaffAccessPage').then((m) => ({ default: m.StaffAccessPage })))
@@ -67,6 +69,7 @@ const COMPANY_NAV: NavGroup[] = [
       { to: '/company/import', label: 'Import', icon: 'upload_file' },
       { to: '/company/profile', label: 'Company profile', icon: 'apartment' },
       { to: '/company/billing', label: 'Billing', icon: 'receipt_long' },
+      { to: '/company/account', label: 'Company account', icon: 'domain' },
     ],
   },
 ]
@@ -130,6 +133,7 @@ function App() {
         <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
         <Route path="/privacy" element={<LegalPage doc="privacy" />} />
         <Route path="/terms" element={<LegalPage doc="terms" />} />
+        <Route path="/company-closure/undo" element={<UndoClosurePage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<RoleShell />}>
@@ -167,6 +171,7 @@ function App() {
             <Route path="/company/profile" element={<CompanyProfilePage />} />
             <Route path="/company/import" element={<ImportPage />} />
             <Route path="/company/billing" element={<BillingPage />} />
+            <Route path="/company/account" element={<CompanyAccountPage />} />
           </Route>
         </Route>
 

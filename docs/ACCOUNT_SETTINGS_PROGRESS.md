@@ -24,8 +24,8 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 | 2 | Own account API | done | `0e6ab8a` |
 | 3 | My account page | done | `c3f9aae` |
 | 4 | Usage + billing (read only) | done | `0c8dca2` |
-| 5 | Legal pages + acceptance | done | see log |
-| 6 | Closure, request side only | todo | |
+| 5 | Legal pages + acceptance | done | `874c5e3` |
+| 6 | Closure, request side only | done | see log |
 | - | Final report | todo | |
 
 ## Log
@@ -77,3 +77,15 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
   `req.ip`. Suite `34-legal-acceptance` (5492 / 5993): 22 passed. Suites 03 / 07 / 25 updated where
   they expect a successful signup and pass; `scripts/e2e-roles.mjs` sends `acceptLegal` too.
   Checked live: unchecked box blocks submit; ticked -> company created, 2 rows with version + IP.
+- **Task 6 done.** `server/src/services/closure.js`: request (password + exact name, 30-day
+  purge date, `closing`, hashed undo token, all company sessions signed out, undo email) and undo
+  (public, token, before the purge date). Refusal wired into `routes/auth.js` login (403) and
+  `middleware/authenticate.js` (401), code `ACCOUNT_CLOSING`. Routes in `routes/companies.js`
+  (undo declared before the auth chain). No purge, no delete anywhere; purge notes are in the
+  questions file. Client: `pages/company/CompanyAccountPage.tsx` at `/company/account` (Settings >
+  Company account) with the danger-zone modal (real counts, password, type the name, plain text);
+  `UndoClosurePage.tsx` at `/company-closure/undo`; a one-time login notice
+  (`setLoginNotice` / `peekLoginNotice` in `lib/auth.tsx`). Suite `35-company-closure`
+  (5493 / 5994): 49 passed. Checked live on the local DB with a throwaway company: modal ->
+  closed -> login shows the notice; login refused with the undo message; undo link -> "Account
+  kept"; sign in again works. (Left undone on the local DB.)

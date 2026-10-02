@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../../lib/auth'
+import { clearLoginNotice, peekLoginNotice, useAuth } from '../../lib/auth'
 import { ROLE_HOME } from '../../lib/roleHome'
 import { Button } from '../../components/Button'
 import { Input } from '../../components/Input'
@@ -13,6 +13,10 @@ import { AuthScreen } from './AuthScreen'
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  // A one-off message from the page that signed us out (e.g. "your company account is closing").
+  // Read in the initializer, cleared after mount, so it shows once.
+  const [notice] = useState(peekLoginNotice)
+  useEffect(() => clearLoginNotice(), [])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -36,6 +40,11 @@ export function LoginPage() {
 
   return (
     <AuthScreen title="SafeTurns" subtitle="Sign in to your account">
+      {notice && (
+        <p role="status" className="w-full rounded-row bg-caution-bg px-4 py-3 text-[14px] text-caution-fg">
+          {notice}
+        </p>
+      )}
       <form className="flex w-full flex-col gap-6" onSubmit={handleSubmit}>
         <div className="flex flex-col gap-2">
           <label className="px-1 text-[12px] font-semibold text-muted" htmlFor="email">
