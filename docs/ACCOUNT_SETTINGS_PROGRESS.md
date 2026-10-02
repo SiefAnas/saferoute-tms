@@ -25,8 +25,8 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 | 3 | My account page | done | `c3f9aae` |
 | 4 | Usage + billing (read only) | done | `0c8dca2` |
 | 5 | Legal pages + acceptance | done | `874c5e3` |
-| 6 | Closure, request side only | done | see log |
-| - | Final report | todo | |
+| 6 | Closure, request side only | done | `bbffd94` |
+| - | Final report | done | see log |
 
 ## Log
 - **Task 1 done.** `server/migrations/1752624000030_account-settings.js`. Tested on the local
@@ -89,3 +89,6 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
   (5493 / 5994): 49 passed. Checked live on the local DB with a throwaway company: modal ->
   closed -> login shows the notice; login refused with the undo message; undo link -> "Account
   kept"; sign in again works. (Left undone on the local DB.)
+- **Final report written** (`docs/ACCOUNT_SETTINGS_REPORT.md`). Full server run: all 34 suites
+  pass (four needed a re-run after clearing stray embedded-Postgres `io_worker`s). Client build,
+  tests and typecheck pass. Spec changelog line added. Everything is done; nothing pushed.

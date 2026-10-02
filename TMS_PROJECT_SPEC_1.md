@@ -300,6 +300,14 @@ changed in scope/vision, not implementation detail, that stays in `BACKLOG.md`/
 
 ## 12. Changelog
 
+- **2026-10-02 (branch `account-settings`, not merged)**: §2.1's "No self-service edit" no longer
+  holds. Every role now has My account (`/account`): own name, phone, address (driver/parent),
+  email change with a confirmation link to the new address, and password. The creator-only admin
+  edit is unchanged. Also new: read-only usage + Billing page (free pilot, no payments), public
+  Terms / Privacy pages (placeholder text) that self-serve signups must accept (recorded per
+  version), and a company "close account" request that signs everyone out and sets a 30-day purge
+  date with an undo link. The purge itself is deliberately not built (retention rules first).
+  Details: `docs/ACCOUNT_SETTINGS_REPORT.md`.
 - **2026-08-27 (latest)**: removed the Parent Dashboard mockup entirely (route + file) —
   it had been left unauthenticated on the live public site since the earlier push and
   needed to come down immediately; pushed that fix on its own before anything else. The
