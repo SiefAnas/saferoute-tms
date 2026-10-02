@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { SectionHeader } from '../../components/mobile'
 import { AddressText } from '../../components/AddressText'
@@ -9,10 +10,9 @@ import { PageTopBar } from '../../layouts/TopBar'
 import { MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import type { ParentProfile, ParentStudentDetail, Student } from '../../types/api'
 
-// Parent app, Profile tab (design 5b): read-only. Self-service edit for parents is
-// intentionally admin-only for now (§ permission-changes task): only the admin who created the
-// account can change it, so the page says who to ask.
-// TODO (v2): self-service password/email change; 2FA / signup verification.
+// Parent app, Profile tab (design 5b): read-only summary. The parent edits their own name, phone,
+// address, email and password on My account (/account, account-settings).
+// TODO (v2): 2FA / signup verification.
 export function ParentProfilePage() {
   const profileQuery = useQuery({ queryKey: ['parent-me'], queryFn: () => api.get<ParentProfile>('/parent/me') })
   const studentsQuery = useQuery({ queryKey: ['parent-students'], queryFn: () => api.get<Student[]>('/parent/students') })
@@ -54,8 +54,11 @@ export function ParentProfilePage() {
                 }))}
               />
               <p className="py-3 text-[13px] text-muted">
-                To change your details, contact {company?.name ?? 'your transportation company'}
-                {company?.phone ? ` at ${company.phone}` : ''}.
+                Change your details in{' '}
+                <Link to="/account" className="font-medium text-ink underline-offset-2 hover:underline">
+                  My account
+                </Link>
+                .
               </p>
             </div>
           </Card>
@@ -83,15 +86,10 @@ export function ParentProfilePage() {
         ))}
       </div>
       <p className="mx-5 mt-3 text-[13px] text-muted">
-        To change your details, contact {company?.name ?? 'your transportation company'}
-        {company?.phone ? (
-          <>
-            {' at '}
-            <a className="font-medium text-ink underline-offset-2 hover:underline" href={`tel:${company.phone.replace(/[^0-9+]/g, '')}`}>
-              {company.phone}
-            </a>
-          </>
-        ) : null}
+        Change your details in{' '}
+        <Link to="/account" className="font-medium text-ink underline-offset-2 hover:underline">
+          My account
+        </Link>
         .
       </p>
       <div className="mx-4 mt-6">

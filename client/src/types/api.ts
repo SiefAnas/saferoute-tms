@@ -63,6 +63,13 @@ export interface PublicUser {
   temp_password_expires_at?: string | null
 }
 
+// GET/PATCH /users/me: the signed-in person's own account, with any email change still waiting
+// for its confirmation link (account-settings).
+export interface OwnAccount extends PublicUser {
+  pending_email: string | null
+  pending_email_sent_at: string | null
+}
+
 // POST /users: the new account plus its temporary password, returned this one time only.
 export interface CreatedUser extends PublicUser {
   temporary_password: string

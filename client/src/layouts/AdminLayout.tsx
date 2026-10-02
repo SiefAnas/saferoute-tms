@@ -86,7 +86,7 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
     const match = items
       .filter((i) => (i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)))
       .sort((a, b) => b.to.length - a.to.length)[0]
-    return match?.label ?? hubName
+    return match?.label ?? (location.pathname === '/account' ? 'My account' : hubName)
   }, [nav, location.pathname, hubName])
 
   const renderNav = (opts: { rail: boolean; onNavigate?: () => void }) => (
@@ -167,6 +167,19 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
         </>
       )}
       <ThemeToggle variant="sidebar" />
+      <NavLink
+        to="/account"
+        aria-label="My account"
+        title="My account"
+        onClick={() => setMobileNavOpen(false)}
+        className={({ isActive }) =>
+          `flex h-8 w-8 shrink-0 items-center justify-center rounded-row hover:bg-sidebar-hover hover:text-sidebar-strong ${
+            isActive ? 'bg-sidebar-hover text-sidebar-strong' : 'text-sidebar-icon'
+          }`
+        }
+      >
+        <span className="material-symbols-outlined !text-[20px]">manage_accounts</span>
+      </NavLink>
       <button
         type="button"
         onClick={logout}

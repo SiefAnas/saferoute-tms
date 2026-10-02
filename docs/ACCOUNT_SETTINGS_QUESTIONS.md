@@ -38,3 +38,14 @@ Branch `account-settings`.
    (`PATCH /users/:id`, creator only) is unchanged. `TMS_PROJECT_SPEC_1.md` gets a changelog line
    at the end of the branch.
 
+## My account page (task 3)
+
+11. **Which roles show "address".** Driver and parent only: they're the roles whose accounts are
+   created with a home address. Monitors have none (MonitorsPage sets it to null), admins and
+   school staff are reached through their org. The API itself accepts `address` for any role.
+12. **Phones.** "Linked from the sidebar footer next to logout": phones have no sidebar, so the
+   driver/parent/monitor phone header got the same icon next to its logout button. The admin
+   shell's phone drawer already shows the sidebar footer.
+13. **Parent Profile tab** said "to change your details, contact your company". That was no
+   longer true, so it now links to My account. The tab itself is unchanged otherwise.
+

@@ -173,6 +173,18 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
             <span className="truncate text-[12px] text-sidebar-icon">{hubName}</span>
           </div>
           <ThemeToggle variant="sidebar" />
+          <NavLink
+            to="/account"
+            aria-label="My account"
+            title="My account"
+            className={({ isActive }) =>
+              `flex h-8 w-8 shrink-0 items-center justify-center rounded-row hover:bg-sidebar-hover hover:text-sidebar-strong ${
+                isActive ? 'bg-sidebar-hover text-sidebar-strong' : 'text-sidebar-icon'
+              }`
+            }
+          >
+            <span className="material-symbols-outlined !text-[20px]">manage_accounts</span>
+          </NavLink>
           <button
             type="button"
             onClick={onLogout}
@@ -253,6 +265,14 @@ export function MobileHeader({ title, sub, onLogout }: { title: string; sub: Rea
       </div>
       <div className="flex shrink-0 gap-2">
         <ThemeToggle variant="mobile" />
+        <NavLink
+          to="/account"
+          aria-label="My account"
+          title="My account"
+          className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-line bg-surface text-muted"
+        >
+          <span className="material-symbols-outlined !text-[20px]">manage_accounts</span>
+        </NavLink>
         <button
           type="button"
           onClick={onLogout}

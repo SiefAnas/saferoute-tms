@@ -11,6 +11,7 @@ import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
 import { ForgotPasswordPage, ResetPasswordPage, SetPasswordPage } from './pages/login/PasswordPages'
 import { DriverLayout } from './layouts/DriverLayout'
 import { MonitorLayout } from './layouts/MonitorLayout'
+import { ConfirmEmailChangePage } from './pages/account/ConfirmEmailChangePage'
 
 // Each role's screens load on demand, so a driver's phone never downloads the admin pages.
 const DriverTodayPage = lazy(() => import('./pages/driver/DriverTodayPage').then((m) => ({ default: m.DriverTodayPage })))
@@ -33,6 +34,7 @@ const SchoolProfilePage = lazy(() => import('./pages/school-admin/SchoolProfileP
 const SchoolStaffDashboard = lazy(() => import('./pages/school-staff/SchoolStaffDashboard').then((m) => ({ default: m.SchoolStaffDashboard })))
 const ParentHomePage = lazy(() => import('./pages/parent/ParentHomePage').then((m) => ({ default: m.ParentHomePage })))
 const ImportPage = lazy(() => import('./pages/ImportPage').then((m) => ({ default: m.ImportPage })))
+const AccountPage = lazy(() => import('./pages/account/AccountPage').then((m) => ({ default: m.AccountPage })))
 const ParentProfilePage = lazy(() => import('./pages/parent/ParentProfilePage').then((m) => ({ default: m.ParentProfilePage })))
 
 // Sidebar nav per role (design 5a, "Sidebar"): grouped, with the only uppercase text in the app
@@ -84,6 +86,28 @@ const SCHOOL_ADMIN_NAV: NavGroup[] = [
 const SCHOOL_STAFF_NAV: NavGroup[] = [
   { items: [{ to: '/school-staff', label: 'Pickup & drop-off', icon: 'how_to_reg', end: true }] },
 ]
+// Pages every role shares (My account) render inside the signed-in role's own shell, so the
+// sidebar / tabs stay the ones that person always sees.
+function RoleShell() {
+  const { user } = useAuth()
+  switch (user?.role) {
+    case 'company_admin':
+      return <AdminLayout hubName="Dispatcher Hub" nav={COMPANY_NAV} />
+    case 'school_admin':
+      return <AdminLayout hubName="School Hub" nav={SCHOOL_ADMIN_NAV} />
+    case 'school_staff':
+      return <AdminLayout hubName="School Hub" nav={SCHOOL_STAFF_NAV} />
+    case 'driver':
+      return <DriverLayout />
+    case 'monitor':
+      return <MonitorLayout />
+    case 'parent':
+      return <ParentLayout />
+    default:
+      return null
+  }
+}
+
 function RootRedirect() {
   const { user, token } = useAuth()
   if (!token || !user) return <Navigate to="/login" replace />
@@ -100,6 +124,13 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
+        <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
+
+        <Route element={<ProtectedRoute />}>
+          <Route element={<RoleShell />}>
+            <Route path="/account" element={<AccountPage />} />
+          </Route>
+        </Route>
 
         <Route element={<ProtectedRoute roles={['driver']} />}>
           <Route element={<DriverLayout />}>
