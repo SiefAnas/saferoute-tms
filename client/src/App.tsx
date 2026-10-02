@@ -12,6 +12,7 @@ import { ForgotPasswordPage, ResetPasswordPage, SetPasswordPage } from './pages/
 import { DriverLayout } from './layouts/DriverLayout'
 import { MonitorLayout } from './layouts/MonitorLayout'
 import { ConfirmEmailChangePage } from './pages/account/ConfirmEmailChangePage'
+import { LegalPage } from './pages/legal/LegalPage'
 
 // Each role's screens load on demand, so a driver's phone never downloads the admin pages.
 const DriverTodayPage = lazy(() => import('./pages/driver/DriverTodayPage').then((m) => ({ default: m.DriverTodayPage })))
@@ -127,6 +128,8 @@ function App() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
         <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
+        <Route path="/privacy" element={<LegalPage doc="privacy" />} />
+        <Route path="/terms" element={<LegalPage doc="terms" />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<RoleShell />}>

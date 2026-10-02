@@ -26,11 +26,12 @@ router.post('/:kind/claim-requests', signupLimiter, async (req, res, next) => {
   }
 });
 
-// POST /signup/:kind  -> fresh org (immediately operational). A claimId is refused (403):
+// POST /signup/:kind  -> fresh org (immediately operational). Needs acceptLegal
+// { terms, privacy } (the versions shown on the form); 400 without it. A claimId is refused (403):
 // claiming an existing placeholder goes through /claim-requests and owner approval.
 router.post('/:kind', signupLimiter, async (req, res, next) => {
   try {
-    const result = await signup(req.params.kind, req.body || {});
+    const result = await signup(req.params.kind, req.body || {}, { ip: req.ip });
     res.status(201).json(result);
   } catch (err) {
     next(err);

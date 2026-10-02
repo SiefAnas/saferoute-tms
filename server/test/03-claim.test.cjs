@@ -8,6 +8,7 @@ process.env.NODE_ENV = 'test'; // silence mailer console; still records messages
 
 const express = require('express');
 const { createRecorder, startEmbeddedPostgres, runMigrateUp } = require('./lib/testkit.cjs');
+const LEGAL = require('../src/services/legal.js').currentVersions();
 const pool = require('../src/db/pool.js');
 const authenticate = require('../src/middleware/authenticate.js');
 const attachScopedDb = require('../src/middleware/tenant.js');
@@ -130,11 +131,12 @@ async function main() {
       nowOk.status === 200 ? ok('after the change, data route allowed (200)') : bad(`still blocked: ${nowOk.status}`);
 
       console.log('\n--- Fresh signup (no claim) -> operational immediately ---');
-      const freshBase = { orgName: '3 Bees Transport', address: '1 Main St', zip: '02139', state: 'MA', fullName: 'Owner', password: PW };
+      // acceptLegal: the Terms / Privacy checkbox (account-settings), versions from client/src/legal.
+      const freshBase = { orgName: '3 Bees Transport', address: '1 Main St', zip: '02139', state: 'MA', fullName: 'Owner', password: PW, acceptLegal: LEGAL };
       const fresh = await post('/signup/company', { ...freshBase, email: 'owner@3bees.com' });
       const freshBody = await j(fresh);
       (fresh.status === 201 && freshBody.mode === 'created' && freshBody.token) ? ok('fresh signup -> 201 created + token (operational)') : bad(`fresh signup wrong: ${fresh.status} ${JSON.stringify(freshBody)}`);
-      (await post('/signup/company', { orgName: 'Dup', address: '1 Main St', zip: '02139', state: 'MA', fullName: 'x', email: 'owner@3bees.com', password: PW })).status === 409 ? ok('duplicate email -> 409') : bad('duplicate email allowed');
+      (await post('/signup/company', { orgName: 'Dup', address: '1 Main St', zip: '02139', state: 'MA', fullName: 'x', email: 'owner@3bees.com', password: PW, acceptLegal: LEGAL })).status === 409 ? ok('duplicate email -> 409') : bad('duplicate email allowed');
 
       console.log('\n--- Fresh signup: address/zip/state now required ---');
       (await post('/signup/company', { ...freshBase, address: undefined, email: 'noaddr@3bees.com' })).status === 400

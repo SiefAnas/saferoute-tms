@@ -213,6 +213,10 @@ token, or weak password. `429` rate limited.
 
 ### How accounts are created
 - Company admins and school admins sign up themselves (`POST /signup/company|school`).
+  The body must include `acceptLegal: { "terms": "<version>", "privacy": "<version>" }`, the
+  versions of `client/src/legal/terms.md` / `privacy.md` the person agreed to (frontmatter
+  `version`). Without it `400`; an outdated version `409` (reload and agree again). One
+  `legal_acceptances` row per document is written with the request IP (branch `account-settings`).
 - **Drivers, monitors and parents are created by a company admin, school staff by a school admin**
   (`POST /users`). The admin doesn't choose a password: the response has a
   `temporary_password` (shown once, e.g. `Kp7x-Qm4r-Tz9w`) to hand over, and the account has

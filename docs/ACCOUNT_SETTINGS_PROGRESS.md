@@ -23,8 +23,8 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 | 1 | Migration 030 | done | `0cf5280` |
 | 2 | Own account API | done | `0e6ab8a` |
 | 3 | My account page | done | `c3f9aae` |
-| 4 | Usage + billing (read only) | done | see log |
-| 5 | Legal pages + acceptance | todo | |
+| 4 | Usage + billing (read only) | done | `0c8dca2` |
+| 5 | Legal pages + acceptance | done | see log |
 | 6 | Closure, request side only | todo | |
 | - | Final report | todo | |
 
@@ -66,3 +66,14 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
   "Billing". Suite `33-usage-billing` (ports 5491 / 5992): 24 passed. Script run on the local DB:
   dry run (nothing written), then twice for real (3 rows, no duplicates). Page checked live.
   Note: restart the hand-started API after adding routes (now started with `node --watch`).
+- **Task 5 done.** `client/src/legal/{terms,privacy}.md` (PLACEHOLDER text, frontmatter
+  `version: 0.1-placeholder`, `effective: 2026-10-02`). `client/src/lib/markdown.ts` (tiny parser,
+  no dependency, no HTML injection) + `client/test/markdown.test.ts` (18 passed, added to
+  `npm test`). `lib/legal.ts` bundles the files with `?raw`. Public `/terms` and `/privacy`
+  (`pages/legal/LegalPage.tsx`). `LegalLinks` in the login/auth footer, admin sidebar footer, wide
+  driver/parent/monitor sidebar, and the phone shell footer. Register: required checkbox with both
+  links; sends `acceptLegal`. Server: `services/legal.js` reads the same frontmatter, `signup()`
+  requires `acceptLegal` (400 / 409 outdated), rows written in the signup transaction with
+  `req.ip`. Suite `34-legal-acceptance` (5492 / 5993): 22 passed. Suites 03 / 07 / 25 updated where
+  they expect a successful signup and pass; `scripts/e2e-roles.mjs` sends `acceptLegal` too.
+  Checked live: unchecked box blocks submit; ticked -> company created, 2 rows with version + IP.

@@ -64,3 +64,26 @@ Branch `account-settings`.
 17. **"Free through the end of the year"** is a fixed label in the client (`PLAN_LABEL`), not a date
    from the DB. `trial_ends_at` stays null; set it if the end date should be real data.
 
+## Legal pages + acceptance (task 5)
+
+18. **Does the API service on Render have `client/` on disk?** The server reads the versions from
+   `client/src/legal/*.md` to refuse an outdated acceptance (409). I don't know the Render service's
+   Root Directory. If `client/` isn't there, the server can't check: it logs one warning and
+   records the versions the form sent (still validated as short version strings). Set `LEGAL_DIR`
+   to point elsewhere if needed. Please check before deploying.
+19. **No Markdown library.** A ~70-line parser (`client/src/lib/markdown.ts`) handles what the
+   placeholder files use (headings, paragraphs, lists, quotes, bold, links) and renders React
+   elements, never HTML. If the real legal text needs tables or numbered lists, either extend it
+   or add a library such as `marked` (that's a dependency decision for you).
+20. **Who else should accept?** Only self-serve signups (company_admin / school_admin) accept now.
+   Accounts made by an admin (drivers, monitors, parents, staff), accounts created by approving a
+   claim request (`scripts/claim-requests.js`), and every account that existed before this branch
+   have no acceptance row. Options: show a one-time "accept to continue" screen at next login for
+   anyone without a row for the current versions. Not built.
+21. **New versions later.** Bumping `version` in a file makes the server refuse forms still showing
+   the old one (409). Existing users are not asked again (see 20).
+22. **`server/test/smoke-neon.cjs`** signs up without address / zip / state, so it was already
+   failing before this branch; not touched, and not run (it targets Neon).
+23. **IP behind Render.** Recorded as `req.ip`, which uses the app's existing `trust proxy 3`
+   setting (verified earlier in BACKLOG #9). Locally it's `::1`.
+

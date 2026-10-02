@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { ThemeToggle } from '../components/ThemeToggle'
+import { LegalLinks } from '../components/LegalLinks'
 import { TopBarContext, type TopBarSlots } from './TopBar'
 import type { Company, DriverSession, Role, School } from '../types/api'
 
@@ -152,8 +153,9 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
   )
 
   const footer = (rail: boolean): ReactNode => (
+    <div className="mt-auto flex flex-col gap-2">
     <div
-      className={`mt-auto flex items-center gap-2.5 border-t border-sidebar-line px-2.5 pt-3 ${rail ? 'flex-col px-0' : ''}`}
+      className={`flex items-center gap-2.5 border-t border-sidebar-line px-2.5 pt-3 ${rail ? 'flex-col px-0' : ''}`}
     >
       {!rail && (
         <>
@@ -189,6 +191,8 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
       >
         <span className="material-symbols-outlined !text-[20px]">logout</span>
       </button>
+    </div>
+    {!rail && <LegalLinks className="px-2.5 text-sidebar-icon" />}
     </div>
   )
 
