@@ -28,8 +28,8 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 | 6 | Closure, request side only | done | `bbffd94` |
 | - | Final report | done | `752d699` |
 | 7 | Legal documents on the server | done | `46c843c` |
-| 8 | Remove the extra page (/company/account) | done | see log |
-| 9 | Data deletion request button | todo | |
+| 8 | Remove the extra page (/company/account) | done | `be3c7fc` |
+| 9 | Data deletion request button | done | see log |
 | 10 | license_number investigation (report only) | todo | |
 | - | Report addendum | todo | |
 
@@ -128,3 +128,14 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
   `/company/account` lands on `/company/profile`, section below the form, red border computes
   (needed `!border-alert-fg/40` because Card sets `border-card-line`), modal opens; dismissed
   without submitting.
+- **Task 9 done.** Migration 031 `deletion_requests` (id, user_id, company_id, reason ≤ 500,
+  requested_at, status default `open` in (`open`,`closed`), handled_at, handled_by; one open per
+  user via a partial unique index). Tested up / constraints / down / up on the local DB (re-checked
+  the target host first: localhost:5499). Suite 01 count 30 -> 31. `services/deletionRequests.js`,
+  routes `GET` / `POST /users/me/deletion-request` (driver/monitor/parent, verify limiter),
+  `config.supportEmail` from new `SUPPORT_EMAIL`. Client: "Request my data be deleted" section on
+  `/account` for those roles; shows the open request instead of the form. Suite
+  `36-deletion-request` (5494 / 5995): 28 passed (happy path, duplicate, concurrent duplicate,
+  closed-then-again, reason limits, roles, no SUPPORT_EMAIL). 01 and 32 pass. Checked live as
+  `parent1@company1.com`: request sent, admin emailed (dev mail log), missing SUPPORT_EMAIL logged,
+  state persists after reload. That local request is left open on the local DB.

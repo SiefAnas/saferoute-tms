@@ -164,3 +164,24 @@ Decisions needed first (the retention rules):
    frontmatter before rendering. Easy to strip on the server instead.
 34. **Mobile apps** don't show the legal pages yet; they can use the same endpoint.
 
+## Data deletion request (task 9)
+
+35. **SafeTurns support's address.** There was none in the code or config, so I added
+   `SUPPORT_EMAIL` (server env, in `.env.example`). Unset = support is not emailed, the company
+   admins still are, and every such request logs `[deletion-request] SUPPORT_EMAIL is not set …`
+   with its id. **It must be set on Render before this ships**, or support never hears about
+   requests. What address?
+36. **Who can ask.** Drivers, monitors and parents only, as asked. Everyone else gets 403. School
+   staff are in the same position (created by their school admin, can't close their account) but
+   the table needs a `company_id` and school staff have none. Add them later with a `school_id`?
+37. **Statuses.** The DB allows `open` and `closed`; the app only writes `open`. `closed` exists so a
+   handled request can be closed by hand (SQL) and the person can ask again. `handled_by` is free
+   text (like `placeholder_claim_requests.decided_by`), nothing writes it yet.
+38. **No confirmation email to the person.** Not asked for. They see the open request on My
+   account. Worth sending one so they have a record?
+39. **No cascade** from users / companies: a request shouldn't disappear as a side effect. The
+   purge design (see above) has to decide what happens to these rows too.
+40. **Which admins.** Every active company_admin of the person's company (deactivated admins and
+   other companies' admins are not emailed). The email names the person, their role and email, the
+   company, the reason and the request id; it carries no student data.
+

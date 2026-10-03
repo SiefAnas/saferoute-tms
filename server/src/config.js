@@ -30,4 +30,7 @@ module.exports = {
   // The website's address, for links in emails (password reset). APP_URL if set, else the first
   // allowed origin (the production frontend), else the local Vite dev server.
   appUrl: (process.env.APP_URL || (process.env.ALLOWED_ORIGINS || '').split(',')[0].trim() || 'http://localhost:5173').replace(/\/+$/, ''),
+  // SafeTurns support inbox: data deletion requests are emailed here (services/deletionRequests.js).
+  // Unset = not emailed, and every such request logs that loudly.
+  supportEmail: (process.env.SUPPORT_EMAIL || '').trim() || null,
 };

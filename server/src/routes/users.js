@@ -6,6 +6,7 @@ const { requireOperable, requireRole } = require('../middleware/authorize');
 const { createUser, listUsers, getUser, updateUser, adminResetPassword } = require('../services/users');
 const { getOwnAccount, updateOwnAccount, requestEmailChange, resendEmailChange, cancelEmailChange } = require('../services/account');
 const { verifyLimiter } = require('../middleware/rateLimit');
+const { getOpenRequest, createRequest } = require('../services/deletionRequests');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb);
@@ -28,6 +29,14 @@ router.post('/me/email-change/resend', verifyLimiter, async (req, res, next) => 
 });
 router.delete('/me/email-change', async (req, res, next) => {
   try { res.json(await cancelEmailChange(req)); } catch (e) { next(e); }
+});
+// Data deletion request (driver, monitor, parent; services/deletionRequests.js). Sends email, so
+// it shares the verify limiter too.
+router.get('/me/deletion-request', async (req, res, next) => {
+  try { res.json(await getOpenRequest(req)); } catch (e) { next(e); }
+});
+router.post('/me/deletion-request', verifyLimiter, async (req, res, next) => {
+  try { res.status(201).json(await createRequest(req, req.body || {})); } catch (e) { next(e); }
 });
 
 router.post('/', adminsOnly, async (req, res, next) => {

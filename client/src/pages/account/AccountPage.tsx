@@ -11,13 +11,17 @@ import { PageIntro } from '../../components/Records'
 import { useToast } from '../../components/Toast'
 import { PageTopBar } from '../../layouts/TopBar'
 import { MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
-import type { LoginResponse, OwnAccount, Role } from '../../types/api'
+import type { DeletionRequest, LoginResponse, OwnAccount, Role } from '../../types/api'
 
 // Roles whose account has a home address (drivers and parents are created with one; see
 // services/users.js createUser). Everyone else's account is reached through their org's address.
 const ADDRESS_ROLES: Role[] = ['driver', 'parent']
 // Roles shown in the driver/parent phone shell, which gives pages no side padding of its own.
 const PHONE_SHELL_ROLES: Role[] = ['driver', 'parent', 'monitor']
+// Roles that didn't create their own account, so they ask for deletion instead of closing it
+// (admins close the whole company account from Company profile).
+const DELETION_REQUEST_ROLES: Role[] = ['driver', 'monitor', 'parent']
+const MAX_REASON = 500
 
 const errorText = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback)
 
@@ -63,6 +67,7 @@ export function AccountPage() {
           <ProfileSection account={account} />
           <EmailSection account={account} />
           <PasswordSection />
+          {DELETION_REQUEST_ROLES.includes(account.role) && <DeletionRequestSection />}
         </>
       )}
     </div>
@@ -280,6 +285,78 @@ function PasswordSection() {
         </div>
       </form>
       {toast.node}
+    </Section>
+  )
+}
+
+// "Request my data be deleted" (driver, monitor, parent). Records the request and emails SafeTurns
+// and the company admin; nothing is deleted automatically. One open request at a time: while one
+// is open, its state shows instead of the form.
+function DeletionRequestSection() {
+  const queryClient = useQueryClient()
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const query = useQuery({
+    queryKey: ['deletion-request'],
+    queryFn: () => api.get<{ request: DeletionRequest | null }>('/users/me/deletion-request'),
+  })
+  const send = useMutation({
+    mutationFn: () => api.post<{ request: DeletionRequest }>('/users/me/deletion-request', { reason }),
+    onSuccess: (res) => {
+      queryClient.setQueryData(['deletion-request'], res)
+      setReason('')
+    },
+    onError: (err) => {
+      setError(errorText(err, 'Could not send the request.'))
+      // 409: one is already open (e.g. sent from another device); show it.
+      if (err instanceof ApiError && err.status === 409) queryClient.invalidateQueries({ queryKey: ['deletion-request'] })
+    },
+  })
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    send.mutate()
+  }
+
+  const open = query.data?.request
+  return (
+    <Section title="Request my data be deleted">
+      <p className="text-[14px] text-muted">
+        Your account was set up by your transportation company, so you can't close it yourself. You can ask for your data to be
+        deleted: the request goes to SafeTurns and to your company's admin, and they will contact you. Nothing is deleted
+        automatically.
+      </p>
+      {query.isLoading ? (
+        <p className="text-[14px] text-muted">Loading…</p>
+      ) : open ? (
+        <div role="status" className="flex flex-col gap-1.5 rounded-row border border-line bg-surface-2 p-4 text-[14px] text-ink">
+          <span className="font-semibold">Request sent on {new Date(open.requested_at).toLocaleDateString()}</span>
+          <span>SafeTurns and your company's admin have it. They will contact you about what happens next.</span>
+          {open.reason && <span className="text-muted">Your reason: {open.reason}</span>}
+        </div>
+      ) : (
+        <form className="flex flex-col gap-4" onSubmit={submit}>
+          <Field label="Reason (optional)">
+            <textarea
+              value={reason}
+              maxLength={MAX_REASON}
+              rows={3}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full rounded-row border border-outline bg-surface px-3 py-2 text-[14px] text-ink outline-none transition-[border-color,box-shadow] focus:border-amber focus:ring-2 focus:ring-amber/20"
+            />
+            <span className="text-[12px] font-normal text-muted">
+              {reason.length} / {MAX_REASON}
+            </span>
+          </Field>
+          <ErrorLine error={error} />
+          <div className="flex justify-end">
+            <Button type="submit" variant="danger" disabled={send.isPending}>
+              {send.isPending ? 'Sending…' : 'Send deletion request'}
+            </Button>
+          </div>
+        </form>
+      )}
     </Section>
   )
 }

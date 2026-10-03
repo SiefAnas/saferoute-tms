@@ -70,6 +70,15 @@ export interface OwnAccount extends PublicUser {
   pending_email_sent_at: string | null
 }
 
+// GET/POST /users/me/deletion-request (driver, monitor, parent): a request for SafeTurns and the
+// company admin to delete the person's data. Only a record + emails; nothing is deleted.
+export interface DeletionRequest {
+  id: string
+  status: 'open' | 'closed'
+  reason: string | null
+  requested_at: string
+}
+
 // POST /users: the new account plus its temporary password, returned this one time only.
 export interface CreatedUser extends PublicUser {
   temporary_password: string
