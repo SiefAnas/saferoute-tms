@@ -1,30 +1,37 @@
-import termsSource from '../legal/terms.md?raw'
-import privacySource from '../legal/privacy.md?raw'
+import { useQuery } from '@tanstack/react-query'
+import { api } from './api'
 import { parseMarkdown, splitFrontmatter, type Block } from './markdown'
 
-// The Terms of Use and Privacy Policy, bundled from client/src/legal/*.md. Each file's
-// frontmatter carries `version` and `effective`; the signup form sends the versions it showed
+// The Terms of Use and Privacy Policy. The API owns them (server/src/legal, GET /legal/:document);
+// the website fetches and renders them. The signup form sends the versions it showed
 // (acceptLegal) and the server records one legal_acceptances row per document.
 export type LegalDocId = 'terms' | 'privacy'
 
-export interface LegalDoc {
-  id: LegalDocId
-  title: string
-  path: string
+// Fixed per document: names and paths for links, available before anything is fetched.
+export const LEGAL_DOCS: Record<LegalDocId, { id: LegalDocId; title: string; path: string }> = {
+  terms: { id: 'terms', title: 'Terms of Use', path: '/terms' },
+  privacy: { id: 'privacy', title: 'Privacy Policy', path: '/privacy' },
+}
+
+// GET /legal/:document
+export interface LegalDocResponse {
+  document: LegalDocId
   version: string
   effective: string
+  markdown: string
+}
+
+export interface LegalDoc extends LegalDocResponse {
   blocks: Block[]
 }
 
-function load(id: LegalDocId, title: string, path: string, source: string): LegalDoc {
-  const { meta, body } = splitFrontmatter(source)
-  return { id, title, path, version: meta.version ?? '', effective: meta.effective ?? '', blocks: parseMarkdown(body) }
+export function useLegalDoc(id: LegalDocId) {
+  return useQuery({
+    queryKey: ['legal', id],
+    queryFn: async (): Promise<LegalDoc> => {
+      const doc = await api.get<LegalDocResponse>(`/legal/${id}`)
+      return { ...doc, blocks: parseMarkdown(splitFrontmatter(doc.markdown).body) }
+    },
+    staleTime: 10 * 60 * 1000,
+  })
 }
-
-export const LEGAL_DOCS: Record<LegalDocId, LegalDoc> = {
-  terms: load('terms', 'Terms of Use', '/terms', termsSource),
-  privacy: load('privacy', 'Privacy Policy', '/privacy', privacySource),
-}
-
-// Body for POST /signup/:kind once the checkbox is ticked.
-export const LEGAL_ACCEPTANCE = { terms: LEGAL_DOCS.terms.version, privacy: LEGAL_DOCS.privacy.version }

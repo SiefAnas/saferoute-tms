@@ -26,7 +26,12 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 | 4 | Usage + billing (read only) | done | `0c8dca2` |
 | 5 | Legal pages + acceptance | done | `874c5e3` |
 | 6 | Closure, request side only | done | `bbffd94` |
-| - | Final report | done | see log |
+| - | Final report | done | `752d699` |
+| 7 | Legal documents on the server | done | see log |
+| 8 | Remove the extra page (/company/account) | todo | |
+| 9 | Data deletion request button | todo | |
+| 10 | license_number investigation (report only) | todo | |
+| - | Report addendum | todo | |
 
 ## Log
 - **Task 1 done.** `server/migrations/1752624000030_account-settings.js`. Tested on the local
@@ -92,3 +97,25 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 - **Final report written** (`docs/ACCOUNT_SETTINGS_REPORT.md`). Full server run: all 34 suites
   pass (four needed a re-run after clearing stray embedded-Postgres `io_worker`s). Client build,
   tests and typecheck pass. Spec changelog line added. Everything is done; nothing pushed.
+
+### Session 2 (2026-10-03)
+- Checked first: `server/.env` DATABASE_URL host `localhost:5499`, db `saferoute_dev`, no sslmode;
+  no DATABASE_URL in the shell. Local only.
+- **Port 4000 is now used by someone else's API** (`node --watch src/index.js`, PID 8900/41956,
+  started 2026-10-03 12:22, not from this session; I don't know which checkout or database it
+  uses, so I left it alone). My old Vite on 5173 proxied `/api` to port 4000, so I stopped my own
+  Vite. From now on: API `PORT=4100` and Vite `VITE_API_BASE_URL=http://localhost:4100 npx vite
+  --port 5174`, both from this worktree, DATABASE_URL set explicitly to the local DB.
+- Stray test Postgres processes: `clean-strays.ps1` in the scratchpad stops only this worktree's
+  embedded-Postgres processes and keeps the dev DB (data dir `devdb-data`).
+- **Task 7 done.** `server/src/legal/{terms,privacy}.md` (git mv; `client/src/legal/` deleted).
+  `services/legal.js` rewritten: one source, `loadLegalDocuments()` validates both files,
+  `getLegalDocument()`, no fallback. `routes/legal.js` mounted at `/legal` (public).
+  `src/index.js` loads the documents before listening and exits 1 with `[legal] FATAL …` if it
+  can't. Client: `lib/legal.ts` is now metadata + `useLegalDoc(id)` (fetch + parse);
+  `LegalPage` and `RegisterPage` use it (register sends the versions it fetched). Tests: suite 34
+  now reads `server/src/legal`, checks the endpoint (shape, values, 404s), and boots `index.js`
+  with a missing / broken `LEGAL_DIR` (exit 1, message on stderr): 37 passed. 03 and 08 pass.
+  Client markdown test no longer reads the files (12 passed). Checked live: API log
+  `[legal] terms 0.1-placeholder, privacy 0.1-placeholder`, `/privacy` and `/register` fetch from
+  `localhost:4100/legal/*`.

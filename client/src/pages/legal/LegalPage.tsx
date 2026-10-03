@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { Copyright } from '../../components/Copyright'
 import { Logo } from '../../components/Logo'
-import { LEGAL_DOCS, type LegalDocId } from '../../lib/legal'
+import { ApiError } from '../../lib/api'
+import { LEGAL_DOCS, useLegalDoc, type LegalDocId } from '../../lib/legal'
 import type { Inline } from '../../lib/markdown'
 import { useAuth } from '../../lib/auth'
 import { ROLE_HOME } from '../../lib/roleHome'
@@ -32,9 +33,11 @@ function Text({ parts }: { parts: Inline[] }) {
   )
 }
 
-// Public /terms and /privacy: no sign-in needed (linked from login, register and the app).
+// Public /terms and /privacy: no sign-in needed (linked from login, register and the app). The
+// text comes from the API (GET /legal/:document).
 export function LegalPage({ doc }: { doc: LegalDocId }) {
-  const d = LEGAL_DOCS[doc]
+  const query = useLegalDoc(doc)
+  const d = query.data
   const other = LEGAL_DOCS[doc === 'terms' ? 'privacy' : 'terms']
   const { user, token } = useAuth()
   const back = token && user ? { to: ROLE_HOME[user.role], label: 'Back to SafeTurns' } : { to: '/login', label: 'Back to sign in' }
@@ -48,6 +51,15 @@ export function LegalPage({ doc }: { doc: LegalDocId }) {
           </Link>
         </div>
         <article className="flex flex-col gap-4 rounded-card border border-line bg-surface p-6 text-[15px] leading-relaxed text-muted shadow-card md:p-10">
+          {query.isPending ? (
+            <p>Loading the {LEGAL_DOCS[doc].title}…</p>
+          ) : !d ? (
+            <p role="alert" className="text-alert-fg">
+              Could not load the {LEGAL_DOCS[doc].title}
+              {query.error instanceof ApiError ? `: ${query.error.message}` : ''}. Please try again later.
+            </p>
+          ) : (
+            <>
           <p className="text-[13px]">
             Version {d.version}
             {d.effective && <> · effective {d.effective}</>}
@@ -84,6 +96,8 @@ export function LegalPage({ doc }: { doc: LegalDocId }) {
               </p>
             )
           })}
+            </>
+          )}
         </article>
         <Link to={other.path} className="text-[13px] font-medium text-muted hover:text-ink hover:underline">
           Read the {other.title}

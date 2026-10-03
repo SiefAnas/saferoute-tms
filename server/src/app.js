@@ -23,6 +23,7 @@ const companyRoutes = require('./routes/companies');
 const monitorRoutes = require('./routes/monitors');
 const webhookRoutes = require('./routes/webhooks');
 const importRoutes = require('./routes/imports');
+const legalRoutes = require('./routes/legal');
 
 function createApp() {
   const app = express();
@@ -75,6 +76,7 @@ function createApp() {
   app.use('/monitors', monitorRoutes.admin);
   app.use('/monitor', monitorRoutes.self);
   app.use('/imports', importRoutes);
+  app.use('/legal', legalRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
 

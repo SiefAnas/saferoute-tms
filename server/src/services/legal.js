@@ -1,22 +1,24 @@
-// Terms of Use / Privacy Policy acceptance at signup (branch account-settings). The documents
-// live in client/src/legal/{terms,privacy}.md; each starts with a frontmatter block carrying its
-// `version` and `effective` date. The signup form sends the versions the person was shown, and
-// one legal_acceptances row per document is written in the same transaction as the account.
+// Terms of Use and Privacy Policy (branch account-settings). The documents live with the API in
+// server/src/legal/{terms,privacy}.md; each starts with a frontmatter block carrying its
+// `version` and `effective` date. GET /legal/:document serves them (the website renders the
+// markdown), and signup records one legal_acceptances row per document for the version the person
+// agreed to, which must be the current one.
 //
-// The server reads the same files so it can refuse an outdated version (the page was open while
-// the documents changed). If the files aren't part of the server's deployment, it can't check:
-// it then records the submitted versions as given and logs that once.
+// The files ship with the server code, so not finding them is a broken deployment: src/index.js
+// calls loadLegalDocuments() before listening and refuses to start if it throws. There is no
+// fallback that accepts whatever version a client sends.
 const fs = require('fs');
 const path = require('path');
 const { HttpError } = require('../errors');
 
 const DOCUMENTS = ['terms', 'privacy'];
-const LEGAL_DIR = process.env.LEGAL_DIR || path.resolve(__dirname, '..', '..', '..', 'client', 'src', 'legal');
+const LEGAL_DIR = process.env.LEGAL_DIR || path.resolve(__dirname, '..', 'legal');
 const VERSION_RE = /^[A-Za-z0-9._-]{1,40}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-// "---\nversion: 1.0\neffective: 2026-10-02\n---\n..." -> { version: '1.0', effective: '2026-10-02' }
+// "---\nversion: 1.0\neffective: 2026-10-02\n---\n..." -> { meta: { version, effective }, body }
 function parseFrontmatter(text) {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
   if (!m) return {};
   const out = {};
   for (const line of m[1].split(/\r?\n/)) {
@@ -26,21 +28,34 @@ function parseFrontmatter(text) {
   return out;
 }
 
-let cached;
-let warned = false;
+function readDocument(document) {
+  const file = path.join(LEGAL_DIR, `${document}.md`);
+  const text = fs.readFileSync(file, 'utf8');
+  const meta = parseFrontmatter(text);
+  if (!VERSION_RE.test(meta.version ?? '')) throw new Error(`${file}: frontmatter needs a "version" (letters, digits, . _ -)`);
+  if (!DATE_RE.test(meta.effective ?? '')) throw new Error(`${file}: frontmatter needs an "effective" date (YYYY-MM-DD)`);
+  // The website parses the frontmatter itself too, so the whole file is sent as `markdown`.
+  return { document, version: meta.version, effective: meta.effective, markdown: text };
+}
+
+let loaded = null;
+
+// Reads and checks both files once. Throws with the file and the reason; the caller decides how
+// loud to be (index.js: log and exit).
+function loadLegalDocuments() {
+  if (!loaded) loaded = Object.fromEntries(DOCUMENTS.map((d) => [d, readDocument(d)]));
+  return loaded;
+}
+
+// GET /legal/:document. Unknown names are 404, like any unknown route.
+function getLegalDocument(document) {
+  if (!DOCUMENTS.includes(document)) throw new HttpError(404, 'not found');
+  return loadLegalDocuments()[document];
+}
+
 function currentVersions() {
-  if (cached !== undefined) return cached;
-  try {
-    cached = Object.fromEntries(DOCUMENTS.map((d) => [d, parseFrontmatter(fs.readFileSync(path.join(LEGAL_DIR, `${d}.md`), 'utf8')).version]));
-    if (DOCUMENTS.some((d) => !cached[d])) throw new Error('missing version in frontmatter');
-  } catch (err) {
-    cached = null;
-    if (!warned) {
-      warned = true;
-      console.warn(`[legal] cannot read document versions from ${LEGAL_DIR} (${err.message}); recording the versions the signup form sends without checking them`);
-    }
-  }
-  return cached;
+  const docs = loadLegalDocuments();
+  return Object.fromEntries(DOCUMENTS.map((d) => [d, docs[d].version]));
 }
 
 // body.acceptLegal = { terms: '<version>', privacy: '<version>' } (the checkbox). Returns the
@@ -51,12 +66,11 @@ function assertLegalAccepted(acceptLegal) {
   }
   const current = currentVersions();
   for (const d of DOCUMENTS) {
-    if (!VERSION_RE.test(acceptLegal[d])) throw new HttpError(400, 'you must agree to the Terms of Use and the Privacy Policy');
-    if (current && acceptLegal[d] !== current[d]) {
+    if (acceptLegal[d] !== current[d]) {
       throw new HttpError(409, 'The Terms of Use or Privacy Policy changed while this page was open. Reload the page and agree again.');
     }
   }
-  return Object.fromEntries(DOCUMENTS.map((d) => [d, acceptLegal[d]]));
+  return current;
 }
 
 async function recordAcceptances(client, userId, versions, ip) {
@@ -65,4 +79,4 @@ async function recordAcceptances(client, userId, versions, ip) {
   }
 }
 
-module.exports = { DOCUMENTS, parseFrontmatter, currentVersions, assertLegalAccepted, recordAcceptances };
+module.exports = { DOCUMENTS, LEGAL_DIR, parseFrontmatter, loadLegalDocuments, getLegalDocument, currentVersions, assertLegalAccepted, recordAcceptances };

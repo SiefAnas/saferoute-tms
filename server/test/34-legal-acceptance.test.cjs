@@ -1,6 +1,7 @@
-// Terms / Privacy acceptance at signup (branch account-settings): registration is refused
-// without the checkbox, and with it two legal_acceptances rows are written (versions from the
-// markdown frontmatter in client/src/legal, plus the request IP) in the same transaction.
+// Terms / Privacy (branch account-settings): GET /legal/:document serves the server's own copy
+// (server/src/legal), the server refuses to start without it, registration is refused without the
+// checkbox, and with it two legal_acceptances rows are written (versions from that copy's
+// frontmatter, plus the request IP) in the same transaction.
 const PG_PORT = 5492;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
 process.env.JWT_SECRET = 'test-secret-34';
@@ -11,6 +12,7 @@ const path = require('node:path');
 const { createRecorder, startEmbeddedPostgres, runMigrateUp } = require('./lib/testkit.cjs');
 const createApp = require('../src/app.js');
 const pool = require('../src/db/pool.js');
+const { spawnSync } = require('node:child_process');
 const { parseFrontmatter } = require('../src/services/legal.js');
 
 const rec = createRecorder('34-legal-acceptance');
@@ -18,7 +20,7 @@ const { ok, bad, eq } = rec;
 const BASE = 'http://localhost:5993';
 const PW = 'Secret123!';
 
-const LEGAL_DIR = path.resolve(__dirname, '..', '..', 'client', 'src', 'legal');
+const LEGAL_DIR = path.resolve(__dirname, '..', 'src', 'legal');
 const fm = (doc) => parseFrontmatter(fs.readFileSync(path.join(LEGAL_DIR, `${doc}.md`), 'utf8'));
 
 async function post(p, body) {
@@ -47,6 +49,37 @@ async function main() {
         /PLACEHOLDER/.test(fs.readFileSync(path.join(LEGAL_DIR, `${doc}.md`), 'utf8')) ? ok(`${doc}.md is clearly marked PLACEHOLDER`) : bad(`${doc}.md has no PLACEHOLDER marker`);
       }
       const LEGAL = { terms: terms.version, privacy: privacy.version };
+      eq('the old client copy is gone (one source of truth)', fs.existsSync(path.resolve(__dirname, '..', '..', 'client', 'src', 'legal')), false);
+
+      console.log('--- GET /legal/:document (public) ---');
+      for (const doc of ['terms', 'privacy']) {
+        const r = await fetch(`${BASE}/legal/${doc}`);
+        const b = await r.json();
+        const file = fs.readFileSync(path.join(LEGAL_DIR, `${doc}.md`), 'utf8');
+        eq(`${doc}: 200 without a token`, r.status, 200);
+        eq(`${doc}: { document, version, effective, markdown }`, Object.keys(b).sort().join(','), 'document,effective,markdown,version');
+        eq(`${doc}: values from the file`, JSON.stringify([b.document, b.version, b.effective, b.markdown]), JSON.stringify([doc, fm(doc).version, fm(doc).effective, file]));
+      }
+      for (const bad of ['cookies', '..%2F..%2Fpackage.json', 'terms.md', 'TERMS']) {
+        eq(`GET /legal/${bad} -> 404`, (await fetch(`${BASE}/legal/${bad}`)).status, 404);
+      }
+
+      console.log('--- the server refuses to start without the files ---');
+      const boot = (env) => spawnSync(process.execPath, ['src/index.js'], {
+        cwd: path.resolve(__dirname, '..'), encoding: 'utf8', timeout: 8000,
+        env: { ...process.env, PORT: '0', ...env },
+      });
+      const missing = boot({ LEGAL_DIR: path.join(__dirname, '.tmp', 'no-such-legal-dir') });
+      eq('missing folder: exits with code 1 (does not keep running)', missing.status, 1);
+      /\[legal\] FATAL/.test(missing.stderr) && /Refusing to start/.test(missing.stderr)
+        ? ok('...and says why on stderr') : bad(`stderr: ${missing.stderr}`);
+      const brokenDir = path.join(__dirname, '.tmp', 'legal-broken');
+      fs.mkdirSync(brokenDir, { recursive: true });
+      fs.writeFileSync(path.join(brokenDir, 'terms.md'), '# no frontmatter');
+      fs.copyFileSync(path.join(LEGAL_DIR, 'privacy.md'), path.join(brokenDir, 'privacy.md'));
+      const broken = boot({ LEGAL_DIR: brokenDir });
+      eq('a file without a version: exits with code 1', broken.status, 1);
+      /terms\.md: frontmatter needs a "version"/.test(broken.stderr) ? ok('...naming the file and the problem') : bad(`stderr: ${broken.stderr}`);
 
       console.log('--- refused without the checkbox ---');
       const before = await counts();

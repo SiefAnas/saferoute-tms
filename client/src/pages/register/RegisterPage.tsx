@@ -1,4 +1,4 @@
-import { LEGAL_ACCEPTANCE, LEGAL_DOCS } from '../../lib/legal'
+import { LEGAL_DOCS, useLegalDoc } from '../../lib/legal'
 import { Copyright } from '../../components/Copyright'
 import { Logo } from '../../components/Logo'
 import { useEffect, useState, type FormEvent } from 'react'
@@ -67,6 +67,12 @@ export function RegisterPage() {
   // Required "I agree to the Terms of Use and Privacy Policy" (account-settings). The server
   // records one acceptance per document with the versions sent here.
   const [agreed, setAgreed] = useState(false)
+  // The versions agreed to are the ones the API serves right now (GET /legal/:document).
+  const termsDoc = useLegalDoc('terms')
+  const privacyDoc = useLegalDoc('privacy')
+  const legalVersions =
+    termsDoc.data && privacyDoc.data ? { terms: termsDoc.data.version, privacy: privacyDoc.data.version } : null
+  const legalError = termsDoc.isError || privacyDoc.isError
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -102,7 +108,7 @@ export function RegisterPage() {
         email,
         password,
         ...(claiming ? { claimId } : { orgName, address, zip, state }),
-        ...(agreed ? { acceptLegal: LEGAL_ACCEPTANCE } : {}),
+        ...(agreed && legalVersions ? { acceptLegal: legalVersions } : {}),
       }),
     onSuccess: async (res) => {
       if (res.mode === 'created') {
@@ -151,6 +157,10 @@ export function RegisterPage() {
     }
     if (!agreed) {
       setError('Please agree to the Terms of Use and Privacy Policy.')
+      return
+    }
+    if (!legalVersions) {
+      setError('The Terms of Use and Privacy Policy could not be loaded. Reload the page and try again.')
       return
     }
     setStage('creating')
@@ -372,6 +382,11 @@ export function RegisterPage() {
               .
             </span>
           </label>
+          {legalError && (
+            <p role="alert" className="text-label-md text-error">
+              Could not load the Terms of Use and Privacy Policy. Reload the page to try again.
+            </p>
+          )}
 
           {error && (
             <p role="alert" className="rounded-lg bg-error-container px-4 py-2 text-body-md text-on-error-container">

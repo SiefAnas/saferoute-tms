@@ -1,6 +1,5 @@
-// Plain Node test, same style as the others: the tiny Markdown reader behind /privacy and /terms,
-// and the real legal files' frontmatter (the versions the signup form sends to the server).
-import { readFileSync } from 'node:fs'
+// Plain Node test, same style as the others: the tiny Markdown reader behind /privacy and /terms.
+// The documents themselves live on the server (server/src/legal); suite 34 checks them there.
 import { parseInline, parseMarkdown, splitFrontmatter } from '../src/lib/markdown.ts'
 
 let pass = 0
@@ -29,14 +28,6 @@ console.log('--- inline ---')
 eq('bold + link', parseInline('a **b** [c](/terms) d'), [{ text: 'a ' }, { text: 'b', bold: true }, { text: ' ' }, { text: 'c', href: '/terms' }, { text: ' d' }])
 eq('javascript: links become plain text', parseInline('[x](javascript:alert(1))'), [{ text: 'x' }, { text: ')' }])
 eq('raw HTML stays text', parseInline('<b>x</b>'), [{ text: '<b>x</b>' }])
-
-console.log('--- the real legal files ---')
-for (const doc of ['terms', 'privacy']) {
-  const { meta, body } = splitFrontmatter(readFileSync(new URL(`../src/legal/${doc}.md`, import.meta.url), 'utf8'))
-  eq(`${doc}.md has a version`, Boolean(meta.version), true)
-  eq(`${doc}.md effective is a date`, /^\d{4}-\d{2}-\d{2}$/.test(meta.effective ?? ''), true)
-  eq(`${doc}.md is marked PLACEHOLDER`, body.includes('PLACEHOLDER'), true)
-}
 
 console.log(`\n==== markdown: ${pass} passed, ${fail} failed ====`)
 if (fail) process.exit(1)

@@ -1,4 +1,4 @@
-// Just enough Markdown for the legal pages (client/src/legal/*.md): a frontmatter block
+// Just enough Markdown for the legal pages (served by GET /legal/:document): a frontmatter block
 // (`key: value` lines between `---`), # / ## / ### headings, paragraphs, `- ` lists, `> ` quotes,
 // **bold** and [links](url). Parsed into plain blocks that React renders as elements: no HTML
 // string is ever injected, so the files can't smuggle markup into the page. No dependency added.

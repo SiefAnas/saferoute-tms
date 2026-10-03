@@ -34,7 +34,7 @@ const BASE = process.env.API_BASE || 'http://localhost:4000'
 }
 
 const PW = 'Secret123!'
-// The Terms / Privacy checkbox signup now requires: the current versions from client/src/legal.
+// The Terms / Privacy checkbox signup now requires: the current versions from server/src/legal.
 const { currentVersions } = (await import('node:module')).createRequire(import.meta.url)('../src/services/legal.js')
 const LEGAL = currentVersions()
 const stamp = Date.now().toString(36)

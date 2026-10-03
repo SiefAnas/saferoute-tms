@@ -131,7 +131,7 @@ async function main() {
       nowOk.status === 200 ? ok('after the change, data route allowed (200)') : bad(`still blocked: ${nowOk.status}`);
 
       console.log('\n--- Fresh signup (no claim) -> operational immediately ---');
-      // acceptLegal: the Terms / Privacy checkbox (account-settings), versions from client/src/legal.
+      // acceptLegal: the Terms / Privacy checkbox (account-settings), versions from server/src/legal.
       const freshBase = { orgName: '3 Bees Transport', address: '1 Main St', zip: '02139', state: 'MA', fullName: 'Owner', password: PW, acceptLegal: LEGAL };
       const fresh = await post('/signup/company', { ...freshBase, email: 'owner@3bees.com' });
       const freshBody = await j(fresh);

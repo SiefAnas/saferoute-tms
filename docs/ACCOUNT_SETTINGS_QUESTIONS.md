@@ -66,11 +66,9 @@ Branch `account-settings`.
 
 ## Legal pages + acceptance (task 5)
 
-18. **Does the API service on Render have `client/` on disk?** The server reads the versions from
-   `client/src/legal/*.md` to refuse an outdated acceptance (409). I don't know the Render service's
-   Root Directory. If `client/` isn't there, the server can't check: it logs one warning and
-   records the versions the form sent (still validated as short version strings). Set `LEGAL_DIR`
-   to point elsewhere if needed. Please check before deploying.
+18. ~~Does the API service on Render have `client/` on disk?~~ **Resolved in task 7**: the
+   documents moved to `server/src/legal/`, the website fetches them from `GET /legal/:document`,
+   and the API refuses to start without them. No fallback any more.
 19. **No Markdown library.** A ~70-line parser (`client/src/lib/markdown.ts`) handles what the
    placeholder files use (headings, paragraphs, lists, quotes, bold, links) and renders React
    elements, never HTML. If the real legal text needs tables or numbered lists, either extend it
@@ -151,4 +149,17 @@ Decisions needed first (the retention rules):
   the 30 days?
 - **Emails already sent** (notifications containing student names) can't be recalled.
 - **Audit.** Record that the purge ran (company id, date, counts) somewhere that survives it.
+
+## Legal documents on the server (task 7)
+
+32. **"Fail loudly" = refuse to start.** If `server/src/legal/terms.md` or `privacy.md` is missing
+   or its frontmatter has no `version` / `effective`, `src/index.js` logs `[legal] FATAL …` naming
+   the file and the problem and exits with code 1 (same idea as `config.js` refusing to boot
+   without `JWT_SECRET` in production). On Render that shows as a failed deploy, and the previous
+   version keeps serving. If you'd rather the API start and only signup / `GET /legal` fail (503),
+   say so; it's a small change.
+33. **`markdown` includes the frontmatter block.** You asked for `{ document, version, effective,
+   markdown }`; I send the whole file so the text is exactly what's on disk. The website strips the
+   frontmatter before rendering. Easy to strip on the server instead.
+34. **Mobile apps** don't show the legal pages yet; they can use the same endpoint.
 

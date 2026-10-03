@@ -70,7 +70,7 @@ itself (`GET /students/:id`) is then `404`.
 | Production base URL | `https://saferoute-tms-api.onrender.com` (no `/api` prefix; the web client adds `/api` only for its local Vite proxy) |
 | Local dev | `http://localhost:4000` |
 | Format | JSON in and out. Send `Content-Type: application/json` on requests with a body. |
-| Auth | `Authorization: Bearer <token>` on every endpoint except `/health`, `/auth/login`, `/auth/verify-email`, `/auth/resend-verification`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/confirm-email-change`, `/signup/*` |
+| Auth | `Authorization: Bearer <token>` on every endpoint except `/health`, `/auth/login`, `/auth/verify-email`, `/auth/resend-verification`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/confirm-email-change`, `DELETE /companies/me/closure`, `/legal/*`, `/signup/*` |
 | Health check | `GET /health` → `200 {"status":"ok"}` |
 
 ### Errors
@@ -227,9 +227,13 @@ token, or weak password. `429` rate limited.
 ### How accounts are created
 - Company admins and school admins sign up themselves (`POST /signup/company|school`).
   The body must include `acceptLegal: { "terms": "<version>", "privacy": "<version>" }`, the
-  versions of `client/src/legal/terms.md` / `privacy.md` the person agreed to (frontmatter
-  `version`). Without it `400`; an outdated version `409` (reload and agree again). One
-  `legal_acceptances` row per document is written with the request IP (branch `account-settings`).
+  versions the person agreed to (from `GET /legal/terms` and `GET /legal/privacy`). Without it
+  `400`; anything but the current version `409` (reload and agree again). One `legal_acceptances`
+  row per document is written with the request IP (branch `account-settings`).
+- `GET /legal/terms`, `GET /legal/privacy` (public) → `{ document, version, effective, markdown }`
+  (`markdown` is the whole file, frontmatter included). Other names `404`. The files live in
+  `server/src/legal/`; the API refuses to start if either is missing or has no `version` /
+  `effective` in its frontmatter.
 - **Drivers, monitors and parents are created by a company admin, school staff by a school admin**
   (`POST /users`). The admin doesn't choose a password: the response has a
   `temporary_password` (shown once, e.g. `Kp7x-Qm4r-Tz9w`) to hand over, and the account has
