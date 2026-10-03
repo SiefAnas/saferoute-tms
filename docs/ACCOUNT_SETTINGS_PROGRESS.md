@@ -30,8 +30,8 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 | 7 | Legal documents on the server | done | `46c843c` |
 | 8 | Remove the extra page (/company/account) | done | `be3c7fc` |
 | 9 | Data deletion request button | done | `a9dbc2f` |
-| 10 | license_number investigation (report only) | done | see log |
-| - | Report addendum | todo | |
+| 10 | license_number investigation (report only) | done | `d440769` |
+| - | Report addendum | done | see log |
 
 ## Log
 - **Task 1 done.** `server/migrations/1752624000030_account-settings.js`. Tested on the local
@@ -145,3 +145,4 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
   Conclusion: no feature depends on the value; dropping it needs a code-first release, then the
   migration. Found (from reading, not reproduced) a pre-existing bulk-import update bug: fields a
   type doesn't have are written as NULL (staff `address`, and `license_number` for non-drivers).
+- **Report addendum written.** Full server run: all 35 suites pass in one go. Client build/tests pass. Nothing pushed.

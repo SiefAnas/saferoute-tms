@@ -150,3 +150,87 @@ issue in PENDING.md). I stopped the orphaned `io_worker` processes left by this 
 runs (not the dev DB, not other clones) and re-ran those four on their own: 03 (49), 20 (49), 33
 (24), 34 (22), all passed. New suites: 32 own account (70), 33 usage/billing (24), 34 legal (22),
 35 closure (49).
+
+---
+
+# Addendum: tasks 7–10 (2026-10-03)
+
+Same branch and worktree, still **not merged, not pushed**, no upstream. First thing this session:
+`server/.env` DATABASE_URL host `localhost:5499` (db `saferoute_dev`, no sslmode), nothing set in
+the shell. Local embedded Postgres only; no Neon, no Render.
+
+| # | Task | Commit |
+|---|---|---|
+| 7 | Legal documents on the server | `46c843c` |
+| 8 | Remove the extra page (`/company/account`) | `be3c7fc` |
+| 9 | Data deletion request button (migration 031) | `a9dbc2f` |
+| 10 | `license_number` investigation (report only) | `d440769` |
+
+## What I built / changed
+
+### 7. Legal documents on the server
+- `terms.md` / `privacy.md` moved (git mv) to `server/src/legal/`; `client/src/legal/` deleted.
+- New public `GET /legal/:document` (`terms` | `privacy`) → `{ document, version, effective,
+  markdown }`; anything else 404.
+- `services/legal.js` rewritten: one source, both files validated (`version`, `effective`), no
+  fallback. `src/index.js` loads them before listening; if it can't, it logs `[legal] FATAL …`
+  (file + reason) and exits with code 1.
+- Signup acceptance unchanged in behavior, now checked against the server's copy.
+- Client: `useLegalDoc(id)` fetches and parses; `/terms`, `/privacy` and the register checkbox use
+  it (register sends the versions it fetched).
+- Tests: suite 34 reads the new path, checks the endpoint, and boots `index.js` with a missing and
+  a broken `LEGAL_DIR` (exit 1, message on stderr). Client markdown test no longer reads files.
+
+### 8. One page fewer
+- Close account is a `CloseAccountSection` at the bottom of `/company/profile`, company_admin only,
+  outside the form, behind a top rule, in its own red-bordered card with a red "Danger zone" title.
+- `/company/account` route is a redirect to `/company/profile`; the Settings nav item is gone. No
+  server or test change was needed (nothing referenced the route).
+
+### 9. Data deletion request
+- Migration 031 `deletion_requests` (as specified; reason ≤ 500, status in `open`/`closed`, one open
+  per user via a partial unique index, no cascades). Up / down / up tested on the local DB.
+- `GET` / `POST /users/me/deletion-request` (driver, monitor, parent; 403 for others; verify rate
+  limiter). Emails SafeTurns support and every active admin of the person's company. Nothing is
+  deleted, approved or denied.
+- New `SUPPORT_EMAIL` server setting (in `.env.example`). If unset, admins are still emailed and
+  each request logs `SUPPORT_EMAIL is not set` with its id. **Set it on Render before shipping.**
+- My account: "Request my data be deleted" section with explanation and an optional 500-character
+  reason; shows the open request instead of the form while one exists.
+- Suite 36: 28 checks (happy path, duplicate, three at once, closed-then-again, limits, roles, no
+  SUPPORT_EMAIL).
+
+### 10. `license_number`
+`docs/LICENSE_NUMBER_USAGE.md`. Nothing depends on the value. It is stored, shown, edited,
+imported and exported, and that's all. Dropping it needs two releases: first remove the code that
+writes it (otherwise `POST /users` and imports fail), then the migration. Nothing was changed.
+
+## Test results
+- Server `npm test`: **all 35 suites pass in a single full run** (36-deletion-request 28,
+  34-legal 37, 01-schema 20 with 31 migrations, and every older suite).
+- Client: `tsc -b`, `vite build`, `npm test` (payrollCycle, localDate, weekdays, money, markdown)
+  pass; no new lint warnings.
+- Live on the local stack (API 4100, Vite 5174): API logs the loaded legal versions; `/privacy` and
+  `/register` fetch from `/legal/*`; `/company/account` lands on Company profile with the danger
+  zone below the form (modal opens; dismissed without submitting); a seeded parent's deletion
+  request was sent, the admin email appeared in the dev mail log, the missing SUPPORT_EMAIL was
+  logged, and the "Request sent" state survived a reload. That request is left open on the local DB.
+
+## Not done / open
+- Questions 32–42 in `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. The ones that need you: the
+  `SUPPORT_EMAIL` address (35), school staff deletion requests (36), "refuse to start" vs.
+  "fail only the legal endpoints" (32), and the bulk-import NULL bug (42).
+- No deletion-request inbox, no handling, no confirmation email to the requester (all as asked or
+  noted).
+
+## Surprises
+1. **Someone else's API is now running on port 4000** (`node --watch src/index.js`, started
+   2026-10-03 12:22, not from this session). I don't know which checkout or database it uses, so I
+   left it alone. My Vite from yesterday proxied `/api` to 4000, so I stopped it before using the
+   browser, and ran my API on 4100 and Vite on 5174 with `VITE_API_BASE_URL` pointing straight at
+   it. My curl never reached the other server (I noticed the port clash before sending it).
+2. **`Card` overrides a border passed in `className`.** It sets `border-card-line` itself, so the
+   red danger border only applies with `!border-…`.
+3. **A pre-existing bulk-import bug** turned up during the license-number search: updating an
+   existing record by import writes NULL into fields that import type doesn't have (staff
+   `address`; non-driver `license_number`). Found by reading the code, not reproduced, not fixed.
