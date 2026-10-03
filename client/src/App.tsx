@@ -30,7 +30,6 @@ const AssignmentsPage = lazy(() => import('./pages/company/AssignmentsPage').the
 const PayrollPage = lazy(() => import('./pages/company/PayrollPage').then((m) => ({ default: m.PayrollPage })))
 const CompanyStudentsPage = lazy(() => import('./pages/company/StudentsPage').then((m) => ({ default: m.CompanyStudentsPage })))
 const CompanyProfilePage = lazy(() => import('./pages/company/CompanyProfilePage').then((m) => ({ default: m.CompanyProfilePage })))
-const CompanyAccountPage = lazy(() => import('./pages/company/CompanyAccountPage').then((m) => ({ default: m.CompanyAccountPage })))
 const BillingPage = lazy(() => import('./pages/company/BillingPage').then((m) => ({ default: m.BillingPage })))
 const StudentsPage = lazy(() => import('./pages/school-admin/StudentsPage').then((m) => ({ default: m.StudentsPage })))
 const StaffAccessPage = lazy(() => import('./pages/school-admin/StaffAccessPage').then((m) => ({ default: m.StaffAccessPage })))
@@ -69,7 +68,6 @@ const COMPANY_NAV: NavGroup[] = [
       { to: '/company/import', label: 'Import', icon: 'upload_file' },
       { to: '/company/profile', label: 'Company profile', icon: 'apartment' },
       { to: '/company/billing', label: 'Billing', icon: 'receipt_long' },
-      { to: '/company/account', label: 'Company account', icon: 'domain' },
     ],
   },
 ]
@@ -171,7 +169,8 @@ function App() {
             <Route path="/company/profile" element={<CompanyProfilePage />} />
             <Route path="/company/import" element={<ImportPage />} />
             <Route path="/company/billing" element={<BillingPage />} />
-            <Route path="/company/account" element={<CompanyAccountPage />} />
+            {/* The danger zone moved to the bottom of Company profile; old links land there. */}
+            <Route path="/company/account" element={<Navigate to="/company/profile" replace />} />
           </Route>
         </Route>
 

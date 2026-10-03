@@ -27,8 +27,8 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 | 5 | Legal pages + acceptance | done | `874c5e3` |
 | 6 | Closure, request side only | done | `bbffd94` |
 | - | Final report | done | `752d699` |
-| 7 | Legal documents on the server | done | see log |
-| 8 | Remove the extra page (/company/account) | todo | |
+| 7 | Legal documents on the server | done | `46c843c` |
+| 8 | Remove the extra page (/company/account) | done | see log |
 | 9 | Data deletion request button | todo | |
 | 10 | license_number investigation (report only) | todo | |
 | - | Report addendum | todo | |
@@ -119,3 +119,12 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
   Client markdown test no longer reads the files (12 passed). Checked live: API log
   `[legal] terms 0.1-placeholder, privacy 0.1-placeholder`, `/privacy` and `/register` fetch from
   `localhost:4100/legal/*`.
+- **Task 8 done.** `CompanyAccountPage.tsx` renamed to `pages/company/CloseAccountSection.tsx`
+  (the danger zone + the unchanged Close account modal). It renders only for `company_admin`, as
+  its own `<section>` below the profile form: top rule, 24px gap, red-bordered card, red "Danger
+  zone" heading, outside the `<form>`. `CompanyProfilePage` renders it after the ProfileCard. The
+  `/company/account` route is now `<Navigate to="/company/profile" replace />`; the Settings nav
+  item is gone. No server change; no test referenced the route. Checked live (5174 / 4100):
+  `/company/account` lands on `/company/profile`, section below the form, red border computes
+  (needed `!border-alert-fg/40` because Card sets `border-card-line`), modal opens; dismissed
+  without submitting.

@@ -3,11 +3,9 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
 import { setLoginNotice, useAuth } from '../../lib/auth'
 import { Button } from '../../components/Button'
-import { Card, CardHeader, CardTitle } from '../../components/Card'
+import { Card, CardHeader } from '../../components/Card'
 import { Field, Input } from '../../components/Input'
 import { Modal } from '../../components/Modal'
-import { PageIntro } from '../../components/Records'
-import { PageTopBar } from '../../layouts/TopBar'
 import type { Company, CompanyUsage } from '../../types/api'
 
 const COUNTS: { key: keyof CompanyUsage; one: string; many: string }[] = [
@@ -18,18 +16,21 @@ const COUNTS: { key: keyof CompanyUsage; one: string; many: string }[] = [
   { key: 'schools', one: 'school', many: 'schools' },
 ]
 
-// Company account (company_admin, Settings): the danger zone. Closing is a request: everyone is
-// signed out now and the data is deleted after 30 days unless the admin uses the emailed undo
-// link (server/src/services/closure.js). The org's profile stays on Company profile.
-export function CompanyAccountPage() {
+// The danger zone at the bottom of Company profile (company_admin only). Closing is a request:
+// everyone is signed out now and the data is deleted after 30 days unless the admin uses the
+// emailed undo link (server/src/services/closure.js). Separated from the profile form above by a
+// rule and its own red-bordered card, so it never reads as one more profile field.
+export function CloseAccountSection() {
+  const { user } = useAuth()
   const [open, setOpen] = useState(false)
+  if (user?.role !== 'company_admin') return null
   return (
-    <div className="flex flex-col gap-5">
-      <PageTopBar title="Company account" />
-      <PageIntro>Settings that affect the whole company account.</PageIntro>
-      <Card className="max-w-[640px] border border-alert-fg/40">
+    <section aria-labelledby="danger-zone" className="mt-6 flex max-w-[640px] flex-col gap-3 border-t border-line pt-6">
+      <Card className="!border-alert-fg/40">
         <CardHeader>
-          <CardTitle>Danger zone</CardTitle>
+          <h2 id="danger-zone" className="text-card-title text-alert-fg">
+            Danger zone
+          </h2>
         </CardHeader>
         <div className="flex flex-col gap-4 px-6 pb-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-1 text-[14px]">
@@ -42,7 +43,7 @@ export function CompanyAccountPage() {
         </div>
       </Card>
       {open && <CloseAccountModal onClose={() => setOpen(false)} />}
-    </div>
+    </section>
   )
 }
 

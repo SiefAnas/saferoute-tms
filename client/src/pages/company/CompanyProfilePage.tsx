@@ -7,10 +7,12 @@ import { ProfileCard } from '../../components/ProfileCard'
 import { PageIntro } from '../../components/Records'
 import { useToast } from '../../components/Toast'
 import { PageTopBar } from '../../layouts/TopBar'
+import { CloseAccountSection } from './CloseAccountSection'
 import type { Company } from '../../types/api'
 
 // Company Admin's own org profile (design 5a profile page): name, phone, email, street, city,
-// state, zip. Email and city are optional.
+// state, zip. Email and city are optional. The account's danger zone (Close account) sits below
+// the form, company_admin only.
 export function CompanyProfilePage() {
   const queryClient = useQueryClient()
   const toast = useToast()
@@ -92,6 +94,7 @@ export function CompanyProfilePage() {
           </Field>
         </ProfileCard>
       )}
+      <CloseAccountSection />
       {toast.node}
     </div>
   )

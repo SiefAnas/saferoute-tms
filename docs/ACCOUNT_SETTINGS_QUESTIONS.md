@@ -87,8 +87,9 @@ Branch `account-settings`.
 
 ## Closure, request side (task 6)
 
-24. **`/company/account` is a new page** (Settings > "Company account"), holding only the danger
-   zone. No such route existed; the company's profile is `/company/profile`, which you asked to
+24. ~~**`/company/account` is a new page**~~ **Resolved in task 8**: the danger zone is now at the
+   bottom of `/company/profile`, and `/company/account` redirects there. (Original note: a new page
+   holding only the danger zone.) No such route existed; the company's profile is `/company/profile`, which you asked to
    keep as it is. If you meant the danger zone to sit on the profile page, it's a move of one card.
 25. **"Everyone is signed out now" is real, also after an undo.** The request bumps
    `password_changed_at` for every user of the company, so tokens issued before it never work
