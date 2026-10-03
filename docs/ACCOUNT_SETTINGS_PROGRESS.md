@@ -29,8 +29,8 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
 | - | Final report | done | `752d699` |
 | 7 | Legal documents on the server | done | `46c843c` |
 | 8 | Remove the extra page (/company/account) | done | `be3c7fc` |
-| 9 | Data deletion request button | done | see log |
-| 10 | license_number investigation (report only) | todo | |
+| 9 | Data deletion request button | done | `a9dbc2f` |
+| 10 | license_number investigation (report only) | done | see log |
 | - | Report addendum | todo | |
 
 ## Log
@@ -139,3 +139,9 @@ Open questions: `docs/ACCOUNT_SETTINGS_QUESTIONS.md`. Final write-up:
   closed-then-again, reason limits, roles, no SUPPORT_EMAIL). 01 and 32 pass. Checked live as
   `parent1@company1.com`: request sent, admin emailed (dev mail log), missing SUPPORT_EMAIL logged,
   state persists after reload. That local request is left open on the local DB.
+- **Task 10 done (report only, no code change).** `docs/LICENSE_NUMBER_USAGE.md`: every read,
+  write and display in server, client, mobile, imports, exports, tests, scripts and docs, plus
+  whole-row reads checked for leaks (none). No remote branch has more references than `main`.
+  Conclusion: no feature depends on the value; dropping it needs a code-first release, then the
+  migration. Found (from reading, not reproduced) a pre-existing bulk-import update bug: fields a
+  type doesn't have are written as NULL (staff `address`, and `license_number` for non-drivers).

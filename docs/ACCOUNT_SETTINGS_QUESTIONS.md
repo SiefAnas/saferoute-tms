@@ -185,3 +185,13 @@ Decisions needed first (the retention rules):
    other companies' admins are not emailed). The email names the person, their role and email, the
    company, the reason and the request id; it carries no student data.
 
+## license_number (task 10)
+
+41. **Is there real license data in production?** Not checked (no Neon in this task). See
+   `docs/LICENSE_NUMBER_USAGE.md` for what a drop needs (two releases) and the questions there.
+42. **Bulk-import update bug** (pre-existing, found while reading): updating an existing staff
+   member by import sets their `address` to NULL, and monitors / parents / staff get
+   `license_number` NULL, because fields their import type doesn't have are passed as `undefined`.
+   Not fixed (task 10 was report only). Small fix in `bulkImport.js` `updateFields`: skip
+   `undefined` as well as `''`. Want it on this branch or separately?
+
