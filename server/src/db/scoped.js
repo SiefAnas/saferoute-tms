@@ -44,14 +44,17 @@ const TABLE_SCOPE = {
 
 // "This assignment has not ended": running today or starting later. The one SQL definition of
 // the driver access window (see driverScope in middleware/authorize.js); `alias` is the
-// assignments table alias in the calling query, or '' for an unaliased one.
-function assignmentNotEndedSql(alias = '') {
+// assignments table alias in the calling query, or '' for an unaliased one. `day` is the SQL
+// expression for "today": the company's business date passed as a parameter (e.g. '$3::date'),
+// never CURRENT_DATE, so the database session timezone plays no part (branch company-timezone).
+function assignmentNotEndedSql(alias, day) {
+  if (!day) throw new Error('assignmentNotEndedSql needs the business date (e.g. "$3::date")');
   const p = alias ? `${alias}.` : '';
-  return `(${p}end_date IS NULL OR ${p}end_date >= CURRENT_DATE)`;
+  return `(${p}end_date IS NULL OR ${p}end_date >= ${day})`;
 }
 
-// "This assignment runs on that weekday": `day` is a SQL date expression (CURRENT_DATE, a
-// generated week day, a bound $n::date). assignments.days_of_week holds ISO weekdays
+// "This assignment runs on that weekday": `day` is a SQL date expression (the business date as a
+// bound $n::date, or a generated week day). EXTRACT(ISODOW) on a date involves no timezone. assignments.days_of_week holds ISO weekdays
 // (1 = Monday ... 7 = Sunday), the same numbering as EXTRACT(ISODOW). The one SQL definition,
 // used wherever a run on a given day matters (schedule, trips, payroll, parent skips).
 function assignmentRunsOnSql(alias, day) {
@@ -84,8 +87,9 @@ function createScopedDb(pool, tenant, actor) {
   // ownerIn implements a whitelisted subquery sub-scope, e.g. school_staff limited to their
   // granted students: student_id IN (SELECT student_id FROM staff_student_access WHERE
   // staff_user_id = $me). All identifiers are validated; the match value is parameterized.
-  // ownerIn.notEnded (assignments only) adds the assignment-not-ended window to the subquery,
-  // for the driver scope: rows tied to the driver's own current or future assignments.
+  // ownerIn.notEnded (assignments only) is the business date ('YYYY-MM-DD'); it adds the
+  // assignment-not-ended-as-of-that-date window to the subquery, for the driver scope: rows tied to
+  // the driver's own current or future assignments.
   const buildWhere = (table, { where = {}, owner = null, ownerIn = null } = {}) => {
     const col = scopeColumn(table, tenant.type);
     const clauses = [`${ident(col)} = $1`];
@@ -102,7 +106,9 @@ function createScopedDb(pool, tenant, actor) {
       }
       if (ownerIn.notEnded) {
         if (ownerIn.table !== 'assignments') throw new ScopeError('notEnded applies to assignments only');
-        subClauses.push(assignmentNotEndedSql());
+        if (typeof ownerIn.notEnded !== 'string') throw new ScopeError('notEnded must be the business date (YYYY-MM-DD)');
+        values.push(ownerIn.notEnded);
+        subClauses.push(assignmentNotEndedSql('', `$${values.length}::date`));
       }
       clauses.push(
         `${ident(ownerIn.column)} IN (SELECT ${ident(ownerIn.refColumn)} FROM ${ident(ownerIn.table)} WHERE ${subClauses.join(' AND ')})`

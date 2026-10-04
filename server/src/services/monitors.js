@@ -7,6 +7,7 @@
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
 const { assignmentNotEndedSql, assignmentRunsOnSql } = require('../db/scoped');
+const { dayRange } = require('../time/businessDate');
 
 const SHIFTS = ['morning', 'afternoon', 'both'];
 
@@ -125,14 +126,14 @@ async function monitorHome(req) {
   if (assignment) {
     const { rows: vans } = await pool.query(
       `SELECT v.id, v.number, v.license_plate, v.brand, v.model, v.color,
-              bool_or(${assignmentRunsOnSql('a', 'CURRENT_DATE')} AND a.start_date <= CURRENT_DATE) AS today,
+              bool_or(${assignmentRunsOnSql('a', '$3::date')} AND a.start_date <= $3::date) AS today,
               COUNT(*)::int AS runs
          FROM assignments a JOIN vans v ON v.id = a.van_id AND v.company_id = a.company_id
-        WHERE a.driver_user_id = $1 AND a.company_id = $2 AND ${assignmentNotEndedSql('a')}
+        WHERE a.driver_user_id = $1 AND a.company_id = $2 AND ${assignmentNotEndedSql('a', '$3::date')}
         GROUP BY v.id
         ORDER BY today DESC, runs DESC
         LIMIT 1`,
-      [assignment.driver_user_id, tenantId]
+      [assignment.driver_user_id, tenantId, req.businessDate]
     );
     if (vans[0]) {
       const { today, runs, ...rest } = vans[0];
@@ -140,6 +141,8 @@ async function monitorHome(req) {
     }
   }
 
+  // "Their shifts today": check-ins between the company's local midnight and the next one.
+  const today = dayRange(req.businessDate, req.businessNow.timeZone);
   const [{ rows: open }, { rows: todays }] = await Promise.all([
     pool.query(
       `SELECT id, shift_period, check_in_at FROM sessions
@@ -149,9 +152,9 @@ async function monitorHome(req) {
     ),
     pool.query(
       `SELECT id, shift_period, check_in_at, check_out_at, duration_minutes FROM sessions
-        WHERE user_id = $1 AND company_id = $2 AND check_in_at::date = CURRENT_DATE
+        WHERE user_id = $1 AND company_id = $2 AND check_in_at >= $3 AND check_in_at < $4
         ORDER BY check_in_at`,
-      [userId, tenantId]
+      [userId, tenantId, today.start, today.end]
     ),
   ]);
 

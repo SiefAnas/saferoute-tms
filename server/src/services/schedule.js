@@ -8,6 +8,7 @@ const { notifyCompanyAndSchoolAdmins } = require('./notifications');
 const { assignmentNotEndedSql, assignmentRunsOnSql } = require('../db/scoped');
 const { routeJoinsSql, ROUTE_COLUMNS, route } = require('./stops');
 const { driverScope } = require('../middleware/authorize');
+const { addDays } = require('../time/businessDate');
 
 // Raw pool query (not req.db): "active today" is a date-range condition req.db's
 // equality-only `where` can't express — same precedent as payroll.js's summary() and
@@ -23,7 +24,7 @@ const { driverScope } = require('../middleware/authorize');
 // afternoon outcomes.
 //
 // The item columns are shared with getWeekSchedule: `day` is the SQL date expression the item
-// is for (CURRENT_DATE here, each generated day of the week there).
+// is for (the company's business date here, each day of the requested week there).
 function scheduleItemColumns(day) {
   return `a.id AS assignment_id, a.shift_period, a.pickup_time, a.dropoff_time,
             st.id AS student_id, st.full_name AS student_name, st.grade,
@@ -41,22 +42,25 @@ function scheduleItemColumns(day) {
                      AND pns.no_show_date = ${day} AND pns.shift_period = 'afternoon') AS no_show_afternoon`;
 }
 
+// "Today" is the company's business date (req.businessDate, its own timezone), passed in as $3;
+// nothing here depends on the database session timezone (branch company-timezone).
 async function getTodaySchedule(req) {
+  const today = '$3::date';
   const { rows } = await pool.query(
-    `SELECT ${scheduleItemColumns('CURRENT_DATE')}, ${ROUTE_COLUMNS}
+    `SELECT ${scheduleItemColumns(today)}, ${ROUTE_COLUMNS}
        FROM assignments a
        JOIN students st ON st.id = a.student_id
        JOIN schools sc ON sc.id = st.school_id
        LEFT JOIN assignment_schedule_overrides o
-              ON o.assignment_id = a.id AND o.override_date = CURRENT_DATE
-       ${routeJoinsSql('CURRENT_DATE')}
+              ON o.assignment_id = a.id AND o.override_date = ${today}
+       ${routeJoinsSql(today)}
       WHERE a.driver_user_id = $1
         AND a.company_id = $2
-        AND a.start_date <= CURRENT_DATE
-        AND ${assignmentNotEndedSql('a')}
-        AND ${assignmentRunsOnSql('a', 'CURRENT_DATE')}
+        AND a.start_date <= ${today}
+        AND ${assignmentNotEndedSql('a', today)}
+        AND ${assignmentRunsOnSql('a', today)}
       ORDER BY st.full_name`,
-    [req.auth.userId, req.auth.tenantId]
+    [req.auth.userId, req.auth.tenantId, req.businessDate]
   );
   return rows.map(toScheduleItem);
 }
@@ -97,32 +101,32 @@ function assertCalendarDate(value, field) {
 // (same item shape, that day's override, parent skips and no-shows). An assignment is on a day
 // when start_date <= day <= end_date AND the day is one of its days_of_week (Monday to Friday
 // unless the office picked other days); a 'both' assignment is on both runs. Same driver scope as
-// everything else: only the driver's own assignments that have not ended as of today, so a past
-// week never brings back an ended assignment's students. Days are generated in SQL and returned
-// as ::text, never through a JS Date.
+// everything else: only the driver's own assignments that have not ended as of the company's
+// today, so a past week never brings back an ended assignment's students. The seven days are plain
+// calendar arithmetic on 'YYYY-MM-DD' strings (addDays), passed in as a date[]: no timestamps, so
+// no timezone or DST change can shift them (generate_series with an interval ran on timestamps in
+// the session zone).
 async function getWeekSchedule(req, start) {
   assertCalendarDate(start, 'start');
-  const { rows: dayRows } = await pool.query(
-    `SELECT g::date::text AS date FROM generate_series($1::date, $1::date + 6, interval '1 day') AS g ORDER BY g`,
-    [start]
-  );
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  const dayRows = weekDays.map((date) => ({ date }));
   const { rows } = await pool.query(
     `SELECT d.day::text AS date, ${scheduleItemColumns('d.day')}, ${ROUTE_COLUMNS}
-       FROM (SELECT g::date AS day FROM generate_series($3::date, $3::date + 6, interval '1 day') AS g) d
+       FROM unnest($3::date[]) AS d(day)
        JOIN assignments a
          ON a.driver_user_id = $1
         AND a.company_id = $2
         AND a.start_date <= d.day
         AND (a.end_date IS NULL OR a.end_date >= d.day)
         AND ${assignmentRunsOnSql('a', 'd.day')}
-        AND ${assignmentNotEndedSql('a')}
+        AND ${assignmentNotEndedSql('a', '$4::date')}
        JOIN students st ON st.id = a.student_id
        JOIN schools sc ON sc.id = st.school_id
        LEFT JOIN assignment_schedule_overrides o
               ON o.assignment_id = a.id AND o.override_date = d.day
        ${routeJoinsSql('d.day')}
       ORDER BY d.day, st.full_name`,
-    [req.auth.userId, req.auth.tenantId, start]
+    [req.auth.userId, req.auth.tenantId, weekDays, req.businessDate]
   );
 
   // Every day appears, with empty runs when the driver has nothing that day.
@@ -167,8 +171,8 @@ async function markNoShow(req, assignmentId, body = {}) {
   try {
     inserted = await pool.query(
       `INSERT INTO pickup_no_shows (company_id, student_id, driver_user_id, no_show_date, shift_period)
-       VALUES ($1, $2, $3, CURRENT_DATE, $4) RETURNING *`,
-      [req.auth.tenantId, student.id, req.auth.userId, shift_period]
+       VALUES ($1, $2, $3, $5::date, $4) RETURNING *`,
+      [req.auth.tenantId, student.id, req.auth.userId, shift_period, req.businessDate]
     );
   } catch (err) {
     if (err.code === '23505') throw new HttpError(409, 'a no-show was already reported for this student for this shift today');
@@ -183,20 +187,20 @@ async function markNoShow(req, assignmentId, body = {}) {
   return { reported: true, noShow: inserted.rows[0], notified };
 }
 
-// The driver's own assignment (by id, or for a student) that runs TODAY (date range and
-// weekday) and covers `shiftPeriod`. Driver writes (log a trip, report a no-show) require one; reads use the wider
+// The driver's own assignment (by id, or for a student) that runs TODAY (the company's business
+// date: date range and weekday) and covers `shiftPeriod`. Driver writes (log a trip, report a no-show) require one; reads use the wider
 // driverScope window, which also includes assignments starting later.
 async function findTodaysAssignment(req, { assignmentId, studentId }, shiftPeriod) {
   const { rows } = await pool.query(
     `SELECT a.* FROM assignments a
       WHERE a.driver_user_id = $1 AND a.company_id = $2
         AND ${assignmentId ? 'a.id' : 'a.student_id'} = $3
-        AND a.start_date <= CURRENT_DATE
-        AND ${assignmentNotEndedSql('a')}
-        AND ${assignmentRunsOnSql('a', 'CURRENT_DATE')}
+        AND a.start_date <= $5::date
+        AND ${assignmentNotEndedSql('a', '$5::date')}
+        AND ${assignmentRunsOnSql('a', '$5::date')}
         AND a.shift_period IN ($4, 'both')
       LIMIT 1`,
-    [req.auth.userId, req.auth.tenantId, assignmentId ?? studentId, shiftPeriod]
+    [req.auth.userId, req.auth.tenantId, assignmentId ?? studentId, shiftPeriod, req.businessDate]
   );
   return rows[0] ?? null;
 }

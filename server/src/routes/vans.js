@@ -13,6 +13,7 @@
 // since "assign a driver to a van" would need to name a student too, which doesn't make
 // sense as a van-level action (a van isn't tied to one student).
 const express = require('express');
+const { assignmentNotEndedSql } = require('../db/scoped');
 const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole, denyRoles, driverScope } = require('../middleware/authorize');
@@ -100,9 +101,9 @@ router.delete('/:id', companyAdmin, async (req, res, next) => {
     if (e.code !== '23001' && e.code !== '23503') return next(e); // RESTRICT, or NO ACTION
     try {
       const { rows: [c] } = await pool.query(
-        `SELECT count(*)::int AS total, count(*) FILTER (WHERE end_date IS NULL OR end_date >= CURRENT_DATE)::int AS current
+        `SELECT count(*)::int AS total, count(*) FILTER (WHERE ${assignmentNotEndedSql('', '$3::date')})::int AS current
            FROM assignments WHERE van_id = $1 AND company_id = $2`,
-        [req.params.id, req.auth.tenantId]
+        [req.params.id, req.auth.tenantId, req.businessDate]
       );
       const what = c.current
         ? `${c.current} current or upcoming assignment${c.current === 1 ? '' : 's'}${c.total > c.current ? ` and ${c.total - c.current} past one${c.total - c.current === 1 ? '' : 's'}` : ''}`

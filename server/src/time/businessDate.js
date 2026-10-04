@@ -84,6 +84,12 @@ function startOfDay(date, timeZone) {
   return new Date(guess);
 }
 
+// [start, end) instants of the local day `date` in `timeZone`, for "check_in_at is on that day"
+// (23, 24 or 25 hours long, depending on DST).
+function dayRange(date, timeZone) {
+  return { start: startOfDay(date, timeZone), end: startOfDay(addDays(date, 1), timeZone) };
+}
+
 // 'HH:MM[:SS]' -> minutes after local midnight.
 function minutesOfTime(time) {
   const [h, m] = String(time).split(':').map(Number);
@@ -133,6 +139,6 @@ async function isKnownToDatabase(name, db) {
 }
 
 module.exports = {
-  DEFAULT_TIME_ZONE, zonedParts, dateInZone, nowInZone, addDays, startOfDay, minutesOfTime,
+  DEFAULT_TIME_ZONE, zonedParts, dateInZone, nowInZone, addDays, startOfDay, dayRange, minutesOfTime,
   companyTimeZone, businessDateFor, businessNowFor, isValidTimeZone, isKnownToDatabase,
 };

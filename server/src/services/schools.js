@@ -52,15 +52,15 @@ async function getCompanySchool(companyId, schoolId) {
 
 // Driver version of getCompanySchool: only schools of students on the driver's own
 // not-ended assignments (the driver access rule, see driverScope in middleware/authorize.js).
-async function getDriverSchool(companyId, driverId, schoolId) {
+async function getDriverSchool(companyId, driverId, schoolId, businessDate) {
   const { rows } = await pool.query(
     `SELECT DISTINCT s.id, s.name, s.address, s.zip_code, s.state, s.phone, s.hours, s.website
        FROM schools s
        JOIN students st ON st.school_id = s.id
        JOIN assignments a ON a.student_id = st.id
       WHERE a.company_id = $1 AND a.driver_user_id = $2 AND s.id = $3
-        AND ${assignmentNotEndedSql('a')}`,
-    [companyId, driverId, schoolId],
+        AND ${assignmentNotEndedSql('a', '$4::date')}`,
+    [companyId, driverId, schoolId, businessDate],
   );
   return rows[0] ?? null;
 }

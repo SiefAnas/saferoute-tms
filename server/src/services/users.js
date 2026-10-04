@@ -147,8 +147,8 @@ async function assertNoActiveAssignments(req, user) {
   let count = 0;
   if (user.role === 'driver') {
     const { rows } = await pool.query(
-      `SELECT count(*)::int AS n FROM assignments WHERE company_id = $1 AND driver_user_id = $2 AND ${assignmentNotEndedSql()}`,
-      [req.auth.tenantId, user.id]
+      `SELECT count(*)::int AS n FROM assignments WHERE company_id = $1 AND driver_user_id = $2 AND ${assignmentNotEndedSql('', '$3::date')}`,
+      [req.auth.tenantId, user.id, req.businessDate]
     );
     count = rows[0].n;
   } else if (user.role === 'monitor') {
