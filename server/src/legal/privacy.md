@@ -5,27 +5,20 @@ effective: 2026-10-02
 
 # Privacy Policy
 
-> **PLACEHOLDER. NOT LEGAL TEXT.** This page only reserves the layout and the version number.
-> The real Privacy Policy must be written or reviewed by a lawyer before anyone relies on it.
+## This document is being prepared
 
-## 1. PLACEHOLDER: What we collect
+SafeTurns is not yet open to the public, and its Privacy Policy is not finished. We are preparing
+it and will publish it here before the service opens.
 
-PLACEHOLDER. Account details, student details entered by transportation companies and schools,
-trip and shift records, location at check-in and check-out.
+## If you have an account now
 
-## 2. PLACEHOLDER: Why we use it
+If your company or school has set up a SafeTurns account for you, they can tell you how they
+are using it. You can also write to us at support@safeturns.com with any question about your
+information or to ask for it to be deleted. Most signed-in users can also send a deletion request
+from their Account page.
 
-PLACEHOLDER.
+## What this page is not
 
-## 3. PLACEHOLDER: Who can see it
-
-PLACEHOLDER. Summarize the access rules (which role sees which students).
-
-## 4. PLACEHOLDER: How long we keep it
-
-PLACEHOLDER. Retention, and what happens after an organization closes its account.
-
-## 5. PLACEHOLDER: Your choices and contact
-
-- PLACEHOLDER item.
-- PLACEHOLDER item.
+This page is a notice, not a privacy policy. It does not set out the rules for how information
+is collected, used, shared or kept. Those will be in the finished document, and this page will be
+replaced when it is ready.
