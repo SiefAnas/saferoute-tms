@@ -1,6 +1,7 @@
 // Driver shift sessions (§7.1). A driver checks in (starts a shift) and checks out (ends it,
 // auto-calculating hours). company_admin can read all company sessions; a driver only their own.
 const { HttpError } = require('../errors');
+const { dayRange } = require('../time/businessDate');
 const { ownerScope } = require('../middleware/authorize');
 const { withTx } = require('../db/tx');
 
@@ -52,12 +53,14 @@ async function checkIn(req, body = {}) {
     // Hard block on returning to a finished shift. Kept for now as a deliberate choice under
     // review: decide based on real driver feedback during beta testing whether this should be
     // relaxed to a warning-only version instead.
+    // "Today" = the company's business date: check-ins from its local midnight to the next one.
+    const today = dayRange(req.businessDate, req.businessNow.timeZone);
     const { rows: already } = await client.query(
       `SELECT 1 FROM sessions
         WHERE user_id = $1 AND company_id = $2 AND shift_period = $3
-          AND check_in_at::date = CURRENT_DATE
+          AND check_in_at >= $4 AND check_in_at < $5
         LIMIT 1`,
-      [userId, tenantId, shift_period]
+      [userId, tenantId, shift_period, today.start, today.end]
     );
     if (already.length > 0) {
       throw new HttpError(409, `you already worked the ${labelOf(shift_period)} shift today and cannot return to it`);

@@ -75,9 +75,12 @@ async function attachTransportInfo(req, students) {
        JOIN users u ON u.id = a.driver_user_id
        JOIN companies c ON c.id = a.company_id
       WHERE a.student_id = ANY($1::uuid[]) AND st.school_id = $2
-        AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+        -- "current" by each assignment's own company's date (a school's students can ride with
+        -- companies in different timezones): this request's instant read in that company's zone.
+        AND a.start_date <= ($3::timestamptz AT TIME ZONE c.timezone)::date
+        AND (a.end_date IS NULL OR a.end_date >= ($3::timestamptz AT TIME ZONE c.timezone)::date)
       ORDER BY a.student_id, a.shift_period, a.created_at DESC`,
-    [students.map((s) => s.id), req.auth.tenantId]
+    [students.map((s) => s.id), req.auth.tenantId, req.now]
   );
   const byStudent = new Map();
   for (const r of rows) {

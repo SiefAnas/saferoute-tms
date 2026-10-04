@@ -62,7 +62,7 @@ router.get('/:id', requireRole('company_admin', 'driver'), async (req, res, next
   try {
     // A driver only reaches schools of students on their own not-ended assignments.
     const school = req.auth.role === 'driver'
-      ? await getDriverSchool(req.auth.tenantId, req.auth.userId, req.params.id)
+      ? await getDriverSchool(req.auth.tenantId, req.auth.userId, req.params.id, req.businessDate)
       : await getCompanySchool(req.auth.tenantId, req.params.id);
     if (!school) throw new HttpError(404, 'school not found');
     res.json(school);

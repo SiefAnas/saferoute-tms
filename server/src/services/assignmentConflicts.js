@@ -8,19 +8,29 @@
 //    enforceable — the driver's other active rows are the source of truth for their van)
 const { HttpError } = require('../errors');
 
+// A calendar day as a comparable 'YYYY-MM-DD' string, with no timezone involved (branch
+// company-timezone). Two kinds of input arrive here: a 'YYYY-MM-DD' string from the request, and a
+// pg DATE column, which node-postgres turns into a JS Date at LOCAL midnight. The old version parsed
+// both with new Date() and read local getters, so a string (parsed as UTC midnight) landed on the
+// previous day in any process west of UTC and an overlap check could be off by one day.
 function dayNumber(dateLike) {
-  const d = new Date(dateLike);
-  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  if (dateLike instanceof Date) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${dateLike.getFullYear()}-${p(dateLike.getMonth() + 1)}-${p(dateLike.getDate())}`;
+  }
+  return String(dateLike).slice(0, 10);
 }
 
 // end === null means open-ended/ongoing (matches the schema and every other range check
 // in this codebase, e.g. services/schedule.js's "end_date IS NULL OR end_date >= today").
 function rangesOverlap(aStart, aEnd, bStart, bEnd) {
-  const aStartNum = dayNumber(aStart);
-  const aEndNum = aEnd == null ? Infinity : dayNumber(aEnd);
-  const bStartNum = dayNumber(bStart);
-  const bEndNum = bEnd == null ? Infinity : dayNumber(bEnd);
-  return aStartNum <= bEndNum && bStartNum <= aEndNum;
+  // 'YYYY-MM-DD' strings sort as dates; an open end is later than any date.
+  const OPEN = '9999-12-31';
+  const aStartDay = dayNumber(aStart);
+  const aEndDay = aEnd == null ? OPEN : dayNumber(aEnd);
+  const bStartDay = dayNumber(bStart);
+  const bEndDay = bEnd == null ? OPEN : dayNumber(bEnd);
+  return aStartDay <= bEndDay && bStartDay <= aEndDay;
 }
 
 // Whether two assignments' shift_period values could ever cover the same shift.

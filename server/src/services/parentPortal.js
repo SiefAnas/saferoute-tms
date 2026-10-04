@@ -8,16 +8,23 @@
 // button's greyed-out visual state, but this endpoint re-derives and enforces it itself
 // rather than trusting the client.
 //
-// ASSUMPTION, flagged for confirmation: pickup_time (and CURRENT_DATE/now()) are compared
-// using the database's own session timezone, with no per-school/per-company timezone
-// concept — same implicit-single-timezone handling the rest of the app already has (e.g.
-// assignments.pickup_time is a bare `time`, no tz). Not new imprecision introduced by this
-// feature, but worth knowing if company/school timezones ever diverge.
+// Timezone (branch company-timezone): "today" is the company's business date and pickup_time is
+// wall-clock time in the company's own zone (req.businessNow, middleware/businessDate.js). The
+// cutoff is compared on that wall clock in JS; the database session timezone plays no part.
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
 const { notifyCompanyAndSchoolAdmins } = require('./notifications');
 const { assignmentRunsOnSql } = require('../db/scoped');
 const { routeJoinsSql, ROUTE_COLUMNS, route, listExtraAddresses } = require('./stops');
+const { dayRange, minutesOfTime } = require('../time/businessDate');
+
+const SKIP_CUTOFF_MINUTES = 30;
+
+// Skip cutoff: a pickup can be skipped until 30 minutes before its time, on the company's wall
+// clock today. `now` is req.businessNow ({ date, minutesOfDay } in the company's zone).
+function beforeSkipCutoff(pickupTime, now) {
+  return pickupTime != null && now.minutesOfDay < minutesOfTime(pickupTime) - SKIP_CUTOFF_MINUTES;
+}
 
 function readScope(req) {
   // Every parent read is narrowed to their own linked students — same ownerIn pattern
@@ -52,34 +59,31 @@ async function assertLinkedStudent(req, studentId) {
 // precedent as schedule.js's getTodaySchedule(). Manually ANDs company_id so this can never
 // cross into another company's assignment. Returns ALL of the student's active assignments
 // today, not just one — a split-shift student has two rows (morning + afternoon).
-async function getActiveAssignments(companyId, studentId) {
+async function getActiveAssignments(now, companyId, studentId) {
   const { rows } = await pool.query(
     `SELECT a.id AS assignment_id, a.driver_user_id, a.shift_period,
             COALESCE(o.pickup_time, a.pickup_time) AS effective_pickup_time,
-            COALESCE(o.skip, false) AS override_skip,
-            (COALESCE(o.pickup_time, a.pickup_time) IS NOT NULL
-              AND now() < ((CURRENT_DATE + COALESCE(o.pickup_time, a.pickup_time))::timestamptz - interval '30 minutes')
-            ) AS still_eligible
+            COALESCE(o.skip, false) AS override_skip
        FROM assignments a
-       LEFT JOIN assignment_schedule_overrides o ON o.assignment_id = a.id AND o.override_date = CURRENT_DATE
+       LEFT JOIN assignment_schedule_overrides o ON o.assignment_id = a.id AND o.override_date = $3::date
       WHERE a.student_id = $1 AND a.company_id = $2
-        AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
-        AND ${assignmentRunsOnSql('a', 'CURRENT_DATE')}
+        AND a.start_date <= $3::date AND (a.end_date IS NULL OR a.end_date >= $3::date)
+        AND ${assignmentRunsOnSql('a', '$3::date')}
       ORDER BY a.created_at DESC`,
-    [studentId, companyId]
+    [studentId, companyId, now.date]
   );
-  return rows;
+  return rows.map((r) => ({ ...r, still_eligible: beforeSkipCutoff(r.effective_pickup_time, now) }));
 }
 
 // Split-shift = the student has two SEPARATE assignments today, one 'morning' and one
 // 'afternoon' (different rows, possibly different drivers/vans) — not one 'both' row. Only
 // then does the parent get a morning-only vs whole-day choice; a single row (whatever its
 // shift_period) keeps the old one-click behavior.
-async function getSkipEligibility(companyId, studentId) {
-  const assignments = await getActiveAssignments(companyId, studentId);
+async function getSkipEligibility(now, companyId, studentId) {
+  const assignments = await getActiveAssignments(now, companyId, studentId);
   const skippedRows = (await pool.query(
-    'SELECT shift_period FROM pickup_skips WHERE student_id = $1 AND skip_date = CURRENT_DATE',
-    [studentId]
+    'SELECT shift_period FROM pickup_skips WHERE student_id = $1 AND skip_date = $2::date',
+    [studentId, now.date]
   )).rows;
   const alreadySkippedShifts = new Set(skippedRows.map((r) => r.shift_period));
 
@@ -118,7 +122,7 @@ async function getStudentDetail(req, studentId) {
 
   const { rows: assignmentRows } = await pool.query(
     `SELECT a.shift_period, a.days_of_week,
-            ${assignmentRunsOnSql('a', 'CURRENT_DATE')} AS runs_today,
+            ${assignmentRunsOnSql('a', '$3::date')} AS runs_today,
             COALESCE(o.pickup_time, a.pickup_time) AS pickup_time,
             COALESCE(o.dropoff_time, a.dropoff_time) AS dropoff_time,
             COALESCE(o.skip, false) AS schedule_skip,
@@ -132,12 +136,12 @@ async function getStudentDetail(req, studentId) {
        JOIN companies c ON c.id = a.company_id
        JOIN students st ON st.id = a.student_id
        JOIN schools sc ON sc.id = st.school_id
-       LEFT JOIN assignment_schedule_overrides o ON o.assignment_id = a.id AND o.override_date = CURRENT_DATE
-       ${routeJoinsSql('CURRENT_DATE')}
+       LEFT JOIN assignment_schedule_overrides o ON o.assignment_id = a.id AND o.override_date = $3::date
+       ${routeJoinsSql('$3::date')}
       WHERE a.student_id = $1 AND a.company_id = $2
-        AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+        AND a.start_date <= $3::date AND (a.end_date IS NULL OR a.end_date >= $3::date)
       ORDER BY a.shift_period, a.created_at DESC`,
-    [studentId, req.auth.tenantId]
+    [studentId, req.auth.tenantId, req.businessDate]
   );
 
   // skip_today combines the two distinct ways a pickup can be off today: the admin/driver
@@ -147,8 +151,8 @@ async function getStudentDetail(req, studentId) {
   // covered (a genuine whole-day skip); a single shift skipped shows in `transport` instead,
   // since a half-skipped day isn't accurately summarized by one flat badge.
   const { rows: skipRows } = await pool.query(
-    'SELECT shift_period FROM pickup_skips WHERE student_id = $1 AND skip_date = CURRENT_DATE',
-    [studentId]
+    'SELECT shift_period FROM pickup_skips WHERE student_id = $1 AND skip_date = $2::date',
+    [studentId, req.businessDate]
   );
   const skippedShifts = new Set(skipRows.map((r) => r.shift_period));
   // Only rides that actually run today (weekday) count; on a day with no ride nothing is skipped.
@@ -162,13 +166,15 @@ async function getStudentDetail(req, studentId) {
 
   const { rows: schoolRows } = await pool.query('SELECT name FROM schools WHERE id = $1', [student.school_id]);
 
+  // Today's trips: logged between the company's local midnight and the next one.
+  const today = dayRange(req.businessDate, req.businessNow.timeZone);
   const { rows: trips } = await pool.query(
     `SELECT trip_type, status, driver_confirmed_at, staff_confirmed_at, completed_at, created_at
        FROM trips
       WHERE student_id = $1 AND company_id = $2
-        AND created_at::date = CURRENT_DATE
+        AND created_at >= $3 AND created_at < $4
       ORDER BY created_at ASC`,
-    [studentId, req.auth.tenantId]
+    [studentId, req.auth.tenantId, today.start, today.end]
   );
 
   const first = assignmentRows[0] ?? null;
@@ -195,7 +201,7 @@ async function getStudentDetail(req, studentId) {
 
 async function getSkipStatus(req, studentId) {
   await assertLinkedStudent(req, studentId);
-  const elig = await getSkipEligibility(req.auth.tenantId, studentId);
+  const elig = await getSkipEligibility(req.businessNow, req.auth.tenantId, studentId);
 
   if (elig.isSplit) {
     // "Skip morning only" needs morning specifically actionable (not already done, still
@@ -244,7 +250,7 @@ async function getSkipStatus(req, studentId) {
 // ignores shift_choice entirely - there's nothing to choose between.
 async function skipPickup(req, studentId, body = {}) {
   const student = await assertLinkedStudent(req, studentId);
-  const elig = await getSkipEligibility(req.auth.tenantId, studentId);
+  const elig = await getSkipEligibility(req.businessNow, req.auth.tenantId, studentId);
 
   if (elig.isSplit) {
     const { shift_choice } = body;
@@ -270,8 +276,8 @@ async function skipPickup(req, studentId, body = {}) {
     if (!elig.morning.alreadySkipped) {
       const r = await pool.query(
         `INSERT INTO pickup_skips (company_id, student_id, parent_user_id, skip_date, shift_period)
-         VALUES ($1, $2, $3, CURRENT_DATE, 'morning') RETURNING *`,
-        [req.auth.tenantId, studentId, req.auth.userId]
+         VALUES ($1, $2, $3, $4::date, 'morning') RETURNING *`,
+        [req.auth.tenantId, studentId, req.auth.userId, req.businessDate]
       );
       skips.push(r.rows[0]);
       driverIds.push(elig.morning.driver_user_id);
@@ -279,8 +285,8 @@ async function skipPickup(req, studentId, body = {}) {
     if (skipAfternoonToo && !elig.afternoon.alreadySkipped) {
       const r = await pool.query(
         `INSERT INTO pickup_skips (company_id, student_id, parent_user_id, skip_date, shift_period)
-         VALUES ($1, $2, $3, CURRENT_DATE, 'afternoon') RETURNING *`,
-        [req.auth.tenantId, studentId, req.auth.userId]
+         VALUES ($1, $2, $3, $4::date, 'afternoon') RETURNING *`,
+        [req.auth.tenantId, studentId, req.auth.userId, req.businessDate]
       );
       skips.push(r.rows[0]);
       driverIds.push(elig.afternoon.driver_user_id);
@@ -303,9 +309,9 @@ async function skipPickup(req, studentId, body = {}) {
 
   const inserted = await pool.query(
     `INSERT INTO pickup_skips (company_id, student_id, parent_user_id, skip_date, shift_period)
-     VALUES ($1, $2, $3, CURRENT_DATE, $4)
+     VALUES ($1, $2, $3, $5::date, $4)
      RETURNING *`,
-    [req.auth.tenantId, studentId, req.auth.userId, p.shiftPeriod]
+    [req.auth.tenantId, studentId, req.auth.userId, p.shiftPeriod, req.businessDate]
   );
 
   const company = await req.db.findById('companies', req.auth.tenantId);

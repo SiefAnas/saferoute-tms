@@ -91,7 +91,8 @@ function ownerScope(req, table) {
 function driverScope(req, refColumn, column = 'id') {
   if (req.auth.role !== 'driver') return null;
   return {
-    ownerIn: { column, table: 'assignments', refColumn, match: { driver_user_id: req.auth.userId }, notEnded: true },
+    // notEnded = the company's business date for this request (middleware/businessDate.js).
+    ownerIn: { column, table: 'assignments', refColumn, match: { driver_user_id: req.auth.userId }, notEnded: req.businessDate },
   };
 }
 

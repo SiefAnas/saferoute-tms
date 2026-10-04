@@ -14,6 +14,7 @@ const { verifyJwt } = require('../auth/jwt');
 const { tenantTypeForRole } = require('../db/scoped');
 const { tempPasswordExpired } = require('../services/passwords');
 const { closingError } = require('../services/closure');
+const attachBusinessDate = require('./businessDate');
 
 async function check(req, res, next, allowPasswordChange) {
   try {
@@ -33,7 +34,8 @@ async function check(req, res, next, allowPasswordChange) {
       `SELECT u.id, u.role, u.company_id, u.school_id, u.is_active, u.email_verified_at,
               u.must_change_password, u.password_changed_at, u.temp_password_expires_at,
               COALESCE(c.claim_status, s.claim_status) AS org_claim_status,
-              c.billing_status AS company_billing_status, c.closure_purge_at AS company_closure_purge_at
+              c.billing_status AS company_billing_status, c.closure_purge_at AS company_closure_purge_at,
+              c.timezone AS company_timezone
          FROM users u
          LEFT JOIN companies c ON c.id = u.company_id
          LEFT JOIN schools   s ON s.id = u.school_id
@@ -72,7 +74,11 @@ async function check(req, res, next, allowPasswordChange) {
       orgClaimStatus: user.org_claim_status,
       emailVerifiedAt: user.email_verified_at,
       mustChangePassword: user.must_change_password,
+      // The company's IANA zone (company users only): decides its business date.
+      companyTimeZone: user.company_timezone ?? null,
     };
+    // Business date for this request, resolved once (middleware/businessDate.js).
+    attachBusinessDate(req);
     next();
   } catch (err) {
     next(err);

@@ -3,6 +3,31 @@
 const pool = require('../db/pool');
 const { HttpError, mapMissingRefError } = require('../errors');
 const { assignmentRunsOnSql } = require('../db/scoped');
+const { dateInZone, startOfDay } = require('../time/businessDate');
+
+// Timezone (branch company-timezone): payroll days are the company's days. A session counts on the
+// date it was checked into in the company's zone, and a period [from, to) given as dates runs from
+// local midnight of `from` to local midnight of `to` in that zone. Nothing here uses the database
+// session timezone (no ::date on a timestamptz, no date strings compared with timestamps in SQL).
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+// A period bound as given by the caller: a calendar date ('YYYY-MM-DD', from the pay pages) or an
+// instant (paid_through_at, a Date or ISO string). Returns { instant, date } in the company's zone:
+// `instant` bounds sessions (check_in_at), `date` bounds adjustments (work_date).
+function periodBound(value, timeZone, field) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'string' && DATE_ONLY.test(value)) {
+    const instant = startOfDay(value, timeZone);
+    if (dateInZone(timeZone, instant) !== value) throw new HttpError(400, `${field} must be a real date (YYYY-MM-DD)`);
+    return { instant, date: value };
+  }
+  const instant = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(instant.getTime())) throw new HttpError(400, `${field} must be a date (YYYY-MM-DD) or a timestamp`);
+  // An instant (the moment a cycle was marked paid): sessions compare exactly; adjustments, which
+  // only have a date, use that instant's date in the company's zone. An adjustment dated the paid
+  // day therefore still counts as owed, as before (see docs/TIMEZONE_QUESTIONS.md, C2).
+  return { instant, date: dateInZone(timeZone, instant) };
+}
 
 // Upsert the single pay rule for a driver in the caller's company. The composite FK
 // (driver_id, company_id) -> users guarantees the driver belongs to this company, so an
@@ -55,12 +80,7 @@ async function addAdjustment(req, body = {}) {
 // Legacy sessions (shift_period IS NULL, recorded before this feature existed) keep paying
 // the old way — the full rate once per distinct calendar day worked — so re-running summary()
 // over a date range from before this shipped doesn't retroactively change old pay.
-async function dailyRatePayCents(req, driverId, rule, sessionsClause, sessionsRange) {
-  const { rows: sessions } = await pool.query(
-    `SELECT id, shift_period, check_in_at::date::text AS work_date
-       FROM sessions WHERE ${sessionsClause}`,
-    sessionsRange
-  );
+async function dailyRatePayCents(req, driverId, rule, sessions) {
   if (sessions.length === 0) return 0;
 
   const legacyDays = new Set(sessions.filter((s) => s.shift_period === null).map((s) => s.work_date));
@@ -143,28 +163,34 @@ async function isShiftComplete(req, driverId, workDate, shiftPeriod, sessionIds)
 async function summary(req, driverId, { from, to } = {}) {
   const rule = (await req.db.findMany('pay_rules', { where: { driver_id: driverId } }))[0];
   if (!rule) throw new HttpError(404, 'no pay rule for this driver');
+  const timeZone = req.businessNow.timeZone;
+  const start = periodBound(from, timeZone, 'from');
+  const end = periodBound(to, timeZone, 'to');
 
   const range = [];
   let clause = 'user_id = $1 AND company_id = $2 AND check_out_at IS NOT NULL';
   range.push(driverId, req.auth.tenantId);
-  if (from) { range.push(from); clause += ` AND check_in_at >= $${range.length}`; }
-  if (to) { range.push(to); clause += ` AND check_in_at < $${range.length}`; }
+  if (start) { range.push(start.instant); clause += ` AND check_in_at >= $${range.length}`; }
+  if (end) { range.push(end.instant); clause += ` AND check_in_at < $${range.length}`; }
 
-  const shifts = (await pool.query(
-    `SELECT COALESCE(SUM(duration_minutes),0)::int AS minutes,
-            COUNT(DISTINCT check_in_at::date)::int AS days
-       FROM sessions WHERE ${clause}`,
+  // Each session's work day is its check-in date in the company's zone.
+  const sessions = (await pool.query(
+    `SELECT id, shift_period, check_in_at, duration_minutes FROM sessions WHERE ${clause}`,
     range
-  )).rows[0];
+  )).rows.map((r) => ({ ...r, work_date: dateInZone(timeZone, r.check_in_at) }));
+  const shifts = {
+    minutes: sessions.reduce((sum, r) => sum + (r.duration_minutes ?? 0), 0),
+    days: new Set(sessions.map((r) => r.work_date)).size,
+  };
 
   const base = rule.rate_type === 'hourly'
     ? Math.round((shifts.minutes / 60) * rule.rate_cents)
-    : await dailyRatePayCents(req, driverId, rule, clause, range);
+    : await dailyRatePayCents(req, driverId, rule, sessions);
 
   const adjRange = [driverId, req.auth.tenantId];
   let adjClause = 'driver_id = $1 AND company_id = $2';
-  if (from) { adjRange.push(from); adjClause += ` AND work_date >= $${adjRange.length}`; }
-  if (to) { adjRange.push(to); adjClause += ` AND work_date < $${adjRange.length}`; }
+  if (start) { adjRange.push(start.date); adjClause += ` AND work_date >= $${adjRange.length}::date`; }
+  if (end) { adjRange.push(end.date); adjClause += ` AND work_date < $${adjRange.length}::date`; }
   const adjResult = await pool.query(
     `SELECT COALESCE(SUM(amount_cents),0)::int AS total FROM pay_adjustments WHERE ${adjClause}`,
     adjRange
