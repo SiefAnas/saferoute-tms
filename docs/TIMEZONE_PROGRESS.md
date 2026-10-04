@@ -20,7 +20,7 @@ No upstream; not merged, not pushed. Local database only.
 | 1 | Survey (no code) | done | `ffdbc45` |
 | 2 | Column + helpers + middleware | done | `22bf0d6` |
 | 3 | Convert business-date code paths | done | `48c73c7` … `029abae` |
-| 4 | Edge-case tests | todo | |
+| 4 | Edge-case tests | done | see log |
 | 5 | Timezone setting in the UI | todo | |
 | 6 | Can the DB-level setting go? (report only) | todo | |
 | - | Report | todo | |
@@ -62,3 +62,14 @@ No upstream; not merged, not pushed. Local database only.
   - Suites run after each step: 04, 05, 09, 10, 11, 12, 13, 14, 16, 17, 18, 19, 21, 22, 23, 25, 30,
     31 all pass. Orphaned test Postgres processes (dead parent) are stopped with
     `clean-orphans.ps1` in the scratchpad when "shared memory block" or port errors appear.
+- **Task 4 done.** `server/test/42-timezone-edges.test.cjs` (PG 5486, API 5986), 49 checks through
+  the real API with the server clock pinned: NY vs LA at one instant, 11:30pm local (incl. LA at
+  06:30Z when NY/UTC are already on the next day), skip cutoff 07:15 local for a 07:45 pickup in
+  each zone, payroll boundary session (2026-10-01T05:30Z: NY Oct 1, LA Sep 30), spring forward
+  (2026-03-08) and fall back (2026-11-01) in both zones (day lengths 23 h / 25 h, both 01:30s, skip
+  cutoffs at the right UTC instant), absent-today for admins and the shared school, skip writes
+  dated by the company. Last block: `ALTER DATABASE … SET timezone` to UTC, Pacific/Kiritimati
+  (+14) and Pacific/Pago_Pago (-11), a child process re-runs the read-only scenario each time:
+  answers identical, control `::date` differs. **Proof it can fail:** the same file against
+  `22bf0d6` (column + helpers, services still on CURRENT_DATE): 30 failed, including the payroll
+  checks (no clock involved) and the session-timezone check. Temporary worktree removed.
