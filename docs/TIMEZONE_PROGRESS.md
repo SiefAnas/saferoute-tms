@@ -17,8 +17,8 @@ No upstream; not merged, not pushed. Local database only.
 
 | # | Task | Status | Commit |
 |---|---|---|---|
-| 1 | Survey (no code) | done | see log |
-| 2 | Column + helpers + middleware | todo | |
+| 1 | Survey (no code) | done | `ffdbc45` |
+| 2 | Column + helpers + middleware | done | see log |
 | 3 | Convert business-date code paths | todo | |
 | 4 | Edge-case tests | todo | |
 | 5 | Timezone setting in the UI | todo | |
@@ -31,3 +31,13 @@ No upstream; not merged, not pushed. Local database only.
   database default, so a local run would never have shown the problem either.
 - **Task 1 done.** `docs/TIMEZONE_SURVEY.md`. Bucket (c) has 3 entries (C1 school-side "today",
   C2 same-day adjustment vs paid_through_at, C3 client-chosen week / month), so no stop.
+- **Task 2 done.** Migration `1752624000032_company-timezone.js` (`companies.timezone text not null
+  default 'America/New_York'`), tested up / down / up on 5488. `server/src/time/clock.js` (the
+  server's "now", pinnable in tests via `_pin`), `server/src/time/businessDate.js` (`dateInZone`,
+  `nowInZone`, `businessDateFor(companyOrId, now)`, `businessNowFor(companyOrId, now)`,
+  `startOfDay(date, zone)` for payroll boundaries, `addDays`, `isValidTimeZone`,
+  `isKnownToDatabase`). Intl only, no library. `middleware/businessDate.js` sets `req.now`,
+  `req.businessNow`, `req.businessDate` once, called at the end of `authenticate` (which now also
+  selects `companies.timezone` in the query it already ran). `PATCH /companies/me` accepts
+  `timezone`, validated against Intl + `pg_timezone_names`. New suite 41 (49 checks, also re-run
+  under process TZ UTC / Tokyo / Honolulu). Suite 01 count 29 -> 30; 01, 02, 15 pass.

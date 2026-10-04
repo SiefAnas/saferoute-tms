@@ -8,6 +8,8 @@ const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
 const { assertValidZip, assertValidState, assertMaxLength, assertValidEmail } = require('../validate');
 const { HttpError } = require('../errors');
+const pool = require('../db/pool');
+const { isValidTimeZone, isKnownToDatabase } = require('../time/businessDate');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb, requireRole('company_admin'));
@@ -25,7 +27,7 @@ router.get('/me', async (req, res, next) => {
 router.patch('/me', async (req, res, next) => {
   try {
     const patch = {};
-    for (const k of ['name', 'address', 'zip_code', 'state', 'phone', 'email', 'city']) {
+    for (const k of ['name', 'address', 'zip_code', 'state', 'phone', 'email', 'city', 'timezone']) {
       if (req.body?.[k] !== undefined) patch[k] = req.body[k];
     }
     // email / city are optional: blank clears them.
@@ -33,6 +35,13 @@ router.patch('/me', async (req, res, next) => {
       if (typeof patch[k] === 'string') patch[k] = patch[k].trim() || null;
     }
     if (patch.email) assertValidEmail(patch.email, 'email');
+    // The company's timezone decides its "today", skip cutoffs and payroll days
+    // (time/businessDate.js). Must be an IANA name both Intl and Postgres know.
+    if (patch.timezone !== undefined) {
+      if (!isValidTimeZone(patch.timezone) || !(await isKnownToDatabase(patch.timezone, pool))) {
+        throw new HttpError(400, 'timezone must be an IANA time zone name, like America/Chicago');
+      }
+    }
     if (!Object.keys(patch).length) throw new HttpError(400, 'nothing to update');
     if (patch.zip_code) assertValidZip(patch.zip_code, 'zip_code');
     if (patch.state) patch.state = assertValidState(patch.state, 'state');
