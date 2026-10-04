@@ -456,6 +456,8 @@ export interface Company {
   phone: string | null
   claim_status: 'claimed' | 'unclaimed' | 'pending_claim'
   created_by_user_id: string | null
+  // IANA zone (migration 032): the company's business day, skip cutoffs and payroll days.
+  timezone: string
 }
 
 export type ScheduleChangeType = 'left_early' | 'staying_later'

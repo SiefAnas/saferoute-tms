@@ -20,8 +20,8 @@ No upstream; not merged, not pushed. Local database only.
 | 1 | Survey (no code) | done | `ffdbc45` |
 | 2 | Column + helpers + middleware | done | `22bf0d6` |
 | 3 | Convert business-date code paths | done | `48c73c7` … `029abae` |
-| 4 | Edge-case tests | done | see log |
-| 5 | Timezone setting in the UI | todo | |
+| 4 | Edge-case tests | done | `b9993ea` |
+| 5 | Timezone setting in the UI | done | see log |
 | 6 | Can the DB-level setting go? (report only) | todo | |
 | - | Report | todo | |
 
@@ -73,3 +73,15 @@ No upstream; not merged, not pushed. Local database only.
   answers identical, control `::date` differs. **Proof it can fail:** the same file against
   `22bf0d6` (column + helpers, services still on CURRENT_DATE): 30 failed, including the payroll
   checks (no clock involved) and the session-timezone check. Temporary worktree removed.
+- **Task 5 done.** `client/src/components/TimezoneSelect.tsx` (type-to-search over
+  `Intl.supportedValuesOf('timeZone')` + UTC, each match with its current UTC offset and local
+  time; not free text), `client/src/lib/timezone.ts` (`zoneHint`), `pages/company/CompanyTimezoneCard.tsx`
+  on Company profile below the form, company_admin only: what it controls (today, skip cutoff,
+  payroll day), own Save, and a confirm dialog warning that existing records get grouped by day
+  differently. `Company.timezone` added to the client type. Suite
+  `43-company-timezone-endpoint` (PG 5487, API 5989): 23 checks (default, 8 refused values incl.
+  `EST`, `+05:00`, SQL-ish text, 403 for driver / school admin, saved, next request uses it,
+  `/auth/me`, aliases like Asia/Kolkata and Asia/Calcutta). Checked live (API 4310 / Vite 5177,
+  local DB 5488 seeded): search "los ang" -> America/Los Angeles (UTC−07:00) -> Save -> warning
+  dialog -> confirm -> stored `America/Los_Angeles`, "Time zone saved". `tsc -b`, lint, client tests
+  pass.
