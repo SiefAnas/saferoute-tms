@@ -159,8 +159,12 @@ async function insertUser(client, req, def, row) {
   return { id: rows[0].id, temporaryPassword };
 }
 
+// Writes only the keys that carry a value. '' (a blank cell) means "leave this value alone", and so
+// does undefined (a field this import type doesn't have): node-postgres would write undefined as
+// NULL. Callers build `patch` from the import type's own fields; skipping undefined here as well
+// means a slip there can't blank a column again.
 async function updateFields(client, table, id, tenantCol, tenantId, patch) {
-  const keys = Object.keys(patch).filter((k) => patch[k] !== '');
+  const keys = Object.keys(patch).filter((k) => patch[k] !== '' && patch[k] !== undefined);
   if (!keys.length) return;
   const sets = keys.map((k, i) => `"${k}" = $${i + 3}`);
   await client.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = $1 AND ${tenantCol} = $2`, [id, tenantId, ...keys.map((k) => patch[k])]);
@@ -170,9 +174,12 @@ async function execPerson(req, def, plan, credentials) {
   const { row } = plan;
   const tenantCol = def.side === 'company' ? 'company_id' : 'school_id';
   if (plan.action === 'update') {
-    await withTx((c) => updateFields(c, 'users', plan.existingId, tenantCol, req.auth.tenantId, {
-      full_name: row.full_name, phone: row.phone, address: row.address, license_number: row.license_number,
-    }));
+    // Only this type's own fields (each field key is the users column of the same name), minus the
+    // email it was matched on. A field the type doesn't list is never written, so importing staff
+    // (no address field) can't touch their address, and adding a field to a type later needs no
+    // change here.
+    const patch = Object.fromEntries(def.fields.filter((fd) => fd.key !== def.key).map((fd) => [fd.key, row[fd.key]]));
+    await withTx((c) => updateFields(c, 'users', plan.existingId, tenantCol, req.auth.tenantId, patch));
     return;
   }
   const made = await withTx((c) => insertUser(c, req, def, row));
