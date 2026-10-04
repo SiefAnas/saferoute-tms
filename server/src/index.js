@@ -1,4 +1,8 @@
 // Dev server entrypoint.
+// First, before anything opens a connection: a non-local DATABASE_URL needs ALLOW_PRODUCTION_DB=yes
+// (src/db/productionGuard.js). Render sets it; a laptop with production in server/.env doesn't.
+require('./db/productionGuard').assertTargetAllowed({ purpose: 'start the API' });
+
 const createApp = require('./app');
 const { port, sweepIntervalMs } = require('./config');
 const { autoCompleteStaleTrips } = require('./services/trips');

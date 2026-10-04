@@ -7,30 +7,14 @@
 // whatever database that API uses and does not clean them up (trips/sessions have no delete).
 const BASE = process.env.API_BASE || 'http://localhost:4000'
 
-// Creates real accounts and data, so it must never run against production. Refuses under
-// NODE_ENV=production and against any non-local API host (or DATABASE_URL host, if set)
-// unless the caller opts in explicitly with ALLOW_REMOTE_E2E=1.
+// Creates real accounts and data, so it must never run against production by accident. Same
+// rule as everything else (src/db/productionGuard.js), applied to the API it calls and to
+// DATABASE_URL if set: a non-local host is refused unless ALLOW_PRODUCTION_DB=yes. (Replaces this
+// script's own ALLOW_REMOTE_E2E=1 flag.)
 {
-  if (process.env.NODE_ENV === 'production') {
-    console.error('Refusing to run: NODE_ENV=production.')
-    process.exit(1)
-  }
-  const localHosts = ['localhost', '127.0.0.1', '::1', '[::1]', 'db']
-  const hostOf = (label, url) => {
-    try { return new URL(url).hostname } catch {
-      console.error(`Refusing to run: ${label} is not a valid URL.`)
-      process.exit(1)
-    }
-  }
-  const targets = [['API_BASE', BASE]]
-  if (process.env.DATABASE_URL) targets.push(['DATABASE_URL', process.env.DATABASE_URL])
-  for (const [label, url] of targets) {
-    const host = hostOf(label, url)
-    if (!localHosts.includes(host) && process.env.ALLOW_REMOTE_E2E !== '1') {
-      console.error(`Refusing to run against non-local ${label} host "${host}". Set ALLOW_REMOTE_E2E=1 to override.`)
-      process.exit(1)
-    }
-  }
+  const { assertTargetAllowed } = (await import('node:module')).createRequire(import.meta.url)('../src/db/productionGuard.js')
+  assertTargetAllowed({ url: BASE, label: 'API_BASE', purpose: 'run the e2e script' })
+  if (process.env.DATABASE_URL) assertTargetAllowed({ purpose: 'run the e2e script' })
 }
 
 const PW = 'Secret123!'

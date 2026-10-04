@@ -79,7 +79,7 @@ async function main() {
     // which crashes the whole process instead of just failing the one query/sweep tick.
     const script = `
       process.env.NODE_ENV = 'test';
-      process.env.DATABASE_URL = 'postgres://x';
+      process.env.DATABASE_URL = 'postgres://localhost/x'; // local: the pool refuses remote hosts (productionGuard)
       process.env.JWT_SECRET = 'x';
       const pool = require('./src/db/pool.js');
       pool.emit('error', new Error('getaddrinfo ENOTFOUND simulated'));
