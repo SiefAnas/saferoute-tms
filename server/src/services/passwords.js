@@ -147,4 +147,4 @@ async function resetPassword({ token, newPassword } = {}) {
   return { ok: true };
 }
 
-module.exports = { TEMP_PASSWORD_DAYS, tempPasswordExpired, generateTempPassword, setPassword, logPasswordReset, changePassword, requestPasswordReset, resetPassword, loginPayload };
+module.exports = { TEMP_PASSWORD_DAYS, passwordChangedNow, tempPasswordExpired, generateTempPassword, setPassword, logPasswordReset, changePassword, requestPasswordReset, resetPassword, loginPayload };

@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { ThemeToggle } from '../components/ThemeToggle'
+import { LegalLinks } from '../components/LegalLinks'
 import { TopBarContext, type TopBarSlots } from './TopBar'
 import type { Company, DriverSession, Role, School } from '../types/api'
 
@@ -86,7 +87,7 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
     const match = items
       .filter((i) => (i.end ? location.pathname === i.to : location.pathname.startsWith(i.to)))
       .sort((a, b) => b.to.length - a.to.length)[0]
-    return match?.label ?? hubName
+    return match?.label ?? (location.pathname === '/account' ? 'My account' : hubName)
   }, [nav, location.pathname, hubName])
 
   const renderNav = (opts: { rail: boolean; onNavigate?: () => void }) => (
@@ -152,8 +153,9 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
   )
 
   const footer = (rail: boolean): ReactNode => (
+    <div className="mt-auto flex flex-col gap-2">
     <div
-      className={`mt-auto flex items-center gap-2.5 border-t border-sidebar-line px-2.5 pt-3 ${rail ? 'flex-col px-0' : ''}`}
+      className={`flex items-center gap-2.5 border-t border-sidebar-line px-2.5 pt-3 ${rail ? 'flex-col px-0' : ''}`}
     >
       {!rail && (
         <>
@@ -167,6 +169,19 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
         </>
       )}
       <ThemeToggle variant="sidebar" />
+      <NavLink
+        to="/account"
+        aria-label="My account"
+        title="My account"
+        onClick={() => setMobileNavOpen(false)}
+        className={({ isActive }) =>
+          `flex h-8 w-8 shrink-0 items-center justify-center rounded-row hover:bg-sidebar-hover hover:text-sidebar-strong ${
+            isActive ? 'bg-sidebar-hover text-sidebar-strong' : 'text-sidebar-icon'
+          }`
+        }
+      >
+        <span className="material-symbols-outlined !text-[20px]">manage_accounts</span>
+      </NavLink>
       <button
         type="button"
         onClick={logout}
@@ -176,6 +191,8 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
       >
         <span className="material-symbols-outlined !text-[20px]">logout</span>
       </button>
+    </div>
+    {!rail && <LegalLinks className="px-2.5 text-sidebar-icon" />}
     </div>
   )
 

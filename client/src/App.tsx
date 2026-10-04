@@ -11,6 +11,9 @@ import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
 import { ForgotPasswordPage, ResetPasswordPage, SetPasswordPage } from './pages/login/PasswordPages'
 import { DriverLayout } from './layouts/DriverLayout'
 import { MonitorLayout } from './layouts/MonitorLayout'
+import { ConfirmEmailChangePage } from './pages/account/ConfirmEmailChangePage'
+import { LegalPage } from './pages/legal/LegalPage'
+import { UndoClosurePage } from './pages/company/UndoClosurePage'
 
 // Each role's screens load on demand, so a driver's phone never downloads the admin pages.
 const DriverTodayPage = lazy(() => import('./pages/driver/DriverTodayPage').then((m) => ({ default: m.DriverTodayPage })))
@@ -27,12 +30,14 @@ const AssignmentsPage = lazy(() => import('./pages/company/AssignmentsPage').the
 const PayrollPage = lazy(() => import('./pages/company/PayrollPage').then((m) => ({ default: m.PayrollPage })))
 const CompanyStudentsPage = lazy(() => import('./pages/company/StudentsPage').then((m) => ({ default: m.CompanyStudentsPage })))
 const CompanyProfilePage = lazy(() => import('./pages/company/CompanyProfilePage').then((m) => ({ default: m.CompanyProfilePage })))
+const BillingPage = lazy(() => import('./pages/company/BillingPage').then((m) => ({ default: m.BillingPage })))
 const StudentsPage = lazy(() => import('./pages/school-admin/StudentsPage').then((m) => ({ default: m.StudentsPage })))
 const StaffAccessPage = lazy(() => import('./pages/school-admin/StaffAccessPage').then((m) => ({ default: m.StaffAccessPage })))
 const SchoolProfilePage = lazy(() => import('./pages/school-admin/SchoolProfilePage').then((m) => ({ default: m.SchoolProfilePage })))
 const SchoolStaffDashboard = lazy(() => import('./pages/school-staff/SchoolStaffDashboard').then((m) => ({ default: m.SchoolStaffDashboard })))
 const ParentHomePage = lazy(() => import('./pages/parent/ParentHomePage').then((m) => ({ default: m.ParentHomePage })))
 const ImportPage = lazy(() => import('./pages/ImportPage').then((m) => ({ default: m.ImportPage })))
+const AccountPage = lazy(() => import('./pages/account/AccountPage').then((m) => ({ default: m.AccountPage })))
 const ParentProfilePage = lazy(() => import('./pages/parent/ParentProfilePage').then((m) => ({ default: m.ParentProfilePage })))
 
 // Sidebar nav per role (design 5a, "Sidebar"): grouped, with the only uppercase text in the app
@@ -62,6 +67,7 @@ const COMPANY_NAV: NavGroup[] = [
     items: [
       { to: '/company/import', label: 'Import', icon: 'upload_file' },
       { to: '/company/profile', label: 'Company profile', icon: 'apartment' },
+      { to: '/company/billing', label: 'Billing', icon: 'receipt_long' },
     ],
   },
 ]
@@ -84,6 +90,28 @@ const SCHOOL_ADMIN_NAV: NavGroup[] = [
 const SCHOOL_STAFF_NAV: NavGroup[] = [
   { items: [{ to: '/school-staff', label: 'Pickup & drop-off', icon: 'how_to_reg', end: true }] },
 ]
+// Pages every role shares (My account) render inside the signed-in role's own shell, so the
+// sidebar / tabs stay the ones that person always sees.
+function RoleShell() {
+  const { user } = useAuth()
+  switch (user?.role) {
+    case 'company_admin':
+      return <AdminLayout hubName="Dispatcher Hub" nav={COMPANY_NAV} />
+    case 'school_admin':
+      return <AdminLayout hubName="School Hub" nav={SCHOOL_ADMIN_NAV} />
+    case 'school_staff':
+      return <AdminLayout hubName="School Hub" nav={SCHOOL_STAFF_NAV} />
+    case 'driver':
+      return <DriverLayout />
+    case 'monitor':
+      return <MonitorLayout />
+    case 'parent':
+      return <ParentLayout />
+    default:
+      return null
+  }
+}
+
 function RootRedirect() {
   const { user, token } = useAuth()
   if (!token || !user) return <Navigate to="/login" replace />
@@ -100,6 +128,16 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
+        <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
+        <Route path="/privacy" element={<LegalPage doc="privacy" />} />
+        <Route path="/terms" element={<LegalPage doc="terms" />} />
+        <Route path="/company-closure/undo" element={<UndoClosurePage />} />
+
+        <Route element={<ProtectedRoute />}>
+          <Route element={<RoleShell />}>
+            <Route path="/account" element={<AccountPage />} />
+          </Route>
+        </Route>
 
         <Route element={<ProtectedRoute roles={['driver']} />}>
           <Route element={<DriverLayout />}>
@@ -130,6 +168,9 @@ function App() {
             <Route path="/company/parents" element={<ParentsPage />} />
             <Route path="/company/profile" element={<CompanyProfilePage />} />
             <Route path="/company/import" element={<ImportPage />} />
+            <Route path="/company/billing" element={<BillingPage />} />
+            {/* The danger zone moved to the bottom of Company profile; old links land there. */}
+            <Route path="/company/account" element={<Navigate to="/company/profile" replace />} />
           </Route>
         </Route>
 

@@ -8,10 +8,12 @@
 //  - an account still on a temporary password (must_change_password) gets 403
 //    PASSWORD_CHANGE_REQUIRED everywhere except the routes mounted with
 //    authenticate.allowPasswordChange (GET /auth/me, POST /auth/change-password).
+//  - (account-settings) users of a company that is closing get 401 ACCOUNT_CLOSING.
 const pool = require('../db/pool');
 const { verifyJwt } = require('../auth/jwt');
 const { tenantTypeForRole } = require('../db/scoped');
 const { tempPasswordExpired } = require('../services/passwords');
+const { closingError } = require('../services/closure');
 
 async function check(req, res, next, allowPasswordChange) {
   try {
@@ -30,7 +32,8 @@ async function check(req, res, next, allowPasswordChange) {
     const { rows } = await pool.query(
       `SELECT u.id, u.role, u.company_id, u.school_id, u.is_active, u.email_verified_at,
               u.must_change_password, u.password_changed_at, u.temp_password_expires_at,
-              COALESCE(c.claim_status, s.claim_status) AS org_claim_status
+              COALESCE(c.claim_status, s.claim_status) AS org_claim_status,
+              c.billing_status AS company_billing_status, c.closure_purge_at AS company_closure_purge_at
          FROM users u
          LEFT JOIN companies c ON c.id = u.company_id
          LEFT JOIN schools   s ON s.id = u.school_id
@@ -40,6 +43,12 @@ async function check(req, res, next, allowPasswordChange) {
     const user = rows[0];
     if (!user || !user.is_active) {
       return res.status(401).json({ error: 'account inactive or not found', code: 'ACCOUNT_INACTIVE' });
+    }
+    // A company that asked to close its account (services/closure.js): every one of its users
+    // is refused, with the same message login gives (it says how to undo).
+    if (user.company_billing_status === 'closing') {
+      const err = closingError(user.company_closure_purge_at, 401);
+      return res.status(401).json({ error: err.message, code: err.code });
     }
     if (user.password_changed_at && claims.iat < Math.floor(new Date(user.password_changed_at).getTime() / 1000)) {
       return res.status(401).json({ error: 'your password was changed, please log in again', code: 'PASSWORD_CHANGED' });

@@ -8,8 +8,22 @@ const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
 const { assertValidZip, assertValidState, assertMaxLength, assertValidEmail } = require('../validate');
 const { HttpError } = require('../errors');
+const { usageCounts, billing } = require('../services/usage');
+const { requestClosure, undoClosure } = require('../services/closure');
+const { verifyLimiter } = require('../middleware/rateLimit');
 
 const router = express.Router();
+
+// Undo a closure request: the link from the closure email (services/closure.js). Public and
+// declared before the auth chain below: nobody in a closing company can sign in.
+router.delete('/me/closure', verifyLimiter, async (req, res, next) => {
+  try {
+    res.json(await undoClosure(req.query.token));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.use(authenticate, requireOperable, attachScopedDb, requireRole('company_admin'));
 
 router.get('/me', async (req, res, next) => {
@@ -44,6 +58,32 @@ router.patch('/me', async (req, res, next) => {
     const row = await req.db.update('companies', req.auth.tenantId, patch);
     if (!row) throw new HttpError(404, 'company not found');
     res.json(row);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Read-only usage and plan (services/usage.js). No payment data exists anywhere.
+router.get('/me/usage', async (req, res, next) => {
+  try {
+    res.json(await usageCounts(req.auth.tenantId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/me/billing', async (req, res, next) => {
+  try {
+    res.json(await billing(req.auth.tenantId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Ask to close the company's account (request side only: nothing is deleted).
+router.post('/me/closure', verifyLimiter, async (req, res, next) => {
+  try {
+    res.json(await requestClosure(req, req.body || {}));
   } catch (e) {
     next(e);
   }

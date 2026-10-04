@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
 import { Copyright } from './Copyright'
+import { LegalLinks } from './LegalLinks'
 import { Logo } from './Logo'
 import { useComingSoon } from './ComingSoon'
 import { useAuth } from '../lib/auth'
@@ -56,7 +57,10 @@ function PhoneShell({ title, sub, onLogout, tabs, children }: ShellProps) {
           <ThumbSlotContext.Provider value={thumbSlot}>
             <Suspense fallback={<p className="px-5 pt-6 text-[14px] text-muted">Loading…</p>}>{children}</Suspense>
           </ThumbSlotContext.Provider>
-          <Copyright className="mt-auto pt-6" />
+          <div className="mt-auto flex flex-col items-center pt-6">
+            <LegalLinks />
+            <Copyright className="!pt-1" />
+          </div>
         </div>
         <div ref={slotRef} />
         <nav className="grid shrink-0 border-t border-line bg-surface pt-2 pb-[max(24px,env(safe-area-inset-bottom))]" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
@@ -173,6 +177,18 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
             <span className="truncate text-[12px] text-sidebar-icon">{hubName}</span>
           </div>
           <ThemeToggle variant="sidebar" />
+          <NavLink
+            to="/account"
+            aria-label="My account"
+            title="My account"
+            className={({ isActive }) =>
+              `flex h-8 w-8 shrink-0 items-center justify-center rounded-row hover:bg-sidebar-hover hover:text-sidebar-strong ${
+                isActive ? 'bg-sidebar-hover text-sidebar-strong' : 'text-sidebar-icon'
+              }`
+            }
+          >
+            <span className="material-symbols-outlined !text-[20px]">manage_accounts</span>
+          </NavLink>
           <button
             type="button"
             onClick={onLogout}
@@ -183,6 +199,7 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
             <span className="material-symbols-outlined !text-[20px]">logout</span>
           </button>
         </div>
+        <LegalLinks className="px-2.5 pt-2 text-sidebar-icon" />
       </aside>
       )}
 
@@ -253,6 +270,14 @@ export function MobileHeader({ title, sub, onLogout }: { title: string; sub: Rea
       </div>
       <div className="flex shrink-0 gap-2">
         <ThemeToggle variant="mobile" />
+        <NavLink
+          to="/account"
+          aria-label="My account"
+          title="My account"
+          className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-line bg-surface text-muted"
+        >
+          <span className="material-symbols-outlined !text-[20px]">manage_accounts</span>
+        </NavLink>
         <button
           type="button"
           onClick={onLogout}

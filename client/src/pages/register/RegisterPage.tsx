@@ -1,3 +1,4 @@
+import { LEGAL_DOCS, useLegalDoc } from '../../lib/legal'
 import { Copyright } from '../../components/Copyright'
 import { Logo } from '../../components/Logo'
 import { useEffect, useState, type FormEvent } from 'react'
@@ -63,6 +64,15 @@ export function RegisterPage() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  // Required "I agree to the Terms of Use and Privacy Policy" (account-settings). The server
+  // records one acceptance per document with the versions sent here.
+  const [agreed, setAgreed] = useState(false)
+  // The versions agreed to are the ones the API serves right now (GET /legal/:document).
+  const termsDoc = useLegalDoc('terms')
+  const privacyDoc = useLegalDoc('privacy')
+  const legalVersions =
+    termsDoc.data && privacyDoc.data ? { terms: termsDoc.data.version, privacy: privacyDoc.data.version } : null
+  const legalError = termsDoc.isError || privacyDoc.isError
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -98,6 +108,7 @@ export function RegisterPage() {
         email,
         password,
         ...(claiming ? { claimId } : { orgName, address, zip, state }),
+        ...(agreed && legalVersions ? { acceptLegal: legalVersions } : {}),
       }),
     onSuccess: async (res) => {
       if (res.mode === 'created') {
@@ -142,6 +153,14 @@ export function RegisterPage() {
     }
     if (!claiming && password !== confirmPassword) {
       setError('Passwords do not match.')
+      return
+    }
+    if (!agreed) {
+      setError('Please agree to the Terms of Use and Privacy Policy.')
+      return
+    }
+    if (!legalVersions) {
+      setError('The Terms of Use and Privacy Policy could not be loaded. Reload the page and try again.')
       return
     }
     setStage('creating')
@@ -342,6 +361,32 @@ export function RegisterPage() {
               </button>
             </div>
           </div>
+
+          <label className="flex items-start gap-2.5 text-body-md text-on-surface">
+            <input
+              type="checkbox"
+              required
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-amber"
+            />
+            <span>
+              I agree to the{' '}
+              <Link to={LEGAL_DOCS.terms.path} target="_blank" className="font-medium text-primary underline-offset-2 hover:underline">
+                Terms of Use
+              </Link>{' '}
+              and{' '}
+              <Link to={LEGAL_DOCS.privacy.path} target="_blank" className="font-medium text-primary underline-offset-2 hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </span>
+          </label>
+          {legalError && (
+            <p role="alert" className="text-label-md text-error">
+              Could not load the Terms of Use and Privacy Policy. Reload the page to try again.
+            </p>
+          )}
 
           {error && (
             <p role="alert" className="rounded-lg bg-error-container px-4 py-2 text-body-md text-on-error-container">

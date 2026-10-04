@@ -91,6 +91,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={{ user, token, login, setSession, logout }}>{children}</AuthContext.Provider>
 }
 
+// A one-time message for the login page after the app signs someone out on purpose (e.g. "your
+// company account is closing"). sessionStorage, not router state: logging out redirects through
+// ProtectedRoute, which would drop router state. LoginPage reads it, then clears it.
+const LOGIN_NOTICE_KEY = 'saferoute_login_notice'
+export function setLoginNotice(text: string) {
+  try {
+    sessionStorage.setItem(LOGIN_NOTICE_KEY, text)
+  } catch {
+    // storage unavailable: the login page simply shows no notice
+  }
+}
+export function peekLoginNotice(): string | null {
+  try {
+    return sessionStorage.getItem(LOGIN_NOTICE_KEY)
+  } catch {
+    return null
+  }
+}
+export function clearLoginNotice() {
+  try {
+    sessionStorage.removeItem(LOGIN_NOTICE_KEY)
+  } catch {
+    // nothing to clear
+  }
+}
+
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')

@@ -8,6 +8,7 @@ const { generateToken, hashToken } = require('../auth/tokens');
 const { signJwt } = require('../auth/jwt');
 const { sendInBackground } = require('../mail/mailer');
 const { HttpError } = require('../errors');
+const { assertLegalAccepted, recordAcceptances } = require('./legal');
 const {
   assertValidEmail,
   assertPasswordStrength,
@@ -68,7 +69,7 @@ async function createAdminUser(client, cfg, orgId, { fullName, email, password }
 }
 
 // Fresh signup: brand-new org, operational immediately (no email verification, §5.2).
-async function signupFresh(kind, { orgName, address, zip, state, fullName, email, password }) {
+async function signupFresh(kind, { orgName, address, zip, state, fullName, email, password }, { legal, ip } = {}) {
   const cfg = kindConfig(kind);
   const user = await withTx(async (client) => {
     const { rows } = await client.query(
@@ -76,14 +77,17 @@ async function signupFresh(kind, { orgName, address, zip, state, fullName, email
        VALUES ($1, $2, $3, $4, 'claimed', now()) RETURNING id`,
       [orgName, address, zip, state]
     );
-    return createAdminUser(client, cfg, rows[0].id, { fullName, email, password }, true);
+    const admin = await createAdminUser(client, cfg, rows[0].id, { fullName, email, password }, true);
+    // Same transaction: no account exists without its Terms / Privacy acceptance rows.
+    await recordAcceptances(client, admin.id, legal, ip);
+    return admin;
   });
   const token = signJwt({ sub: user.id, role: user.role, tt: kind, tid: undefined });
   return { mode: 'created', token, user: { id: user.id, email: user.email, role: user.role } };
 }
 
-async function signup(kind, body = {}) {
-  const { orgName, fullName, email, password, address, zip, state, claimId } = body;
+async function signup(kind, body = {}, { ip } = {}) {
+  const { orgName, fullName, email, password, address, zip, state, claimId, acceptLegal } = body;
   if (!fullName || !email || !password) throw new HttpError(400, 'fullName, email and password are required');
   assertValidEmail(email);
   assertPasswordStrength(password);
@@ -104,7 +108,9 @@ async function signup(kind, body = {}) {
   assertMaxLength(address, 500, 'address');
   assertValidZip(zip);
   const normalizedState = assertValidState(state);
-  return signupFresh(kind, { orgName, address, zip, state: normalizedState, fullName, email, password });
+  // The required "I agree to the Terms of Use and Privacy Policy" checkbox (services/legal.js).
+  const legal = assertLegalAccepted(acceptLegal);
+  return signupFresh(kind, { orgName, address, zip, state: normalizedState, fullName, email, password }, { legal, ip });
 }
 
 // Verify email. Only marks the address verified: it never finalizes a claim any more (claims are

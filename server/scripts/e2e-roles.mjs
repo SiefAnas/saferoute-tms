@@ -34,6 +34,9 @@ const BASE = process.env.API_BASE || 'http://localhost:4000'
 }
 
 const PW = 'Secret123!'
+// The Terms / Privacy checkbox signup now requires: the current versions from server/src/legal.
+const { currentVersions } = (await import('node:module')).createRequire(import.meta.url)('../src/services/legal.js')
+const LEGAL = currentVersions()
 const stamp = Date.now().toString(36)
 let passed = 0
 let failed = 0
@@ -77,7 +80,7 @@ const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 async function main() {
   console.log('\n--- Sign up test orgs (self-serve) ---')
   const signup = async (kind, orgName, email) => {
-    const r = await api('POST', `/signup/${kind}`, null, { orgName, address: '1 Test Rd, Springfield', zip: '62704', state: 'IL', fullName: `MVP Test Admin ${stamp}`, email, password: PW })
+    const r = await api('POST', `/signup/${kind}`, null, { orgName, address: '1 Test Rd, Springfield', zip: '62704', state: 'IL', fullName: `MVP Test Admin ${stamp}`, email, password: PW, acceptLegal: LEGAL })
     check(r.status === 201, `signup ${kind} "${orgName}" -> 201`, r)
     created.push(`${kind} "${orgName}" + admin ${email}`)
     return r

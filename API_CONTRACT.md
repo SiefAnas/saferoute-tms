@@ -70,7 +70,7 @@ itself (`GET /students/:id`) is then `404`.
 | Production base URL | `https://saferoute-tms-api.onrender.com` (no `/api` prefix; the web client adds `/api` only for its local Vite proxy) |
 | Local dev | `http://localhost:4000` |
 | Format | JSON in and out. Send `Content-Type: application/json` on requests with a body. |
-| Auth | `Authorization: Bearer <token>` on every endpoint except `/health`, `/auth/login`, `/auth/verify-email`, `/auth/resend-verification`, `/signup/*` |
+| Auth | `Authorization: Bearer <token>` on every endpoint except `/health`, `/auth/login`, `/auth/verify-email`, `/auth/resend-verification`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/confirm-email-change`, `DELETE /companies/me/closure`, `/legal/*`, `/signup/*` |
 | Health check | `GET /health` → `200 {"status":"ok"}` |
 
 ### Errors
@@ -183,8 +183,67 @@ Body `{ "token": "…", "newPassword": "…" }` (the website's reset page sends 
 {"ok": true}`; every existing session of that user is signed out. `400` wrong, used or expired
 token, or weak password. `429` rate limited.
 
+### Own account (every role, branch `account-settings`)
+- `GET /users/me` → the caller's user object (same shape as admin `GET /users/:id`) plus
+  `pending_email` and `pending_email_sent_at` (both `null` unless an email change is waiting).
+- `PATCH /users/me` body: any of `full_name`, `phone`, `address` (text; blank or `null` clears
+  `phone` / `address`). Anything else in the body (role, is_active, email, password, company_id…)
+  → `400` and nothing is saved. `full_name` can't be blank. Parents can't clear phone or address.
+  Same length limits as the admin edit. Returns the same shape as `GET /users/me`.
+- `POST /users/me/email-change` body `{ "newEmail", "currentPassword" }` → `200` own account with
+  `pending_email` set. The email doesn't change yet: a link `<website>/confirm-email-change?token=…`
+  goes to the **new** address (24 hours, only the newest link works). `400` wrong password,
+  invalid email, or same as the current one; `409 "email already registered"` if any account
+  uses it. Rate limited with the verify endpoints (`429`).
+- `POST /users/me/email-change/resend` → a new link to the same pending address (`409` when
+  nothing is pending or the address was taken meanwhile). `DELETE /users/me/email-change` cancels.
+- `POST /auth/confirm-email-change` (public) body `{ "token" }` → `200 {"ok": true, "email": "…"}`.
+  The new email is the login from now on, and **every session of that user is signed out**
+  (old tokens get `401 PASSWORD_CHANGED`, the same code a password change uses). `400` wrong,
+  used or expired link, or account deactivated; `409` the address was registered by someone else
+  in the meantime.
+
+### Data deletion request (driver, monitor, parent; branch `account-settings`)
+- `GET /users/me/deletion-request` → `{ request: null | { id, status: "open", reason, requested_at } }`
+  (the caller's open request).
+- `POST /users/me/deletion-request` body `{ "reason"?: "…" }` (optional, ≤ 500 characters after
+  trimming) → `201 { request }`. Records the request and emails SafeTurns support
+  (`SUPPORT_EMAIL` on the server) and every active company_admin of the person's company.
+  Nothing is deleted, approved or denied. `409` one is already open; `400` reason too long / not
+  text; `403` any other role (admins close the company account instead). Rate limited with the
+  verify endpoints.
+
+### Usage and billing (company_admin, read only, branch `account-settings`)
+- `GET /companies/me/usage` → `{ students, drivers, monitors, vans, schools }` for the caller's
+  company. Drivers / monitors: active accounts only. Schools: the same list as `GET /schools`.
+- `GET /companies/me/billing` → `{ plan: "pilot", status: "free" | "closing", trial_ends_at, usage }`.
+  No payment data exists. Other roles → `403`.
+- `server/scripts/snapshot-usage.js [--dry-run]` stores the same counts once per company per day in
+  `usage_snapshots` (not scheduled yet).
+
+### Closing a company account (company_admin, branch `account-settings`)
+- `POST /companies/me/closure` body `{ "currentPassword", "confirmName" }` (the company name typed
+  exactly, same case and spaces) → `200 { closure_requested_at, closure_purge_at }` (purge 30 days
+  out). Every session of every user of the company is signed out at once, and the admin gets an
+  email with an undo link `<website>/company-closure/undo?token=…`. `400` wrong password or name,
+  `409` already closing, `403` other roles. Nothing is deleted (the purge isn't built).
+- While closing, **every user of that company** gets `403 {"code":"ACCOUNT_CLOSING"}` at login
+  (after a correct password) and `401 {"code":"ACCOUNT_CLOSING"}` on any other request. Show
+  `error` as-is: it gives the purge date and says how to undo.
+- `DELETE /companies/me/closure?token=…` (public: nobody in the company can sign in) → `200
+  {"ok": true, "company": "…"}`; clears the closure while the purge date is in the future.
+  `400` wrong, used or expired link. Old sessions stay signed out; people sign in again.
+
 ### How accounts are created
 - Company admins and school admins sign up themselves (`POST /signup/company|school`).
+  The body must include `acceptLegal: { "terms": "<version>", "privacy": "<version>" }`, the
+  versions the person agreed to (from `GET /legal/terms` and `GET /legal/privacy`). Without it
+  `400`; anything but the current version `409` (reload and agree again). One `legal_acceptances`
+  row per document is written with the request IP (branch `account-settings`).
+- `GET /legal/terms`, `GET /legal/privacy` (public) → `{ document, version, effective, markdown }`
+  (`markdown` is the whole file, frontmatter included). Other names `404`. The files live in
+  `server/src/legal/`; the API refuses to start if either is missing or has no `version` /
+  `effective` in its frontmatter.
 - **Drivers, monitors and parents are created by a company admin, school staff by a school admin**
   (`POST /users`). The admin doesn't choose a password: the response has a
   `temporary_password` (shown once, e.g. `Kp7x-Qm4r-Tz9w`) to hand over, and the account has

@@ -63,6 +63,22 @@ export interface PublicUser {
   temp_password_expires_at?: string | null
 }
 
+// GET/PATCH /users/me: the signed-in person's own account, with any email change still waiting
+// for its confirmation link (account-settings).
+export interface OwnAccount extends PublicUser {
+  pending_email: string | null
+  pending_email_sent_at: string | null
+}
+
+// GET/POST /users/me/deletion-request (driver, monitor, parent): a request for SafeTurns and the
+// company admin to delete the person's data. Only a record + emails; nothing is deleted.
+export interface DeletionRequest {
+  id: string
+  status: 'open' | 'closed'
+  reason: string | null
+  requested_at: string
+}
+
 // POST /users: the new account plus its temporary password, returned this one time only.
 export interface CreatedUser extends PublicUser {
   temporary_password: string
@@ -456,6 +472,23 @@ export interface Company {
   phone: string | null
   claim_status: 'claimed' | 'unclaimed' | 'pending_claim'
   created_by_user_id: string | null
+}
+
+// GET /companies/me/usage (account-settings): what the company has in SafeTurns right now.
+export interface CompanyUsage {
+  students: number
+  drivers: number // active accounts only
+  monitors: number // active accounts only
+  vans: number
+  schools: number
+}
+
+// GET /companies/me/billing: read only, no payments. Every company is on the free pilot.
+export interface CompanyBilling {
+  plan: 'pilot'
+  status: 'free' | 'closing'
+  trial_ends_at: string | null
+  usage: CompanyUsage
 }
 
 export type ScheduleChangeType = 'left_early' | 'staying_later'
