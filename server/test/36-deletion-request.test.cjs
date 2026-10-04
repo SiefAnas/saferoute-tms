@@ -1,11 +1,13 @@
 // Data deletion requests (branch account-settings): POST /users/me/deletion-request records one
-// open request per driver / monitor / parent and emails SafeTurns support plus the company's
-// active admins; a second open request is refused; GET shows the open one. Nothing is deleted.
+// open request per driver / monitor / parent (against the company) and per school admin / school
+// staff (against the school, migration 033), and emails SafeTurns support plus the org's other
+// active admins; a second open request is refused; GET shows the open one. Company admins are
+// refused (they close the whole company). Nothing is deleted.
 const PG_PORT = 5494;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
 process.env.JWT_SECRET = 'test-secret-36';
 process.env.NODE_ENV = 'test';
-process.env.SUPPORT_EMAIL = 'support@safeturns.test';
+process.env.SUPPORT_EMAIL = 'support@safeturns.com';
 
 const { createRecorder, startEmbeddedPostgres, runMigrateUp } = require('./lib/testkit.cjs');
 const createApp = require('../src/app.js');
@@ -52,8 +54,13 @@ async function main() {
     const parent = await user('parent@a.com', 'parent', 'company_id', A.id, 'Pat Parent');
     await user('driver@a.com', 'driver', 'company_id', A.id, 'Dee Driver');
     await user('monitor@a.com', 'monitor', 'company_id', A.id);
-    await user('staff@s.com', 'school_staff', 'school_id', S.id);
-    await user('sadmin@s.com', 'school_admin', 'school_id', S.id);
+    const S2 = await q("INSERT INTO schools(name,claim_status,claimed_at) VALUES('School Two','claimed',now()) RETURNING id");
+    const staff = await user('staff@s.com', 'school_staff', 'school_id', S.id, 'Sam Staff');
+    const sadmin = await user('sadmin@s.com', 'school_admin', 'school_id', S.id, 'Sid Admin');
+    await user('sadmin2@s.com', 'school_admin', 'school_id', S.id);
+    const goneS = await user('gone-sadmin@s.com', 'school_admin', 'school_id', S.id);
+    await pool.query('UPDATE users SET is_active = false WHERE id = $1', [goneS.id]);
+    await user('sadmin@s2.com', 'school_admin', 'school_id', S2.id);
     await q("INSERT INTO students(company_id,school_id,full_name,grade) VALUES($1,$2,'Kid','3')", [A.id, S.id]);
     const before = (await q('SELECT (SELECT count(*) FROM users)::int + (SELECT count(*) FROM students)::int AS n')).n;
 
@@ -73,7 +80,7 @@ async function main() {
       const row = await q('SELECT user_id, company_id, reason, status, handled_at, handled_by, requested_at > now() - interval \'1 minute\' AS recent FROM deletion_requests WHERE id = $1', [r?.id]);
       eq('row: user, company, reason, status open, not handled', JSON.stringify([row.user_id, row.company_id, row.reason, row.status, row.handled_at, row.handled_by, row.recent]), JSON.stringify([parent.id, A.id, 'We moved away.', 'open', null, null, true]));
       const sent = await mailer._drained();
-      eq('emails: support + the two active admins of the same company', sent.map((m) => m.to).sort().join(','), 'admin1@a.com,admin2@a.com,support@safeturns.test');
+      eq('emails: support + the two active admins of the same company', sent.map((m) => m.to).sort().join(','), 'admin1@a.com,admin2@a.com,support@safeturns.com');
       const m = sent[0];
       (/Pat Parent/.test(m.subject) && /Acme Rides/.test(m.subject) && /parent, parent@a\.com/.test(m.text) && /We moved away\./.test(m.text) && m.text.includes(r.id))
         ? ok('email names the person, role, company, reason and request id') : bad(`mail: ${m.subject} / ${m.text}`);
@@ -97,12 +104,53 @@ async function main() {
       eq('reason of 501 characters -> 400', (await api('POST', '/users/me/deletion-request', tM, { reason: 'x'.repeat(501) })).status, 400);
       eq('reason of exactly 500 -> 201', (await api('POST', '/users/me/deletion-request', tM, { reason: 'x'.repeat(500) })).status, 201);
       eq('reason as a number -> 400', (await api('POST', '/users/me/deletion-request', tD, { reason: 5 })).status, 400);
-      for (const email of ['admin1@a.com', 'staff@s.com', 'sadmin@s.com']) {
-        const t = await login(email);
-        eq(`${email}: POST -> 403`, (await api('POST', '/users/me/deletion-request', t, {})).status, 403);
-        eq(`${email}: GET -> 403`, (await api('GET', '/users/me/deletion-request', t)).status, 403);
-      }
+      const tA = await login('admin1@a.com');
+      eq('company admin: POST -> 403 (closes the company instead)', (await api('POST', '/users/me/deletion-request', tA, {})).status, 403);
+      eq('company admin: GET -> 403', (await api('GET', '/users/me/deletion-request', tA)).status, 403);
       eq('no token -> 401', (await api('POST', '/users/me/deletion-request', null, {})).status, 401);
+
+      console.log('\n--- school staff ---');
+      const tS = await login('staff@s.com');
+      eq('staff: GET before asking -> { request: null }', JSON.stringify((await api('GET', '/users/me/deletion-request', tS)).body), JSON.stringify({ request: null }));
+      mailer._reset();
+      const sReq = await api('POST', '/users/me/deletion-request', tS, { reason: 'Leaving the district.' });
+      eq('staff: POST -> 201', sReq.status, 201);
+      const sRow = await q('SELECT user_id, company_id, school_id, reason, status FROM deletion_requests WHERE id = $1', [sReq.body?.request?.id]);
+      eq('staff row: school recorded, no company', JSON.stringify([sRow?.user_id, sRow?.company_id, sRow?.school_id, sRow?.reason, sRow?.status]), JSON.stringify([staff.id, null, S.id, 'Leaving the district.', 'open']));
+      const sSent = await mailer._drained();
+      eq('staff emails: support + the two active admins of that school only', sSent.map((x) => x.to).sort().join(','), 'sadmin2@s.com,sadmin@s.com,support@safeturns.com');
+      const sm = sSent[0];
+      (/Sam Staff/.test(sm.subject) && /School S/.test(sm.subject) && /school staff, staff@s\.com/.test(sm.text) && sm.text.includes(sReq.body.request.id) && /the school's admins/.test(sm.text))
+        ? ok('staff email names the person, role, school and request id') : bad(`mail: ${sm.subject} / ${sm.text}`);
+      eq('staff: GET shows the open request', (await api('GET', '/users/me/deletion-request', tS)).body?.request?.id, sReq.body.request.id);
+      mailer._reset();
+      const sDup = await api('POST', '/users/me/deletion-request', tS, { reason: 'again' });
+      eq('staff: second request while one is open -> 409', `${sDup.status} ${sDup.body?.error}`, '409 you already have an open deletion request');
+      eq('staff: still exactly one request', (await q('SELECT count(*)::int AS n FROM deletion_requests WHERE user_id = $1', [staff.id])).n, 1);
+      eq('staff: no emails for the refused duplicate', (await mailer._drained()).length, 0);
+      await pool.query("UPDATE deletion_requests SET status = 'closed' WHERE user_id = $1", [staff.id]);
+      eq('staff: after the open one is closed, a new one is allowed', (await api('POST', '/users/me/deletion-request', tS, {})).status, 201);
+
+      console.log('\n--- school admin ---');
+      const tSA = await login('sadmin@s.com');
+      mailer._reset();
+      const saRace = await Promise.all([1, 2, 3].map(() => api('POST', '/users/me/deletion-request', tSA, {})));
+      eq('school admin, three at once: one 201, two 409', saRace.map((x) => x.status).sort().join(','), '201,409,409');
+      const saRow = await q("SELECT company_id, school_id FROM deletion_requests WHERE user_id = $1 AND status = 'open'", [sadmin.id]);
+      eq('school admin row: school recorded, no company', JSON.stringify([saRow?.company_id, saRow?.school_id]), JSON.stringify([null, S.id]));
+      eq('school admin emails: support + the other active admin, not themselves', (await mailer._drained()).map((x) => x.to).sort().join(','), 'sadmin2@s.com,support@safeturns.com');
+
+      console.log('\n--- constraint: exactly one of company / school ---');
+      const tryInsert = async (companyId, schoolId) => {
+        try {
+          await pool.query("INSERT INTO deletion_requests (user_id, company_id, school_id, status) VALUES ($1, $2, $3, 'closed')", [staff.id, companyId, schoolId]);
+          return 'inserted';
+        } catch (e) { return e.constraint || e.code; }
+      };
+      eq('both company and school -> refused', await tryInsert(A.id, S.id), 'deletion_requests_one_owner');
+      eq('neither company nor school -> refused', await tryInsert(null, null), 'deletion_requests_one_owner');
+      eq('school only -> allowed', await tryInsert(null, S.id), 'inserted');
+      eq('company only -> allowed', await tryInsert(A.id, null), 'inserted');
 
       console.log('\n--- without SUPPORT_EMAIL ---');
       config.supportEmail = null;

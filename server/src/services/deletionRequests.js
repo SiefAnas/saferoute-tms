@@ -1,17 +1,24 @@
-// Data deletion requests (branch account-settings). Drivers, monitors and parents were created by
-// their company admin, so they can't close their own account; they can ask for their data to be
-// deleted. A request is a record (deletion_requests) plus an email to SafeTurns support
-// (config.supportEmail) and to the company's active admins. Nothing else happens: no inbox, no
-// approve / deny, no deletion. What the right reply is hasn't been decided yet.
+// Data deletion requests (branch account-settings). Anyone who can't close their own account can
+// ask for their data to be deleted instead. Company admins close the whole company account
+// (services/closure.js); every other role was created by an admin and has no way to close its
+// account, so it asks:
+//  - driver, monitor, parent: the request records the company; the company's active admins are
+//    emailed.
+//  - school_admin, school_staff (migration 033): the request records the school; the school's
+//    active admins are emailed.
+// SafeTurns support (config.supportEmail) is emailed either way. Nothing else happens: no inbox,
+// no approve / deny, no deletion. What the right reply is hasn't been decided yet.
 const pool = require('../db/pool');
 const config = require('../config');
 const { HttpError } = require('../errors');
 const { assertMaxLength } = require('../validate');
 const { sendInBackground } = require('../mail/mailer');
 
-const REQUEST_ROLES = ['driver', 'monitor', 'parent'];
+const COMPANY_ROLES = ['driver', 'monitor', 'parent'];
+const SCHOOL_ROLES = ['school_admin', 'school_staff'];
+const REQUEST_ROLES = [...COMPANY_ROLES, ...SCHOOL_ROLES];
 const MAX_REASON = 500;
-const ROLE_LABEL = { driver: 'driver', monitor: 'monitor', parent: 'parent' };
+const ROLE_LABEL = { driver: 'driver', monitor: 'monitor', parent: 'parent', school_admin: 'school admin', school_staff: 'school staff' };
 
 function publicRequest(r) {
   return r ? { id: r.id, status: r.status, reason: r.reason, requested_at: r.requested_at } : null;
@@ -19,7 +26,7 @@ function publicRequest(r) {
 
 function assertCanRequest(req) {
   if (!REQUEST_ROLES.includes(req.auth.role)) {
-    throw new HttpError(403, 'only drivers, monitors and parents can request deletion here; admins close the whole account');
+    throw new HttpError(403, 'company admins close the whole company account instead of requesting deletion');
   }
 }
 
@@ -30,23 +37,33 @@ async function getOpenRequest(req) {
   return { request: publicRequest(rows[0]) };
 }
 
+// The requester plus the organisation the request belongs to: the company for company-side roles,
+// the school for school-side roles.
+async function loadRequester(req) {
+  const school = SCHOOL_ROLES.includes(req.auth.role);
+  const user = (await pool.query(
+    school
+      ? 'SELECT u.id, u.full_name, u.email, u.role, u.school_id AS org_id, s.name AS org_name FROM users u JOIN schools s ON s.id = u.school_id WHERE u.id = $1'
+      : 'SELECT u.id, u.full_name, u.email, u.role, u.company_id AS org_id, c.name AS org_name FROM users u JOIN companies c ON c.id = u.company_id WHERE u.id = $1',
+    [req.auth.userId]
+  )).rows[0];
+  if (!user) throw new HttpError(404, 'user not found');
+  return { user, school };
+}
+
 async function createRequest(req, { reason } = {}) {
   assertCanRequest(req);
   if (reason !== undefined && reason !== null && typeof reason !== 'string') throw new HttpError(400, 'reason must be text');
   const text = typeof reason === 'string' ? reason.trim() || null : null;
   assertMaxLength(text, MAX_REASON, 'reason');
 
-  const user = (await pool.query(
-    'SELECT u.id, u.full_name, u.email, u.role, u.company_id, c.name AS company_name FROM users u JOIN companies c ON c.id = u.company_id WHERE u.id = $1',
-    [req.auth.userId]
-  )).rows[0];
-  if (!user) throw new HttpError(404, 'user not found');
+  const { user, school } = await loadRequester(req);
 
   let row;
   try {
     row = (await pool.query(
-      'INSERT INTO deletion_requests (user_id, company_id, reason) VALUES ($1, $2, $3) RETURNING *',
-      [user.id, user.company_id, text]
+      'INSERT INTO deletion_requests (user_id, company_id, school_id, reason) VALUES ($1, $2, $3, $4) RETURNING *',
+      [user.id, school ? null : user.org_id, school ? user.org_id : null, text]
     )).rows[0];
   } catch (err) {
     // deletion_requests_one_open_per_user: one open request at a time (also under a double click).
@@ -54,20 +71,25 @@ async function createRequest(req, { reason } = {}) {
     throw err;
   }
 
+  // The organisation's active admins. A school admin asking about their own account isn't emailed
+  // their own request.
   const admins = (await pool.query(
-    "SELECT email FROM users WHERE company_id = $1 AND role = 'company_admin' AND is_active ORDER BY email",
-    [user.company_id]
+    school
+      ? "SELECT email FROM users WHERE school_id = $1 AND role = 'school_admin' AND is_active AND id <> $2 ORDER BY email"
+      : "SELECT email FROM users WHERE company_id = $1 AND role = 'company_admin' AND is_active AND id <> $2 ORDER BY email",
+    [user.org_id, user.id]
   )).rows.map((r) => r.email);
+  const orgKind = school ? 'school' : 'company';
   const message = (to) => ({
     to,
-    subject: `Data deletion request: ${user.full_name} (${user.company_name})`,
+    subject: `Data deletion request: ${user.full_name} (${user.org_name})`,
     text:
-      `${user.full_name} (${ROLE_LABEL[user.role]}, ${user.email}) at ${user.company_name} asked for their data ` +
+      `${user.full_name} (${ROLE_LABEL[user.role]}, ${user.email}) at ${user.org_name} asked for their data ` +
       `in SafeTurns to be deleted.\n\n` +
       `Reason: ${text ?? '(none given)'}\n` +
       `Requested: ${row.requested_at.toISOString()}\n` +
       `Request id: ${row.id}\n\n` +
-      `Nothing has been deleted. SafeTurns support and the company's admins have both received this ` +
+      `Nothing has been deleted. SafeTurns support and the ${orgKind}'s admins have both received this ` +
       `email; reply to the person directly.`,
   });
   if (config.supportEmail) {
