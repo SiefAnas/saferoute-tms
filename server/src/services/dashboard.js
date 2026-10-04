@@ -5,8 +5,9 @@ const pool = require('../db/pool');
 // "Late/absent today" — the real hook flagged back when Skip Pickup / Mark Absent were
 // built. Today only, resets daily by construction (both source tables are keyed by
 // calendar date) — no acknowledged/cleared state, per instruction to keep this simple.
-// Uses the DB's own CURRENT_DATE (not a JS-computed date string) to stay consistent with
-// how skip_date/no_show_date were actually written by parentPortal.js/schedule.js.
+// "Today" is the company's business date (req.businessDate, its own timezone), the same date
+// skip_date / no_show_date are written with (parentPortal.js / schedule.js). School users see each
+// row's own company's today (docs/TIMEZONE_SURVEY.md, C1). No CURRENT_DATE, no session timezone.
 //
 // Extended 2026-09-02 for school_admin/school_staff (§ pickup-confirmation task): pickup_skips
 // and pickup_no_shows are company-tenant-only tables (no school_id column at all), so a
@@ -21,10 +22,7 @@ async function getAbsentToday(req) {
 }
 
 async function getAbsentTodayForCompany(req) {
-  // ::text on purpose: pg parses DATE into a JS Date at local midnight, and toISOString() on
-  // that shifts to the previous day on any server running east of UTC (e.g. Egypt, UTC+2/+3).
-  const { rows: dateRows } = await pool.query('SELECT CURRENT_DATE::text AS d');
-  const today = dateRows[0].d;
+  const today = req.businessDate;
 
   const [skips, noShows, students] = await Promise.all([
     req.db.findMany('pickup_skips', { where: { skip_date: today } }),
@@ -49,15 +47,21 @@ async function getAbsentTodayForSchool(req) {
     ? 'AND st.id IN (SELECT student_id FROM staff_student_access WHERE staff_user_id = $2)'
     : '';
   const params = req.auth.role === 'school_staff' ? [req.auth.tenantId, req.auth.userId] : [req.auth.tenantId];
+  // A school's students can ride with companies in different zones: each row is "today" by its own
+  // company's date, i.e. this request's instant read in that company's timezone.
+  params.push(req.now);
+  const now = `$${params.length}::timestamptz`;
 
   const { rows } = await pool.query(
     `SELECT st.id AS student_id, st.full_name AS student_name, 'parent_skipped' AS type, ps.created_at AS at
        FROM pickup_skips ps JOIN students st ON st.id = ps.student_id
-      WHERE st.school_id = $1 AND ps.skip_date = CURRENT_DATE ${staffFilter}
+       JOIN companies c ON c.id = ps.company_id
+      WHERE st.school_id = $1 AND ps.skip_date = (${now} AT TIME ZONE c.timezone)::date ${staffFilter}
      UNION ALL
      SELECT st.id, st.full_name, 'driver_no_show', pns.created_at
        FROM pickup_no_shows pns JOIN students st ON st.id = pns.student_id
-      WHERE st.school_id = $1 AND pns.no_show_date = CURRENT_DATE ${staffFilter}
+       JOIN companies c ON c.id = pns.company_id
+      WHERE st.school_id = $1 AND pns.no_show_date = (${now} AT TIME ZONE c.timezone)::date ${staffFilter}
      ORDER BY at DESC`,
     params
   );
