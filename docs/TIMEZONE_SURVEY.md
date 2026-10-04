@@ -96,6 +96,13 @@ School-side; the dates belong to the student's company (see **C1**): l. 40 (toda
 |---|---|
 | (via `findTodaysAssignment`, `driverScope`) | Logging a trip needs today's run; driver read scope uses "not ended". The trip timestamps themselves are (b). |
 
+### Found during task 3 (missed by the task-1 grep: they reach CURRENT_DATE through `assignmentNotEndedSql()`)
+| Where | Decides |
+|---|---|
+| `services/schools.js:62` | `GET /schools/:id` for a driver: schools of the driver's not-ended assignments. |
+| `services/users.js:150` | Deactivating a driver: "N active assignments, reassign first". |
+| `middleware/authorize.js:94` (`driverScope`) → scoped accessor `notEnded` | The driver read scope for students, vans, assignments. |
+
 ### Routes
 | Where | Decides |
 |---|---|

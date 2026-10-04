@@ -18,8 +18,8 @@ No upstream; not merged, not pushed. Local database only.
 | # | Task | Status | Commit |
 |---|---|---|---|
 | 1 | Survey (no code) | done | `ffdbc45` |
-| 2 | Column + helpers + middleware | done | see log |
-| 3 | Convert business-date code paths | todo | |
+| 2 | Column + helpers + middleware | done | `22bf0d6` |
+| 3 | Convert business-date code paths | done | `48c73c7` … `029abae` |
 | 4 | Edge-case tests | todo | |
 | 5 | Timezone setting in the UI | todo | |
 | 6 | Can the DB-level setting go? (report only) | todo | |
@@ -41,3 +41,24 @@ No upstream; not merged, not pushed. Local database only.
   selects `companies.timezone` in the query it already ran). `PATCH /companies/me` accepts
   `timezone`, validated against Intl + `pg_timezone_names`. New suite 41 (49 checks, also re-run
   under process TZ UTC / Tokyo / Honolulu). Suite 01 count 29 -> 30; 01, 02, 15 pass.
+- **Task 3 done**, one commit per service:
+  - `48c73c7` shared: `assignmentNotEndedSql(alias, day)` now requires the day (throws without it);
+    scoped accessor `notEnded` carries the business date; driver scope, driver school lookup,
+    deactivation check, van delete message, `/schedule/today` + `/week` (week days by `addDays`,
+    `unnest($::date[])`, not `generate_series` on timestamps), no-show date, today's assignment,
+    monitor home (today's van; today's sessions as an instant range via `dayRange`).
+  - `70666cb` sessions: "already worked this shift today".
+  - `9d597d0` parent portal: skip cutoff on the company's wall clock in JS; skip dates; detail.
+  - `75bcdd6` payroll: period bounds at local midnight (`startOfDay`), work day = check-in date in
+    the company zone (JS), adjustment cutoff date in the company zone (C2), 400 on bad from/to.
+  - `8bb8532` dashboard: company uses its date; school uses each row's company date (C1).
+  - `919d14f` school side: schedule changes (date = student's company date via
+    `businessDateFor(id)`), cancel today's pickup, school student list transport.
+  - `029abae` assignment overlap: plain YYYY-MM-DD compare (old code: false overlap west of UTC,
+    shown with TZ=America/Los_Angeles).
+  - Sweep of `server/src`: no `CURRENT_DATE`, `CURRENT_TIME`, `LOCALTIME`, `date_trunc`,
+    `generate_series`, or `::date` on a timestamp left. The only SQL date conversions are explicit
+    `($n::timestamptz AT TIME ZONE c.timezone)::date` (school side), which don't read the session zone.
+  - Suites run after each step: 04, 05, 09, 10, 11, 12, 13, 14, 16, 17, 18, 19, 21, 22, 23, 25, 30,
+    31 all pass. Orphaned test Postgres processes (dead parent) are stopped with
+    `clean-orphans.ps1` in the scratchpad when "shared memory block" or port errors appear.
