@@ -9,10 +9,10 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "migrate": "node-pg-migrate --envPath .env",
-    "migrate:up": "node-pg-migrate up --envPath .env",
-    "migrate:down": "node-pg-migrate down --envPath .env",
-    "migrate:redo": "node-pg-migrate redo --envPath .env",
+    "migrate": "node scripts/check-db-target.js && node-pg-migrate --envPath .env",
+    "migrate:up": "node scripts/check-db-target.js && node-pg-migrate up --envPath .env",
+    "migrate:down": "node scripts/check-db-target.js && node-pg-migrate down --envPath .env",
+    "migrate:redo": "node scripts/check-db-target.js && node-pg-migrate redo --envPath .env",
     "migrate:create": "node-pg-migrate create --envPath .env",
     "test": "node test/run-all.cjs",
     "test:neon": "node test/smoke-neon.cjs"

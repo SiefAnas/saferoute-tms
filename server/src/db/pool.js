@@ -1,6 +1,12 @@
 // Single shared pg connection pool.
 const { Pool } = require('pg');
 const { databaseUrl } = require('../config');
+const { assertTargetAllowed } = require('./productionGuard');
+
+// Every script and the API reach the database through this pool, so the production check here
+// covers them all (including scripts written later): a non-local DATABASE_URL needs
+// ALLOW_PRODUCTION_DB=yes, otherwise the process exits before connecting.
+assertTargetAllowed({ purpose: 'connect' });
 
 const pool = new Pool({ connectionString: databaseUrl });
 

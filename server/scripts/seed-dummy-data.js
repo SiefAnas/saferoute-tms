@@ -25,28 +25,10 @@
 // (Secret123!) so it's a known, memorable login for testing.
 require('dotenv').config();
 
-// Creates accounts with a known password, so it must never run against production data.
-// Refuses under NODE_ENV=production and against any non-local database unless the
-// caller opts in explicitly with ALLOW_REMOTE_SEED=1.
-function assertSeedAllowed() {
-  if (process.env.NODE_ENV === 'production') {
-    console.error('Refusing to seed: NODE_ENV=production.');
-    process.exit(1);
-  }
-  let host = '';
-  try {
-    host = new URL(process.env.DATABASE_URL || '').hostname;
-  } catch {
-    console.error('Refusing to seed: DATABASE_URL is missing or invalid.');
-    process.exit(1);
-  }
-  const local = ['localhost', '127.0.0.1', '::1', '[::1]', 'db'].includes(host);
-  if (!local && process.env.ALLOW_REMOTE_SEED !== '1') {
-    console.error(`Refusing to seed non-local database host "${host}". Set ALLOW_REMOTE_SEED=1 to override.`);
-    process.exit(1);
-  }
-}
-assertSeedAllowed();
+// Creates accounts with a known password, so it must never run against production data by
+// accident. Same rule as everything else (src/db/productionGuard.js): a non-local DATABASE_URL is
+// refused unless ALLOW_PRODUCTION_DB=yes. (Replaces this script's own ALLOW_REMOTE_SEED=1 flag.)
+require('../src/db/productionGuard').assertTargetAllowed({ purpose: 'seed dummy data' });
 
 const pool = require('../src/db/pool.js');
 const { hashPassword } = require('../src/auth/password.js');

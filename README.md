@@ -37,6 +37,20 @@ You need a running PostgreSQL 13+ (for `gen_random_uuid()` / trigram search). Pi
   with db/user/password `saferoute` (matches `server/.env.example`).
 - **Local install:** install PostgreSQL, then create a db and user and point `DATABASE_URL` at it.
 - **Hosted dev db:** e.g. Neon / Supabase — paste its connection string into `DATABASE_URL`.
+  It will be refused unless you also set `ALLOW_PRODUCTION_DB=yes` (see below).
+
+### `ALLOW_PRODUCTION_DB` (production guard)
+
+The API, the migration scripts, the seed and the e2e script refuse to run when `DATABASE_URL`
+points anywhere but `localhost` / `127.0.0.1` / `::1`. They print the host they were about to reach
+and exit. Set `ALLOW_PRODUCTION_DB=yes` (exactly `yes`) only where reaching a remote database is
+the point:
+
+- **Render (API service): required**, or the live API refuses to start.
+- **A deliberate one-off command** against production, e.g.
+  `ALLOW_PRODUCTION_DB=yes npm run migrate:up`.
+
+Don't put it in your local `server/.env`. The rule lives in `server/src/db/productionGuard.js`.
 
 ## Running migrations (STEP 1)
 
