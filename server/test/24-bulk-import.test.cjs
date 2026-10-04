@@ -94,7 +94,8 @@ async function main() {
         { full_name: 'Stolen', email: 'other@b.test' },
       ];
       const pv = await api('POST', '/imports/preview', tA, { type: 'drivers', rows });
-      eq('preview counts', JSON.stringify(pv.body.counts), '{"create":1,"update":1,"error":5}');
+      // overwrite (prod-safety-and-import-fix): the update row replaces Busy's stored name.
+      eq('preview counts', JSON.stringify(pv.body.counts), '{"create":1,"update":1,"error":5,"overwrite":1}');
       eq('row actions', pv.body.rows.map((r) => r.action).join(), 'create,update,error,error,error,error,error');
       ok(/Duplicate email/.test(pv.body.rows[3].reason) && /Duplicate email/.test(pv.body.rows[4].reason) ? 'both duplicate-email rows are errors' : bad('dup reasons'));
       ok(/another account/.test(pv.body.rows[6].reason) ? 'another company\'s email is refused without leaking who it is' : bad(`cross-tenant: ${pv.body.rows[6].reason}`));
