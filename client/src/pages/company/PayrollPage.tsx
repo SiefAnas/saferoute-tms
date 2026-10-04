@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
-import { formatMoney, formatDuration, formatMonthDay, formatCalendarMonthDay, formatRate } from '../../lib/format'
+import { formatMoney, formatDuration, formatMonthDay, formatCalendarMonthDay, formatClock, formatRate } from '../../lib/format'
 import { parseDollarAmount } from '../../lib/money'
 import { isOnOrAfterCycleStart } from '../../lib/payrollCycle'
 import { currentAssignmentBy, vanLabel } from '../../lib/fleet'
@@ -483,10 +483,8 @@ function BreakdownDrawer({
       .sort((a, b) => b.check_in_at.localeCompare(a.check_in_at))
   }, [sessionsQuery.data, driver.id, paidThroughAt])
 
-  // BACKLOG bug fix: this used to compare `a.work_date >= paidThroughAt.slice(0, 10)` (a
-  // date-string-only compare), so a same-day adjustment still showed under the new cycle
-  // even though the server's own timestamp compare had already excluded it from
-  // base_pay_cents/adjustments_cents — see lib/payrollCycle.ts + its test.
+  // Cutoff: an adjustment dated the same day the cycle was marked paid carries into the next
+  // cycle (the server compares work_date as a date; see lib/payrollCycle.ts).
   const adjustments = useMemo(() => {
     const all = adjustmentsQuery.data ?? []
     return all.filter((a) => isOnOrAfterCycleStart(a.work_date, paidThroughAt)).sort((a, b) => b.work_date.localeCompare(a.work_date))
@@ -536,6 +534,12 @@ function BreakdownDrawer({
         <p className="text-[14px] text-muted">Loading…</p>
       ) : (
         <>
+          {paidThroughAt && (
+            <p className="text-[13px] text-muted">
+              Last marked paid {formatMonthDay(paidThroughAt)} at {formatClock(paidThroughAt)}. This cycle has the shifts that
+              started after that, and adjustments dated {formatMonthDay(paidThroughAt)} or later.
+            </p>
+          )}
           <DrawerSection title="Shifts worked">
             {shifts.length === 0 ? (
               <InlineEmpty icon="event_available" tone="success" text="New cycle started. No completed shifts yet." />
