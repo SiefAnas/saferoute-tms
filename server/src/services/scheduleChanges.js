@@ -16,6 +16,7 @@
 // `trips` — a forward-looking day-level skip has no retroactive effect on it.
 const pool = require('../db/pool');
 const { HttpError } = require('../errors');
+const { businessDateFor } = require('../time/businessDate');
 const { notifyCompanyAndSchoolAdmins } = require('./notifications');
 const { assignmentRunsOnSql } = require('../db/scoped');
 
@@ -32,13 +33,24 @@ function readScope(req, column = 'student_id') {
   return {};
 }
 
+// Timezone (branch company-timezone): a schedule change belongs to the student's company, so its
+// date is that company's business date. A school's students can ride with companies in different
+// zones, so "today's changes" for a school means: each row dated today in its own company's zone
+// (this request's instant read in that zone). No CURRENT_DATE, no session timezone.
 async function listScheduleChangesToday(req) {
-  // "Today" must come from Postgres (same CURRENT_DATE that change_date defaults to on insert),
-  // not from JS. new Date().toISOString() is always UTC, so it was one day ahead of the DB for
-  // ~4 hours every evening in US timezones and this list came back empty. ::text keeps pg from
-  // turning the DATE into a JS Date (which would bring the same UTC shift back).
-  const { rows } = await pool.query('SELECT CURRENT_DATE::text AS d');
-  return req.db.findMany('schedule_changes', { ...readScope(req), where: { change_date: rows[0].d }, orderBy: 'created_at' });
+  const params = [req.auth.tenantId, req.now];
+  let staffFilter = '';
+  if (req.auth.role === 'school_staff') {
+    params.push(req.auth.userId);
+    staffFilter = `AND sc.student_id IN (SELECT student_id FROM staff_student_access WHERE staff_user_id = $${params.length})`;
+  }
+  const { rows } = await pool.query(
+    `SELECT sc.* FROM schedule_changes sc JOIN companies c ON c.id = sc.company_id
+      WHERE sc.school_id = $1 AND sc.change_date = ($2::timestamptz AT TIME ZONE c.timezone)::date ${staffFilter}
+      ORDER BY sc.created_at`,
+    params
+  );
+  return rows;
 }
 
 async function logScheduleChange(req, studentId, { change_type, note } = {}) {
@@ -56,17 +68,20 @@ async function logScheduleChange(req, studentId, { change_type, note } = {}) {
   // the student, not the actor) — same shape as logTrip's driver (company-tenant) explicitly
   // supplying school_id. The composite FKs on schedule_changes enforce both are consistent
   // with this actual student, not just independently valid ids.
+  // "Today" for this student = their company's business date, at this request's instant.
+  const studentToday = await businessDateFor(student.company_id, req.now);
   const row = await req.db.insert('schedule_changes', {
     company_id: student.company_id,
     student_id: studentId,
     change_type,
     note: note ?? null,
     reported_by_user_id: req.auth.userId,
+    change_date: studentToday,
   });
 
   // Both change types cancel today's scheduled pickup now — see the file header comment.
-  const skippedAssignmentId = await applyPickupSkip(req, student);
-  const notified = await notifyScheduleChangeLogged(student, change_type, note);
+  const skippedAssignmentId = await applyPickupSkip(req, student, studentToday);
+  const notified = await notifyScheduleChangeLogged(student, change_type, note, studentToday);
 
   return { ...row, notified, skipped_assignment_id: skippedAssignmentId };
 }
@@ -76,32 +91,32 @@ async function logScheduleChange(req, studentId, { change_type, note } = {}) {
 // company_admin-only, "like its parent assignments"), so req.db can't reach it from a
 // school-tenant caller. Raw pool, explicit ownership via the JOIN (only assignments for a
 // student at THIS actor's own school), same precedent as placeholders.js's cross-tenant edits.
-async function applyPickupSkip(req, student) {
+async function applyPickupSkip(req, student, today) {
   const { rows } = await pool.query(
     `SELECT a.id, a.company_id
        FROM assignments a
        JOIN students st ON st.id = a.student_id
       WHERE a.student_id = $1 AND st.school_id = $2
-        AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
-        AND ${assignmentRunsOnSql('a', 'CURRENT_DATE')}
+        AND a.start_date <= $3::date AND (a.end_date IS NULL OR a.end_date >= $3::date)
+        AND ${assignmentRunsOnSql('a', '$3::date')}
       ORDER BY a.created_at DESC
       LIMIT 1`,
-    [student.id, req.auth.tenantId]
+    [student.id, req.auth.tenantId, today]
   );
   const assignment = rows[0];
   if (!assignment) return null; // no active assignment today, nothing scheduled to skip
 
   const { rows: existing } = await pool.query(
-    `SELECT id FROM assignment_schedule_overrides WHERE assignment_id = $1 AND override_date = CURRENT_DATE`,
-    [assignment.id]
+    `SELECT id FROM assignment_schedule_overrides WHERE assignment_id = $1 AND override_date = $2::date`,
+    [assignment.id, today]
   );
   if (existing[0]) {
     await pool.query(`UPDATE assignment_schedule_overrides SET skip = true WHERE id = $1`, [existing[0].id]);
   } else {
     await pool.query(
       `INSERT INTO assignment_schedule_overrides (company_id, assignment_id, override_date, skip)
-       VALUES ($1, $2, CURRENT_DATE, true)`,
-      [assignment.company_id, assignment.id]
+       VALUES ($1, $2, $3::date, true)`,
+      [assignment.company_id, assignment.id, today]
     );
   }
   return assignment.id;
@@ -110,16 +125,16 @@ async function applyPickupSkip(req, student) {
 // Notifies company_admin + school_admin (via the shared helper) plus the student's currently
 // assigned driver and linked parent(s) as extraRecipients — the one recipient set this task
 // asks for that no existing helper covers on its own.
-async function notifyScheduleChangeLogged(student, changeType, note) {
+async function notifyScheduleChangeLogged(student, changeType, note, today) {
   let extraRecipients = [];
   try {
     const [driverRows, parentRows] = await Promise.all([
     pool.query(
       `SELECT u.email FROM assignments a JOIN users u ON u.id = a.driver_user_id
         WHERE a.student_id = $1 AND a.company_id = $2
-          AND a.start_date <= CURRENT_DATE AND (a.end_date IS NULL OR a.end_date >= CURRENT_DATE)
+          AND a.start_date <= $3::date AND (a.end_date IS NULL OR a.end_date >= $3::date)
         ORDER BY a.created_at DESC LIMIT 1`,
-      [student.id, student.company_id]
+      [student.id, student.company_id, today]
     ),
     pool.query(`SELECT u.email FROM parent_students ps JOIN users u ON u.id = ps.parent_user_id WHERE ps.student_id = $1`, [student.id]),
   ]);
