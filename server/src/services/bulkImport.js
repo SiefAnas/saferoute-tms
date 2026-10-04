@@ -324,28 +324,33 @@ async function planStudents(req, def, rows) {
   return plans;
 }
 
+// What an update of an existing student sends to updateFields (blank cells are skipped there).
+// Notes stay the raw cell: notes hold disability and safety information, and a blank cell (or no
+// Notes column) must leave the stored note alone. The 'None' default is for NEW students only
+// (see the insert below); it used to be applied here too and wiped every note on a re-import.
+function studentUpdatePatch(plan) {
+  const { row } = plan;
+  return {
+    full_name: row.full_name, grade: row.grade, age: Number(row.age), parent_name: row.parent_name, parent_phone: row.parent_phone,
+    street_address: row.street_address, city: row.city, state: row.state, zip_code: row.zip_code, notes: row.notes,
+    // Only when the preview said so (an existing student getting their first ID); an ID match
+    // never rewrites the stored ID.
+    ...(plan.attachStudentId ? { student_id: row.student_id } : {}),
+  };
+}
+
 async function execStudent(req, def, plan, credentials) {
   const { row } = plan;
   return withTx(async (c) => {
     const tenantId = req.auth.tenantId;
     let studentId = plan.existingId;
-    const fields = {
-      grade: row.grade, age: Number(row.age), parent_name: row.parent_name, parent_phone: row.parent_phone,
-      street_address: row.street_address, city: row.city, state: row.state, zip_code: row.zip_code, notes: row.notes || 'None',
-    };
     if (plan.action === 'update') {
-      await updateFields(c, 'students', studentId, 'company_id', tenantId, {
-        full_name: row.full_name,
-        ...fields,
-        // Only when the preview said so (an existing student getting their first ID); an ID match
-        // never rewrites the stored ID.
-        ...(plan.attachStudentId ? { student_id: row.student_id } : {}),
-      });
+      await updateFields(c, 'students', studentId, 'company_id', tenantId, studentUpdatePatch(plan));
     } else {
       const { rows } = await c.query(
         `INSERT INTO students (company_id, school_id, full_name, grade, age, parent_name, parent_phone, street_address, city, state, zip_code, notes, student_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
-        [tenantId, plan.schoolId, row.full_name, fields.grade, fields.age, fields.parent_name, fields.parent_phone, fields.street_address, fields.city, fields.state, fields.zip_code, fields.notes, row.student_id || null]
+        [tenantId, plan.schoolId, row.full_name, row.grade, Number(row.age), row.parent_name, row.parent_phone, row.street_address, row.city, row.state, row.zip_code, row.notes || 'None', row.student_id || null]
       );
       studentId = rows[0].id;
     }
