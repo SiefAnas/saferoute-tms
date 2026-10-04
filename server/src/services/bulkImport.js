@@ -163,23 +163,28 @@ async function insertUser(client, req, def, row) {
 // does undefined (a field this import type doesn't have): node-postgres would write undefined as
 // NULL. Callers build `patch` from the import type's own fields; skipping undefined here as well
 // means a slip there can't blank a column again.
+const writtenKeys = (patch) => Object.keys(patch).filter((k) => patch[k] !== '' && patch[k] !== undefined);
+
 async function updateFields(client, table, id, tenantCol, tenantId, patch) {
-  const keys = Object.keys(patch).filter((k) => patch[k] !== '' && patch[k] !== undefined);
+  const keys = writtenKeys(patch);
   if (!keys.length) return;
   const sets = keys.map((k, i) => `"${k}" = $${i + 3}`);
   await client.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = $1 AND ${tenantCol} = $2`, [id, tenantId, ...keys.map((k) => patch[k])]);
+}
+
+// What an update of an existing person sends to updateFields: only this type's own fields (each
+// field key is the users column of the same name), minus the email it was matched on. A field the
+// type doesn't list is never written, so importing staff (no address field) can't touch their
+// address, and adding a field to a type later needs no change here.
+function personUpdatePatch(def, plan) {
+  return Object.fromEntries(def.fields.filter((fd) => fd.key !== def.key).map((fd) => [fd.key, plan.row[fd.key]]));
 }
 
 async function execPerson(req, def, plan, credentials) {
   const { row } = plan;
   const tenantCol = def.side === 'company' ? 'company_id' : 'school_id';
   if (plan.action === 'update') {
-    // Only this type's own fields (each field key is the users column of the same name), minus the
-    // email it was matched on. A field the type doesn't list is never written, so importing staff
-    // (no address field) can't touch their address, and adding a field to a type later needs no
-    // change here.
-    const patch = Object.fromEntries(def.fields.filter((fd) => fd.key !== def.key).map((fd) => [fd.key, row[fd.key]]));
-    await withTx((c) => updateFields(c, 'users', plan.existingId, tenantCol, req.auth.tenantId, patch));
+    await withTx((c) => updateFields(c, 'users', plan.existingId, tenantCol, req.auth.tenantId, personUpdatePatch(def, plan)));
     return;
   }
   const made = await withTx((c) => insertUser(c, req, def, row));
@@ -217,11 +222,16 @@ async function planVans(req, def, rows) {
   return plans;
 }
 
+// What an update of an existing van sends to updateFields.
+function vanUpdatePatch(plan) {
+  const { row } = plan;
+  return { license_plate: row.license_plate, brand: row.brand, model: row.model, color: row.color, number: row.number, year: row.year ? Number(row.year) : '' };
+}
+
 async function execVan(req, plan) {
   const { row } = plan;
-  const patch = { license_plate: row.license_plate, brand: row.brand, model: row.model, color: row.color, number: row.number, year: row.year ? Number(row.year) : '' };
   if (plan.action === 'update') {
-    await withTx((c) => updateFields(c, 'vans', plan.existingId, 'company_id', req.auth.tenantId, patch));
+    await withTx((c) => updateFields(c, 'vans', plan.existingId, 'company_id', req.auth.tenantId, vanUpdatePatch(plan)));
     return;
   }
   await pool.query(
@@ -384,12 +394,55 @@ async function plan(req, type, rawRows) {
 
 const countOf = (plans, action) => plans.filter((p) => p.action === action).length;
 
+// ---- preview: what each update would change ----------------------------------------------------
+//
+// For every row that will update an existing record, the fields whose value would actually change,
+// with the stored value and the value from the file. It uses the same patch builders and the same
+// writtenKeys rule as the import itself, so the preview shows exactly what commit would write.
+// Display only: nothing here changes what the import does.
+
+const UPDATE_TARGET = {
+  vans: { table: 'vans', tenantCol: () => 'company_id', patch: (def, p) => vanUpdatePatch(p) },
+  students: { table: 'students', tenantCol: () => 'company_id', patch: (def, p) => studentUpdatePatch(p) },
+  people: { table: 'users', tenantCol: (def) => (def.side === 'company' ? 'company_id' : 'school_id'), patch: personUpdatePatch },
+};
+
+const asText = (v) => (v === null || v === undefined ? '' : String(v));
+
+async function describeChanges(req, type, def, plans) {
+  const target = UPDATE_TARGET[type] ?? UPDATE_TARGET.people;
+  const updates = plans.filter((p) => p.action === 'update');
+  if (!updates.length) return new Map();
+  const { rows: current } = await pool.query(
+    `SELECT * FROM ${target.table} WHERE id = ANY($1::uuid[]) AND ${target.tenantCol(def)} = $2`,
+    [updates.map((p) => p.existingId), req.auth.tenantId]
+  );
+  const byId = new Map(current.map((r) => [r.id, r]));
+  const labels = new Map(def.fields.map((fd) => [fd.key, fd.label]));
+  const out = new Map();
+  for (const p of updates) {
+    const stored = byId.get(p.existingId) ?? {};
+    const patch = target.patch(def, p);
+    const changes = writtenKeys(patch)
+      .filter((k) => asText(stored[k]) !== asText(patch[k]))
+      .map((k) => ({ field: k, label: labels.get(k) ?? k, old: stored[k] === null || stored[k] === undefined ? null : asText(stored[k]), new: asText(patch[k]) }));
+    // An overwrite: the file replaces a value that is there today (not just filling an empty one).
+    out.set(p, { changes, overwrite: changes.some((c) => c.old !== null && c.old.trim() !== '') });
+  }
+  return out;
+}
+
 async function preview(req, type, rawRows) {
-  const { plans } = await plan(req, type, rawRows);
+  const { def, plans } = await plan(req, type, rawRows);
+  const diffs = await describeChanges(req, type, def, plans);
+  const rows = plans.map((p, i) => {
+    const d = diffs.get(p);
+    return { index: i, action: p.action, reason: p.reason ?? null, note: p.note ?? null, changes: d ? d.changes : null, overwrite: d ? d.overwrite : false };
+  });
   return {
     type,
-    counts: { create: countOf(plans, 'create'), update: countOf(plans, 'update'), error: countOf(plans, 'error') },
-    rows: plans.map((p, i) => ({ index: i, action: p.action, reason: p.reason ?? null, note: p.note ?? null })),
+    counts: { create: countOf(plans, 'create'), update: countOf(plans, 'update'), error: countOf(plans, 'error'), overwrite: rows.filter((r) => r.overwrite).length },
+    rows,
   };
 }
 

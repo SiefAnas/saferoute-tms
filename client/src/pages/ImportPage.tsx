@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle } from '../components/Card'
 import { Field, Select } from '../components/Input'
 import { PageIntro } from '../components/Records'
 import { PageTopBar } from '../layouts/TopBar'
-import type { ImportCommitResult, ImportCredential, ImportPreview, ImportTypesResponse } from '../types/api'
+import type { ImportChange, ImportCommitResult, ImportCredential, ImportPreview, ImportTypesResponse } from '../types/api'
 
 // Bulk import (docs/bulk-import-spec.md), web only. One screen, four steps: pick what you are
 // importing, upload and match columns, preview every row (nothing saved), then import. The file is
@@ -273,11 +273,25 @@ export function ImportPage() {
           </CardHeader>
           <div className="flex flex-col gap-4 px-5 py-4">
             <Counts items={[['Will create', preview.counts.create], ['Will update', preview.counts.update], ['Errors (not imported)', preview.counts.error]]} />
+            {preview.counts.overwrite > 0 && (
+              <p role="alert" className="rounded-row bg-caution-bg px-3 py-2 text-[13px] text-caution-fg">
+                <b className="font-semibold">
+                  {preview.counts.overwrite} row{preview.counts.overwrite === 1 ? '' : 's'} will replace information that is there today.
+                </b>{' '}
+                Check the old and new values below before importing. Blank cells never change anything.
+              </p>
+            )}
             <RowTable
               type={type}
               rows={mappedRows}
               rowNumbers={sheet.rowNumbers}
-              status={preview.rows.map((r) => ({ label: ACTION_TEXT[r.action], cls: ACTION_CLASS[r.action], reason: r.reason ?? r.note }))}
+              status={preview.rows.map((r) => ({
+                label: ACTION_TEXT[r.action],
+                cls: ACTION_CLASS[r.action],
+                reason: r.reason ?? r.note,
+                changes: r.changes,
+                overwrite: r.overwrite,
+              }))}
             />
             <div className="flex flex-wrap items-center gap-3">
               <Button type="button" disabled={runCommit.isPending || preview.counts.create + preview.counts.update === 0} onClick={() => runCommit.mutate()}>
@@ -355,7 +369,7 @@ function RowTable({
   type: ImportTypesResponse['types'][number]
   rows: Record<string, string>[]
   rowNumbers: number[]
-  status: { label: string; cls: string; reason: string | null | undefined }[]
+  status: { label: string; cls: string; reason: string | null | undefined; changes?: ImportChange[] | null; overwrite?: boolean }[]
 }) {
   const shown = type.fields.slice(0, 3)
   return (
@@ -381,15 +395,37 @@ function RowTable({
                   {r[f.key]}
                 </td>
               ))}
-              <td className="px-3 py-2">
+              <td className="min-w-[260px] px-3 py-2">
                 <span className={`font-semibold ${status[i]?.cls ?? ''}`}>{status[i]?.label}</span>
+                {status[i]?.overwrite && (
+                  <span className="ml-2 rounded-[9px] bg-caution-bg px-[7px] py-0.5 text-[11px] font-semibold text-caution-fg">Overwrites existing data</span>
+                )}
                 {status[i]?.reason && <div className="text-[12px] text-muted">{status[i].reason}</div>}
+                {status[i]?.changes && <ChangeList changes={status[i].changes!} />}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  )
+}
+
+// What an update row would change (import preview): "Address: 4 Road Ln → 9 New Rd". Only fields
+// whose value changes are listed; an existing value being replaced is marked.
+function ChangeList({ changes }: { changes: ImportChange[] }) {
+  if (changes.length === 0) return <div className="text-[12px] text-muted">No changes: every value is already the same.</div>
+  return (
+    <ul className="mt-1 flex flex-col gap-0.5 text-[12px]">
+      {changes.map((c) => (
+        <li key={c.field} className={c.old ? 'text-caution-fg' : 'text-muted'}>
+          <span className="font-semibold">{c.label}:</span>{' '}
+          {c.old ? <span className="line-through decoration-1">{c.old}</span> : <span className="italic">empty</span>}
+          {' → '}
+          <span className="font-medium text-ink">{c.new}</span>
+        </li>
+      ))}
+    </ul>
   )
 }
 

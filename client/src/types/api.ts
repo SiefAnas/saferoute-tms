@@ -535,10 +535,24 @@ export interface ImportTypesResponse {
   max_rows: number
   types: { id: string; label: string; match_key: string; fields: ImportField[] }[]
 }
+// One field an update would change: the stored value (null = empty) and the value from the file.
+export interface ImportChange {
+  field: string
+  label: string
+  old: string | null
+  new: string
+}
 export interface ImportPreview {
   type: string
-  counts: { create: number; update: number; error: number }
-  rows: { index: number; action: 'create' | 'update' | 'error'; reason: string | null; note: string | null }[]
+  counts: { create: number; update: number; error: number; overwrite: number }
+  rows: {
+    index: number
+    action: 'create' | 'update' | 'error'
+    reason: string | null
+    note: string | null
+    changes: ImportChange[] | null // update rows only; [] = nothing would change
+    overwrite: boolean // the update replaces a non-empty stored value
+  }[]
 }
 export interface ImportCredential {
   full_name: string
