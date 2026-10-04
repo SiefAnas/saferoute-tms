@@ -21,9 +21,9 @@ No upstream; not merged, not pushed. Local database only.
 | 2 | Column + helpers + middleware | done | `22bf0d6` |
 | 3 | Convert business-date code paths | done | `48c73c7` … `029abae` |
 | 4 | Edge-case tests | done | `b9993ea` |
-| 5 | Timezone setting in the UI | done | see log |
-| 6 | Can the DB-level setting go? (report only) | todo | |
-| - | Report | todo | |
+| 5 | Timezone setting in the UI | done | `a0ac5e5` |
+| 6 | Can the DB-level setting go? (report only) | done | in the report |
+| - | Report | done | see log |
 
 ## Log
 - First check: `server/.env` → `localhost:5488`, server reports `::1 saferoute_dev`; session
@@ -85,3 +85,7 @@ No upstream; not merged, not pushed. Local database only.
   local DB 5488 seeded): search "los ang" -> America/Los Angeles (UTC−07:00) -> Save -> warning
   dialog -> confirm -> stored `America/Los_Angeles`, "Time zone saved". `tsc -b`, lint, client tests
   pass.
+- **Task 6 + report done.** `docs/TIMEZONE_REPORT.md`. Full server run: all 33 suites pass (a first
+  run had one unexplained silent stop in suite 25, which passed alone and in the second full run).
+  Branches checked with `git merge-tree`: prod-safety merges cleanly, account-settings conflicts in
+  4 files (listed in the report). Nothing merged, nothing pushed.
