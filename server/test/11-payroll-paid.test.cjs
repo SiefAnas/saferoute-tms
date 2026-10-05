@@ -112,6 +112,25 @@ async function main() {
         ? ok('a new shift after Paid shows up in the next unpaid cycle, old shift excluded')
         : bad(`after new shift: ${JSON.stringify(afterNewShift.body)}`);
 
+      console.log('\n--- same-day adjustment: listed lines add up to the owed total ---');
+      // The website lists a cycle's adjustments with the client's own isAdjustmentInCycle and
+      // the server's adjustments_from; the owed total is the server's. Same boundary, same sum.
+      const { isAdjustmentInCycle } = await import('../../client/src/lib/payrollCycle.ts');
+      const cycle = (await api('GET', `/payroll/unpaid-summary/${driver.id}`, admin)).body;
+      const paidDay = (await pool.query('SELECT $1::timestamptz::date::text AS d', [cycle.paid_through_at])).rows[0].d;
+      eq('adjustments_from is the day the cycle was marked paid', cycle.adjustments_from, paidDay);
+      const dayBefore = (await pool.query("SELECT ($1::date - 1)::text AS d", [paidDay])).rows[0].d;
+      await api('POST', '/payroll/adjustments', admin, { driver_id: driver.id, amount_cents: 1234, note: 'same day', work_date: paidDay });
+      await api('POST', '/payroll/adjustments', admin, { driver_id: driver.id, amount_cents: 777, note: 'day before', work_date: dayBefore });
+      const sameDay = (await api('GET', `/payroll/unpaid-summary/${driver.id}`, admin)).body;
+      eq('the server counts the same-day adjustment (and not the day-before one)', sameDay.adjustments_cents, 1234);
+      const listed = (await api('GET', `/payroll/adjustments/${driver.id}`, admin)).body
+        .filter((a) => isAdjustmentInCycle(a.work_date, sameDay.adjustments_from));
+      eq('the drawer lists exactly the same-day adjustment', listed.map((a) => a.note).join(','), 'same day');
+      eq('listed adjustments sum to adjustments_cents', listed.reduce((n, a) => n + a.amount_cents, 0), sameDay.adjustments_cents);
+      eq('base + listed adjustments = total owed', sameDay.base_pay_cents + listed.reduce((n, a) => n + a.amount_cents, 0), sameDay.total_pay_cents);
+      eq('never marked paid -> adjustments_from null', before.body.adjustments_from, null);
+
       eq('unpaid-summary for a driver with no pay rule -> 404', (await api('GET', `/payroll/unpaid-summary/${driver2.id}`, admin)).status, 404);
     } finally {
       server.close();

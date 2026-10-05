@@ -140,7 +140,10 @@ async function isShiftComplete(req, driverId, workDate, shiftPeriod, sessionIds)
 // this session's new "amount owed since last paid" would have been wrong in the same way
 // (already-settled adjustments re-appearing as still owed). Adjustments are now filtered by
 // `work_date` exactly like sessions are filtered by `check_in_at`.
-async function summary(req, driverId, { from, to } = {}) {
+//
+// `adjustmentsFrom` (a 'YYYY-MM-DD' string) overrides `from` for adjustments only; unpaidSummary
+// passes the paid day so the boundary it reports to the client is the one used here.
+async function summary(req, driverId, { from, to, adjustmentsFrom = from } = {}) {
   const rule = (await req.db.findMany('pay_rules', { where: { driver_id: driverId } }))[0];
   if (!rule) throw new HttpError(404, 'no pay rule for this driver');
 
@@ -163,7 +166,7 @@ async function summary(req, driverId, { from, to } = {}) {
 
   const adjRange = [driverId, req.auth.tenantId];
   let adjClause = 'driver_id = $1 AND company_id = $2';
-  if (from) { adjRange.push(from); adjClause += ` AND work_date >= $${adjRange.length}`; }
+  if (adjustmentsFrom) { adjRange.push(adjustmentsFrom); adjClause += ` AND work_date >= $${adjRange.length}::date`; }
   if (to) { adjRange.push(to); adjClause += ` AND work_date < $${adjRange.length}`; }
   const adjResult = await pool.query(
     `SELECT COALESCE(SUM(amount_cents),0)::int AS total FROM pay_adjustments WHERE ${adjClause}`,
@@ -185,11 +188,19 @@ async function summary(req, driverId, { from, to } = {}) {
 
 // The "current unpaid cycle": everything since paid_through_at (or the beginning of time,
 // if never marked paid). Reuses summary() directly rather than duplicating its computation.
+//
+// The cutoff differs by kind: shifts start at the paid_through_at instant (check_in_at is a
+// timestamp), adjustments start on the paid DAY (work_date is a date), so an adjustment dated the
+// day the cycle was marked paid is in the new cycle. That day is computed once, by Postgres, and
+// returned as adjustments_from so the website lists exactly the adjustments this total counts.
 async function unpaidSummary(req, driverId) {
   const rule = (await req.db.findMany('pay_rules', { where: { driver_id: driverId } }))[0];
   if (!rule) throw new HttpError(404, 'no pay rule for this driver');
-  const result = await summary(req, driverId, { from: rule.paid_through_at ?? undefined });
-  return { ...result, paid_through_at: rule.paid_through_at };
+  const adjustmentsFrom = rule.paid_through_at
+    ? (await pool.query('SELECT $1::date::text AS d', [rule.paid_through_at])).rows[0].d
+    : null;
+  const result = await summary(req, driverId, { from: rule.paid_through_at ?? undefined, adjustmentsFrom: adjustmentsFrom ?? undefined });
+  return { ...result, paid_through_at: rule.paid_through_at, adjustments_from: adjustmentsFrom };
 }
 
 // Marks the current unpaid cycle settled — resets the "owed since" counter to now. Does not

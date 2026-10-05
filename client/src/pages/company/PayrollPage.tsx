@@ -3,7 +3,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { api, ApiError } from '../../lib/api'
 import { formatMoney, formatDuration, formatMonthDay, formatCalendarMonthDay, formatClock, formatRate } from '../../lib/format'
 import { parseDollarAmount } from '../../lib/money'
-import { isOnOrAfterCycleStart } from '../../lib/payrollCycle'
+import { isAdjustmentInCycle, isOnOrAfterCycleStart } from '../../lib/payrollCycle'
 import { currentAssignmentBy, vanLabel } from '../../lib/fleet'
 import { Button } from '../../components/Button'
 import { Field, Input, Select } from '../../components/Input'
@@ -475,6 +475,7 @@ function BreakdownDrawer({
   })
 
   const paidThroughAt = unpaidQuery.data?.paid_through_at ?? null
+  const adjustmentsFrom = unpaidQuery.data?.adjustments_from ?? null
 
   const shifts = useMemo(() => {
     const all = (sessionsQuery.data ?? []).filter((s) => s.user_id === driver.id && s.check_out_at)
@@ -484,11 +485,11 @@ function BreakdownDrawer({
   }, [sessionsQuery.data, driver.id, paidThroughAt])
 
   // Cutoff: an adjustment dated the same day the cycle was marked paid carries into the next
-  // cycle (the server compares work_date as a date; see lib/payrollCycle.ts).
+  // cycle. The server sends that day as adjustments_from; see lib/payrollCycle.ts.
   const adjustments = useMemo(() => {
     const all = adjustmentsQuery.data ?? []
-    return all.filter((a) => isOnOrAfterCycleStart(a.work_date, paidThroughAt)).sort((a, b) => b.work_date.localeCompare(a.work_date))
-  }, [adjustmentsQuery.data, paidThroughAt])
+    return all.filter((a) => isAdjustmentInCycle(a.work_date, adjustmentsFrom)).sort((a, b) => b.work_date.localeCompare(a.work_date))
+  }, [adjustmentsQuery.data, adjustmentsFrom])
 
   const s = unpaidQuery.data
   const owed = s?.total_pay_cents ?? 0
@@ -537,7 +538,7 @@ function BreakdownDrawer({
           {paidThroughAt && (
             <p className="text-[13px] text-muted">
               Last marked paid {formatMonthDay(paidThroughAt)} at {formatClock(paidThroughAt)}. This cycle has the shifts that
-              started after that, and adjustments dated {formatMonthDay(paidThroughAt)} or later.
+              started after that, and adjustments dated {adjustmentsFrom ? formatCalendarMonthDay(adjustmentsFrom) : formatMonthDay(paidThroughAt)} or later.
             </p>
           )}
           <DrawerSection title="Shifts worked">

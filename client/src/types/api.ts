@@ -437,6 +437,9 @@ export interface PaySummary {
 // against, for the Payroll page's "Amount Owed" column + "Paid" button.
 export interface UnpaidPaySummary extends PaySummary {
   paid_through_at: string | null
+  // The first work_date counted in this cycle: the day the cycle was marked paid, as the server
+  // reckons it ("2026-09-22"). null if never marked paid.
+  adjustments_from: string | null
 }
 
 export interface PayAdjustment {

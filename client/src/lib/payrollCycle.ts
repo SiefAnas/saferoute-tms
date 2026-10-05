@@ -1,20 +1,24 @@
-// Shared "is this row in the current unpaid cycle" comparison, used by the driver cycle drawer
-// (PayrollPage.tsx) for both worked shifts and adjustments.
-//
-// Where the server puts the cutoff (services/payroll.js summary(), from = paid_through_at):
-//  - Shifts: `check_in_at >= paid_through_at`, a full timestamp compare. A shift that started
+// "Is this row in the current unpaid cycle" comparisons for the driver cycle drawer
+// (PayrollPage.tsx). They must use exactly the boundaries the server uses for the owed total
+// (services/payroll.js unpaidSummary), so the listed lines always add up to it:
+//  - Shifts: check_in_at >= paid_through_at, a full timestamp compare. A shift that started
 //    before the cycle was marked paid belongs to the paid cycle.
-//  - Adjustments: `work_date >= paid_through_at` with work_date a DATE, so Postgres compares
-//    dates. An adjustment dated the same day a cycle is marked paid is NOT in the paid cycle: it
-//    carries into the next one. That is the intended behaviour (an adjustment entered on the
-//    payday after paying is for the next cycle).
+//  - Adjustments: work_date >= adjustments_from, a calendar-date compare. adjustments_from is the
+//    day the cycle was marked paid, computed by the server, so an adjustment dated that day is in
+//    the new cycle. Never derive it here from paid_through_at: the browser's time zone can name a
+//    different day than the server's.
 //
-// `dateIsh` is a plain date ("work_date", e.g. "2026-09-22") or a full timestamp
-// ("check_in_at"). KNOWN MISMATCH, not fixed here (see docs/ACCOUNT_SETTINGS_REPORT.md, task 13):
-// `new Date(...)` on a bare date parses as UTC midnight, which is earlier than a same-day
-// paid_through_at instant, so this returns false for a same-day adjustment and the drawer's list
-// leaves it out while the server's total (adjustments_cents) counts it. Shifts are unaffected.
-export function isOnOrAfterCycleStart(dateIsh: string, paidThroughAt: string | null): boolean {
+// No imports: the server's payroll suite imports this file directly to check the sums.
+
+// `timestamp` is a full timestamp such as a session's check_in_at.
+export function isOnOrAfterCycleStart(timestamp: string, paidThroughAt: string | null): boolean {
   if (!paidThroughAt) return true
-  return new Date(dateIsh) >= new Date(paidThroughAt)
+  return new Date(timestamp) >= new Date(paidThroughAt)
+}
+
+// `workDate` is an adjustment's work_date ("2026-09-22" or "2026-09-22T00:00:00.000Z");
+// `adjustmentsFrom` is unpaid-summary's adjustments_from ("2026-09-22"), null if never paid.
+export function isAdjustmentInCycle(workDate: string, adjustmentsFrom: string | null): boolean {
+  if (!adjustmentsFrom) return true
+  return workDate.slice(0, 10) >= adjustmentsFrom
 }
