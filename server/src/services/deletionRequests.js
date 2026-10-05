@@ -1,9 +1,9 @@
 // Data deletion requests (branch account-settings). Anyone who can't close their own account can
-// ask for their data to be deleted instead. Company admins close the whole company account
-// (services/closure.js); every other role was created by an admin and has no way to close its
-// account, so it asks:
-//  - driver, monitor, parent: the request records the company; the company's active admins are
-//    emailed.
+// ask for their data to be deleted instead. That is every role: most were created by an admin and
+// have no way to close their account, and a company admin can only close the whole company
+// (services/closure.js), which is no exit for one person when a company has several admins.
+//  - driver, monitor, parent, company_admin: the request records the company; the company's other
+//    active admins are emailed (never the requester).
 //  - school_admin, school_staff (migration 033): the request records the school; the school's
 //    active admins are emailed.
 // SafeTurns support (config.supportEmail) is emailed either way. Nothing else happens: no inbox,
@@ -14,11 +14,11 @@ const { HttpError } = require('../errors');
 const { assertMaxLength } = require('../validate');
 const { sendInBackground } = require('../mail/mailer');
 
-const COMPANY_ROLES = ['driver', 'monitor', 'parent'];
+const COMPANY_ROLES = ['driver', 'monitor', 'parent', 'company_admin'];
 const SCHOOL_ROLES = ['school_admin', 'school_staff'];
 const REQUEST_ROLES = [...COMPANY_ROLES, ...SCHOOL_ROLES];
 const MAX_REASON = 500;
-const ROLE_LABEL = { driver: 'driver', monitor: 'monitor', parent: 'parent', school_admin: 'school admin', school_staff: 'school staff' };
+const ROLE_LABEL = { driver: 'driver', monitor: 'monitor', parent: 'parent', company_admin: 'company admin', school_admin: 'school admin', school_staff: 'school staff' };
 
 function publicRequest(r) {
   return r ? { id: r.id, status: r.status, reason: r.reason, requested_at: r.requested_at } : null;
@@ -26,7 +26,7 @@ function publicRequest(r) {
 
 function assertCanRequest(req) {
   if (!REQUEST_ROLES.includes(req.auth.role)) {
-    throw new HttpError(403, 'company admins close the whole company account instead of requesting deletion');
+    throw new HttpError(403, 'this role cannot request deletion');
   }
 }
 
@@ -71,7 +71,7 @@ async function createRequest(req, { reason } = {}) {
     throw err;
   }
 
-  // The organisation's active admins. A school admin asking about their own account isn't emailed
+  // The organisation's other active admins: an admin asking about their own account isn't emailed
   // their own request.
   const admins = (await pool.query(
     school

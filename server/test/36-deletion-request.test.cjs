@@ -1,8 +1,8 @@
 // Data deletion requests (branch account-settings): POST /users/me/deletion-request records one
-// open request per driver / monitor / parent (against the company) and per school admin / school
-// staff (against the school, migration 033), and emails SafeTurns support plus the org's other
-// active admins; a second open request is refused; GET shows the open one. Company admins are
-// refused (they close the whole company). Nothing is deleted.
+// open request per driver / monitor / parent / company admin (against the company) and per school
+// admin / school staff (against the school, migration 033), and emails SafeTurns support plus the
+// org's other active admins (never the requester); a second open request is refused; GET shows
+// the open one. Nothing is deleted.
 const PG_PORT = 5494;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
 process.env.JWT_SECRET = 'test-secret-36';
@@ -104,10 +104,32 @@ async function main() {
       eq('reason of 501 characters -> 400', (await api('POST', '/users/me/deletion-request', tM, { reason: 'x'.repeat(501) })).status, 400);
       eq('reason of exactly 500 -> 201', (await api('POST', '/users/me/deletion-request', tM, { reason: 'x'.repeat(500) })).status, 201);
       eq('reason as a number -> 400', (await api('POST', '/users/me/deletion-request', tD, { reason: 5 })).status, 400);
-      const tA = await login('admin1@a.com');
-      eq('company admin: POST -> 403 (closes the company instead)', (await api('POST', '/users/me/deletion-request', tA, {})).status, 403);
-      eq('company admin: GET -> 403', (await api('GET', '/users/me/deletion-request', tA)).status, 403);
       eq('no token -> 401', (await api('POST', '/users/me/deletion-request', null, {})).status, 401);
+
+      console.log('\n--- company admin ---');
+      // Closing the company is no exit for one admin, so admins can ask too.
+      const tA = await login('admin1@a.com');
+      const admin1 = await q("SELECT id FROM users WHERE email = 'admin1@a.com'");
+      eq('company admin: GET before asking -> { request: null }', JSON.stringify((await api('GET', '/users/me/deletion-request', tA)).body), JSON.stringify({ request: null }));
+      mailer._reset();
+      const aReq = await api('POST', '/users/me/deletion-request', tA, { reason: 'Handing over to admin2.' });
+      eq('company admin: POST -> 201', aReq.status, 201);
+      const aRow = await q('SELECT user_id, company_id, school_id, reason, status FROM deletion_requests WHERE id = $1', [aReq.body?.request?.id]);
+      eq('company admin row: company recorded, no school', JSON.stringify([aRow?.user_id, aRow?.company_id, aRow?.school_id, aRow?.reason, aRow?.status]), JSON.stringify([admin1.id, A.id, null, 'Handing over to admin2.', 'open']));
+      const aSent = await mailer._drained();
+      eq('company admin emails: support + the other active admin only (not the requester, not the inactive admin, not company B)', aSent.map((x) => x.to).sort().join(','), 'admin2@a.com,support@safeturns.com');
+      /company admin, admin1@a\.com/.test(aSent[0]?.text) && aSent[0].text.includes(aReq.body.request.id)
+        ? ok('company admin email names the role and request id') : bad(`mail: ${aSent[0]?.text}`);
+      eq('company admin: GET shows the open request', (await api('GET', '/users/me/deletion-request', tA)).body?.request?.id, aReq.body.request.id);
+      mailer._reset();
+      const aDup = await api('POST', '/users/me/deletion-request', tA, { reason: 'again' });
+      eq('company admin: second request while one is open -> 409', `${aDup.status} ${aDup.body?.error}`, '409 you already have an open deletion request');
+      eq('company admin: still exactly one request', (await q('SELECT count(*)::int AS n FROM deletion_requests WHERE user_id = $1', [admin1.id])).n, 1);
+      eq('company admin: no emails for the refused duplicate', (await mailer._drained()).length, 0);
+      const tA2 = await login('admin2@a.com');
+      const a2Race = await Promise.all([1, 2, 3].map(() => api('POST', '/users/me/deletion-request', tA2, {})));
+      eq('second company admin, three at once: one 201, two 409', a2Race.map((x) => x.status).sort().join(','), '201,409,409');
+      await pool.query("UPDATE deletion_requests SET status = 'closed' WHERE user_id IN ($1, (SELECT id FROM users WHERE email = 'admin2@a.com'))", [admin1.id]);
 
       console.log('\n--- school staff ---');
       const tS = await login('staff@s.com');

@@ -70,7 +70,7 @@ export interface OwnAccount extends PublicUser {
   pending_email_sent_at: string | null
 }
 
-// GET/POST /users/me/deletion-request (everyone but company_admin): a request for SafeTurns and the
+// GET/POST /users/me/deletion-request (every role): a request for SafeTurns and the
 // admins of the person's company or school to delete the person's data. Only a record + emails; nothing is deleted.
 export interface DeletionRequest {
   id: string

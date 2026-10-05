@@ -18,9 +18,10 @@ import type { DeletionRequest, LoginResponse, OwnAccount, Role } from '../../typ
 const ADDRESS_ROLES: Role[] = ['driver', 'parent']
 // Roles shown in the driver/parent phone shell, which gives pages no side padding of its own.
 const PHONE_SHELL_ROLES: Role[] = ['driver', 'parent', 'monitor']
-// Roles that can't close their own account, so they ask for deletion instead (company admins close
-// the whole company account from Company profile). School roles ask through their school.
-const DELETION_REQUEST_ROLES: Role[] = ['driver', 'monitor', 'parent', 'school_admin', 'school_staff']
+// Roles that can't close their own account, so they ask for deletion instead. That is every role:
+// a company admin can only close the whole company (Company profile), which is no exit for one
+// person. School roles ask through their school.
+const DELETION_REQUEST_ROLES: Role[] = ['driver', 'monitor', 'parent', 'company_admin', 'school_admin', 'school_staff']
 const SCHOOL_ROLES: Role[] = ['school_admin', 'school_staff']
 const MAX_REASON = 500
 
@@ -68,7 +69,9 @@ export function AccountPage() {
           <ProfileSection account={account} />
           <EmailSection account={account} />
           <PasswordSection />
-          {DELETION_REQUEST_ROLES.includes(account.role) && <DeletionRequestSection school={SCHOOL_ROLES.includes(account.role)} />}
+          {DELETION_REQUEST_ROLES.includes(account.role) && (
+            <DeletionRequestSection school={SCHOOL_ROLES.includes(account.role)} companyAdmin={account.role === 'company_admin'} />
+          )}
         </>
       )}
     </div>
@@ -290,10 +293,10 @@ function PasswordSection() {
   )
 }
 
-// "Request my data be deleted" (everyone but company admins). Records the request and emails
+// "Request my data be deleted" (every role). Records the request and emails
 // SafeTurns and the admins of the person's company or school; nothing is deleted automatically. One open request at a time: while one
 // is open, its state shows instead of the form.
-function DeletionRequestSection({ school }: { school: boolean }) {
+function DeletionRequestSection({ school, companyAdmin }: { school: boolean; companyAdmin: boolean }) {
   const queryClient = useQueryClient()
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -325,18 +328,22 @@ function DeletionRequestSection({ school }: { school: boolean }) {
   return (
     <Section title="Request my data be deleted">
       <p className="text-[14px] text-muted">
-        {school
-          ? "Your account is part of your school's SafeTurns account, so you can't close it yourself."
-          : "Your account was set up by your transportation company, so you can't close it yourself."}{' '}
-        You can ask for your data to be deleted: the request goes to SafeTurns and to your {org}'s admins, and they will
-        contact you. Nothing is deleted automatically.
+        {companyAdmin
+          ? 'Closing the company account (Company profile) closes it for everyone. To have only your own data deleted, ask here.'
+          : school
+            ? "Your account is part of your school's SafeTurns account, so you can't close it yourself."
+            : "Your account was set up by your transportation company, so you can't close it yourself."}{' '}
+        The request goes to SafeTurns and to your {org}'s {companyAdmin ? 'other admins' : 'admins'}, and they will contact
+        you. Nothing is deleted automatically.
       </p>
       {query.isLoading ? (
         <p className="text-[14px] text-muted">Loading…</p>
       ) : open ? (
         <div role="status" className="flex flex-col gap-1.5 rounded-row border border-line bg-surface-2 p-4 text-[14px] text-ink">
           <span className="font-semibold">Request sent on {new Date(open.requested_at).toLocaleDateString()}</span>
-          <span>SafeTurns and your {org}'s admins have it. They will contact you about what happens next.</span>
+          <span>
+            SafeTurns and your {org}'s {companyAdmin ? 'other admins' : 'admins'} have it. They will contact you about what happens next.
+          </span>
           {open.reason && <span className="text-muted">Your reason: {open.reason}</span>}
         </div>
       ) : (
