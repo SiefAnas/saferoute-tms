@@ -62,6 +62,15 @@ npm run migrate:up            # apply all migrations
 npm run migrate:down          # roll back the most recent migration
 ```
 
+## Support address
+
+`SUPPORT_EMAIL` (server) is the SafeTurns support inbox: **support@safeturns.com**. Data deletion
+requests (`POST /users/me/deletion-request`, from drivers, monitors, parents, school admins and
+school staff) are emailed there as well as to the admins of the person's company or school. It is
+in `server/.env.example` and **must be set on Render**. If it is unset the request is still
+recorded and the admins are still emailed, but support is not, and the server logs
+`[deletion-request] SUPPORT_EMAIL is not set …` with the request id on every such request.
+
 ## Build order (per spec §13)
 
 1. **Schema & migrations** ← current step

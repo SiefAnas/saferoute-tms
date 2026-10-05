@@ -46,7 +46,9 @@ async function main() {
         ? ok(`both documents carry version + effective in their frontmatter (terms ${terms.version}, privacy ${privacy.version})`)
         : bad(`frontmatter: ${JSON.stringify({ terms, privacy })}`);
       for (const doc of ['terms', 'privacy']) {
-        /PLACEHOLDER/.test(fs.readFileSync(path.join(LEGAL_DIR, `${doc}.md`), 'utf8')) ? ok(`${doc}.md is clearly marked PLACEHOLDER`) : bad(`${doc}.md has no PLACEHOLDER marker`);
+        const text = fs.readFileSync(path.join(LEGAL_DIR, `${doc}.md`), 'utf8');
+        (/This document is being prepared/.test(text) && /not yet open to the public/.test(text) && /This page is a notice/.test(text) && !/PLACEHOLDER/.test(text))
+          ? ok(`${doc}.md is an honest 'being prepared' notice, no filler`) : bad(`${doc}.md does not read as the being-prepared notice`);
       }
       const LEGAL = { terms: terms.version, privacy: privacy.version };
       eq('the old client copy is gone (one source of truth)', fs.existsSync(path.resolve(__dirname, '..', '..', 'client', 'src', 'legal')), false);

@@ -70,8 +70,8 @@ export interface OwnAccount extends PublicUser {
   pending_email_sent_at: string | null
 }
 
-// GET/POST /users/me/deletion-request (driver, monitor, parent): a request for SafeTurns and the
-// company admin to delete the person's data. Only a record + emails; nothing is deleted.
+// GET/POST /users/me/deletion-request (every role): a request for SafeTurns and the
+// admins of the person's company or school to delete the person's data. Only a record + emails; nothing is deleted.
 export interface DeletionRequest {
   id: string
   status: 'open' | 'closed'
@@ -437,6 +437,9 @@ export interface PaySummary {
 // against, for the Payroll page's "Amount Owed" column + "Paid" button.
 export interface UnpaidPaySummary extends PaySummary {
   paid_through_at: string | null
+  // The first work_date counted in this cycle: the day the cycle was marked paid, as the server
+  // reckons it ("2026-09-22"). null if never marked paid.
+  adjustments_from: string | null
 }
 
 export interface PayAdjustment {

@@ -30,7 +30,7 @@ router.post('/me/email-change/resend', verifyLimiter, async (req, res, next) => 
 router.delete('/me/email-change', async (req, res, next) => {
   try { res.json(await cancelEmailChange(req)); } catch (e) { next(e); }
 });
-// Data deletion request (driver, monitor, parent; services/deletionRequests.js). Sends email, so
+// Data deletion request (every role; services/deletionRequests.js). Sends email, so
 // it shares the verify limiter too.
 router.get('/me/deletion-request', async (req, res, next) => {
   try { res.json(await getOpenRequest(req)); } catch (e) { next(e); }

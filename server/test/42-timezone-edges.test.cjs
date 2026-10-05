@@ -247,6 +247,35 @@ async function main() {
     eq('NY at the same instant: it is 02:00 Oct 16, before the cutoff -> skipped', nyOk.status, 200);
     eq('...and the skip is dated Oct 16 (NY), not by the DB session zone', (await pool.query("SELECT skip_date::text AS d FROM pickup_skips WHERE student_id = $1", [await childOf('parent@ny.test')])).rows[0]?.d, '2026-10-16');
     clock._pin(null);
+
+    console.log('\n--- unpaid cycle: same-day adjustment per zone, and the drawer\'s lines add up ---');
+    // Marked paid at 2026-10-15T05:30Z: Oct 15 01:30 EDT in NY, still Oct 14 22:30 PDT in LA (and
+    // already Oct 15 in UTC and on this machine). Adjustments dated Oct 13, 14 and 15 in each
+    // company. The paid day is the company's: an adjustment dated it is in the new cycle.
+    // Uses the website's own filters (client/src/lib/payrollCycle.ts) on the API's own lists.
+    const { isAdjustmentInCycle, isOnOrAfterCycleStart } = await import('../../client/src/lib/payrollCycle.ts');
+    const PAID_AT = '2026-10-15T05:30:00Z';
+    const expect = {
+      ny: { paidDay: '2026-10-15', adjustments: 10000, listed: 'Oct 15' },
+      la: { paidDay: '2026-10-14', adjustments: 11000, listed: 'Oct 14,Oct 15' },
+    };
+    for (const k of ['ny', 'la']) {
+      const admin = (await fetch(`${BASE}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: `admin@${k}.test`, password: PW }) }).then((x) => x.json())).token;
+      const driverId = (await pool.query('SELECT id FROM users WHERE email = $1', [`driver@${k}.test`])).rows[0].id;
+      await pool.query('UPDATE pay_rules SET paid_through_at = $1 WHERE driver_id = $2', [PAID_AT, driverId]);
+      for (const [workDate, cents, note] of [['2026-10-13', 100, 'Oct 13'], ['2026-10-14', 1000, 'Oct 14'], ['2026-10-15', 10000, 'Oct 15']]) {
+        await api('POST', '/payroll/adjustments', admin, { driver_id: driverId, amount_cents: cents, note, work_date: workDate });
+      }
+      const s = (await api('GET', `/payroll/unpaid-summary/${driverId}`, admin)).body;
+      eq(`${k.toUpperCase()}: adjustments_from is the paid day in the company's zone`, s.adjustments_from, expect[k].paidDay);
+      eq(`${k.toUpperCase()}: the owed total counts the adjustments from that day on`, s.adjustments_cents, expect[k].adjustments);
+      const adjustments = (await api('GET', `/payroll/adjustments/${driverId}`, admin)).body.filter((a) => isAdjustmentInCycle(a.work_date, s.adjustments_from));
+      eq(`${k.toUpperCase()}: the drawer lists those adjustments`, adjustments.map((a) => a.note).sort().join(','), expect[k].listed);
+      eq(`${k.toUpperCase()}: listed adjustments sum to adjustments_cents`, adjustments.reduce((n, a) => n + a.amount_cents, 0), s.adjustments_cents);
+      const shifts = (await api('GET', '/sessions', admin)).body.filter((x) => x.user_id === driverId && x.check_out_at && isOnOrAfterCycleStart(x.check_in_at, s.paid_through_at));
+      eq(`${k.toUpperCase()}: listed shifts sum to worked_minutes (the four Nov 1 shifts)`, `${shifts.reduce((n, x) => n + x.duration_minutes, 0)}/${s.worked_minutes}`, '240/240');
+      eq(`${k.toUpperCase()}: base + listed adjustments = total owed`, s.base_pay_cents + adjustments.reduce((n, a) => n + a.amount_cents, 0), s.total_pay_cents);
+    }
     server.close();
     server = null;
 

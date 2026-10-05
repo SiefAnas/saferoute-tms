@@ -234,3 +234,265 @@ writes it (otherwise `POST /users` and imports fail), then the migration. Nothin
 3. **A pre-existing bulk-import bug** turned up during the license-number search: updating an
    existing record by import writes NULL into fields that import type doesn't have (staff
    `address`; non-driver `license_number`). Found by reading the code, not reproduced, not fixed.
+
+---
+
+# Addendum: tasks 11-14 (2026-10-04)
+
+Branch `account-settings`, worktree `saferoute-account`. Checked first: `server/.env`
+`DATABASE_URL` host is `localhost:5499` (local). Nothing merged, nothing pushed, no Neon, no
+Render. The previous session's local DB helper was gone with its scratchpad, so a fresh embedded
+Postgres was started on 5499 for this session (the request left open there yesterday no longer
+exists). New migration is **033**; 032 stays reserved for `company-timezone`.
+
+## Must be set on Render
+
+| Variable | Value | Why |
+|---|---|---|
+| `SUPPORT_EMAIL` | `support@safeturns.com` | Data deletion requests are emailed here. Unset = support is never told, only the org's admins are. |
+
+## 11. Support address
+- `server/.env.example`: `SUPPORT_EMAIL=support@safeturns.com`, with a comment saying it must be set
+  on Render and covering the school roles.
+- `README.md`: new "Support address" section (what it is, where it goes, must be set on Render,
+  what happens when it's unset).
+- The loud log is unchanged: with it unset, every request logs
+  `[deletion-request] SUPPORT_EMAIL is not set: SafeTurns support was NOT emailed about request <id>`.
+- Addressing confirmed: suite 36 now runs with `SUPPORT_EMAIL=support@safeturns.com` and checks the
+  exact recipient list of each request, for the company shape and the school shape
+  (`support@safeturns.com` plus the right admins, nobody else).
+
+## 12. School staff deletion requests
+- **Migration 033** `deletion-requests-school`: `deletion_requests.company_id` is nullable, new
+  nullable `school_id` (references `schools`, indexed), check `deletion_requests_one_owner`:
+  `num_nonnulls(company_id, school_id) = 1`. Existing rows all have a company and pass as they are.
+  `down` **refuses** (raises) while any school-shaped row exists rather than deleting it.
+  Tested on the local DB: up, down, up; and down with a school row present fails and leaves the
+  row (test row removed afterwards).
+- `services/deletionRequests.js`: open to `school_admin` and `school_staff`. Their request records
+  `school_id` (company null). The email goes to SafeTurns support and the school's active
+  `school_admin`s, and says "the school's admins". Company-side roles unchanged.
+- One open request at a time: the partial unique index is on `user_id`, so it already covers both
+  shapes. Tested for school staff (sequential duplicate, then allowed again after closing) and for a
+  school admin (three at once: one 201, two 409).
+- A school admin isn't emailed their own request. With no other active school admin, only support
+  gets it. (The same `id <>` filter is on the company side, where it never matches: company admins
+  can't request.)
+- Client: My account shows the section to school roles too, with "your school's admins" wording.
+  `API_CONTRACT.md` updated.
+- Suite 36: 28 -> 41 checks (school staff happy path, row shape, recipients, email text, duplicate,
+  closed-then-again; school admin race and recipients; the constraint refusing both and neither,
+  allowing either one). 403 for roles is now company_admin only.
+
+### Roles checked against "anyone who cannot close their own account can request deletion"
+| Role | Can close own account? | Can request deletion? |
+|---|---|---|
+| driver | no | yes (company) |
+| monitor | no | yes (company) |
+| parent | no | yes (company) |
+| school_admin | no (schools have no closure) | **yes, new** (school) |
+| school_staff | no | **yes, new** (school) |
+| company_admin | only by closing the **whole company** | no |
+
+Those are all six roles in `users_role_check`. **One gap to decide:** a company admin in a company
+with more than one admin can't close just their own account; their only option closes the
+company for everyone. Under the rule as written they "can close", so I left them out, but if you
+mean "close my own account without taking the company with me", company admins are still missing
+the right. Opening it is one line in `COMPANY_ROLES` plus a test.
+
+## 13. Payroll comment and wording
+- `client/src/lib/payrollCycle.ts` and the drawer in `PayrollPage.tsx`: the comments now say where
+  the server puts the cutoff. Shifts: `check_in_at >= paid_through_at` (timestamp). Adjustments:
+  `work_date >= paid_through_at` compared as dates, so **an adjustment dated the same day a cycle is
+  marked paid carries into the next cycle**. Confirmed by running it: mark paid, then add an
+  adjustment dated today, and `/payroll/unpaid-summary` counts it (1234 cents) in the new cycle.
+- Driver drawer: new line above "Shifts worked" when the driver has been paid before:
+  "Last marked paid Oct 4 at 05:15 PM. This cycle has the shifts that started after that, and
+  adjustments dated Oct 4 or later." I used "last marked paid" rather than "paid through" because
+  the paid day itself is in the next cycle for adjustments, so "paid through Oct 4" would say the
+  opposite of what happens.
+- No logic changed.
+
+**Mismatch found, not fixed (needs your go-ahead, it's a logic change):** the drawer's
+*adjustments list* uses `isOnOrAfterCycleStart`, which parses a bare `work_date` as UTC midnight
+and so **leaves a same-day adjustment out of the list**, while the server's total (which the drawer
+shows as "owed") **counts it**. So the list and the total disagree for that one case. The
+client test `client/test/payrollCycle.test.ts` asserts the exclusion ("was the bug"), so the
+earlier fix went the wrong way for adjustments. The fix is to compare adjustments by calendar
+date (`work_date >= paid date`) and flip that test case. A second, smaller edge: the server takes
+"the paid day" from the server process's clock/time zone, and the page formats it in the browser's,
+so near midnight they can name different days.
+
+## 14. Honest placeholder legal text
+- `server/src/legal/terms.md` and `privacy.md` now say plainly: SafeTurns is not yet open to the
+  public, the document isn't finished and is being prepared, it'll be published here before the
+  service opens, questions to support@safeturns.com (privacy also mentions the Account page
+  deletion request), and "this page is a notice, not terms of use / a privacy policy". No terms,
+  rights, obligations or data practices are stated. I left out any claim about who is using the
+  service now, because I can't verify one.
+- Frontmatter untouched: `version: 0.1-placeholder`, `effective: 2026-10-02`, so the loader, the
+  signup acceptance and existing acceptances all behave as before. You may want to bump the version
+  when the real text goes in (that will make signups record the new one).
+- Suite 34: the "marked PLACEHOLDER" check is now "reads as the being-prepared notice, no
+  PLACEHOLDER filler".
+
+## Merging note
+Suite 01 now expects 32 applied migrations on this branch. Merged with `company-timezone` (032) it
+will be 33.
+
+## Test results (tasks 11-14)
+- Server `npm test`: 35 of 36 suites passed in the full run (01-schema 20 with 32 migrations,
+  34-legal 37, 36-deletion-request 41). **27-duplicate-student-flag** died at startup
+  (`FATAL: undefined`) because I'd left an orphaned scratch Postgres on its port 5477. That was
+  my mistake, not the code. After stopping it, 27 passed alone (18/18).
+- Client: `tsc -b` and `vite build` pass. `payrollCycle`, `localDate`, `markdown`, `weekdays` and
+  `money` tests pass. No lint output on the changed files.
+- Migration 033 on the local DB: up / down / up, and down refusing while a school row exists.
+- **Not checked live in the browser.** Starting the API for the preview was refused by the
+  session's permission check, so the two UI changes (school roles' deletion section, the payroll
+  cutoff line) are checked only by type-check and build.
+
+---
+
+# Addendum: tasks 15-16 (2026-10-05)
+
+Same branch and worktree. Checked first: `server/.env` `DATABASE_URL` host is `localhost:5499`
+(local). Nothing merged, nothing pushed, no Neon, no Render. No new migration.
+
+## 15. Payroll drawer mismatch, fixed
+- **Server** (`services/payroll.js`): `unpaid-summary` now also returns `adjustments_from`, the
+  paid day as Postgres reckons it (`paid_through_at::date`, computed once). The same value is the
+  adjustments filter for the total (`work_date >= $n::date`), so the boundary the client gets is
+  exactly the one the sum used. `null` if never marked paid. Other callers of `summary()` are
+  unchanged (the explicit `::date` cast is what Postgres already inferred).
+- **Client**: the drawer lists adjustments with new `isAdjustmentInCycle(work_date,
+  adjustments_from)` (calendar-date compare), so an adjustment dated the paid day is listed and
+  the lines add up to the owed total. Shifts keep `isOnOrAfterCycleStart` (timestamp compare),
+  which already matched the server. The drawer's cutoff line now names the server's day too.
+  The browser never works the paid day out itself, because its time zone can differ from the
+  server's.
+- **Tests**: the client test's old "same day -> excluded (was the bug)" case is gone. The commit
+  message says why: it never matched the server, so passing it meant the list disagreed with the
+  total. New cases: same day included, day before excluded, and listed adjustments sum to
+  `adjustments_cents` (and base + listed = total) for the same-day case (13 checks). Server suite
+  11 does the same against the real API, using the client's own function: mark paid, add one
+  adjustment dated the paid day and one the day before, then check `adjustments_from` is the paid
+  day, the server counts only the same-day one, the drawer's filter lists exactly that one, and
+  the sums match (11 -> 18 checks).
+- `API_CONTRACT.md` doesn't describe the `unpaid-summary` response fields, so there was nothing
+  to update there. The new field is in `client/src/types/api.ts`.
+
+## 16. Company admins can request deletion
+- `company_admin` is now a company-side requester: the request records the company, and the
+  email goes to SafeTurns support and the company's **other** active admins (never the requester,
+  never an inactive admin, never another company's).
+- My account shows the section to company admins, with wording that says closing the company
+  closes it for everyone and this request is for their own data only.
+- Suite 36 (41 -> 49 checks): company admin happy path, row shape, exact recipients, email text,
+  duplicate refused with no emails, and a second admin's three-at-once race (one 201, two 409).
+  The old "company admin -> 403" checks are gone.
+- **Every role can now request deletion** (driver, monitor, parent, company_admin, school_admin,
+  school_staff). No role is missing it. The 403 branch stays as a guard for any future role.
+
+## Merging note
+Suite 01 expects **32** migrations on this branch. **After merging with `company-timezone`
+(032) it has to go to 33.**
+
+## Surprises
+- **Embedded Postgres leaks one `io_worker` per test run on Windows.** The test kit's teardown
+  stops the main Postgres process, but one worker survives with its parent gone and keeps the
+  shared-memory block. The next run of the same suite then fails with "pre-existing shared memory
+  block is still in use". This hit suite 36 today: 12 orphans from yesterday's full run were
+  still there. I stopped only orphans of this worktree's Postgres binary whose parent had exited,
+  and re-ran. I haven't fixed the test kit (it's outside these tasks).
+- My own text replacement once turned `$${…}` into `${…}` in the SQL (JavaScript's
+  `String.replace` treats `$$` specially). Suite 11 caught it straight away with a 500, and the
+  committed code is correct.
+
+## Test results (tasks 15-16)
+- Server `npm test`: **all 35 suites pass in one full run** (exit 0). 01-schema 20 (32
+  migrations), 11-payroll-paid 18, 36-deletion-request 49. Correction to the 11-14 addendum: the
+  server has 35 suites, not 36. It should have said "34 of 35 in the full run, 27 passed alone".
+- Client: `tsc -b`, `vite build`, and the `payrollCycle` (13), `localDate`, `markdown`,
+  `weekdays` and `money` tests pass. No lint output on the changed files.
+- The full run leaked 11 orphaned Postgres workers (see Surprises); I stopped them afterwards.
+- Not checked live in the browser (same reason as last time: starting the API for the preview
+  was refused).
+
+---
+
+# Addendum: tasks 17-18 (2026-10-05)
+
+Same branch and worktree. Checked first: `server/.env` `DATABASE_URL` host is `localhost:5499`
+(local). Nothing merged, nothing pushed, no Neon, no Render. Only test code changed.
+
+## 17. Test kit no longer leaks Postgres workers
+
+### Why it leaked
+`embedded-postgres` (18.4.0-beta.17) stops the server on Windows with
+`taskkill /pid <postmaster> /f /t`: a force-kill of the process tree. It doesn't wait for taskkill,
+and it resolves as soon as the postmaster exits. Postgres 18 runs separate `io_worker` processes.
+When the tree kill takes a worker before the postmaster, the still-running postmaster treats it as
+a crash and starts replacement workers that taskkill never listed. Those survive with no parent,
+hold the cluster's shared memory and sometimes its port, and the next run of that suite fails
+("pre-existing shared memory block is still in use", or `FATAL: undefined`). It's a race, which is
+why it was intermittent: one leak in one run of suite 36, 11 in one full run.
+
+### Fix (`server/test/lib/testkit.cjs`, test code only)
+- **Stop the way Postgres expects.** On Windows the suite's `epg.stop()` runs
+  `pg_ctl stop -m fast -w` (pg_ctl ships next to the postgres binary the library launched). The
+  postmaster shuts its own children down and exits last. It then waits for the postmaster to
+  exit. A tree force-kill is only the fallback if that fails, and it's awaited. Elsewhere it uses
+  SIGINT, then SIGKILL. The data dir is removed after the process has exited. Teardown problems
+  are logged, never thrown, as before. The library's own exit hook calls the same `stop`, so a
+  suite that crashes also shuts down cleanly.
+- **Clear only this suite's own leftovers.** Each run writes `test/.tmp/<suite>.postmaster.json`
+  (postmaster pid, this checkout's bin dir, data dir) and a clean stop deletes it. If the next run
+  of the same suite finds it, it stops only processes that match all of:
+  - this checkout's postgres binary;
+  - either the recorded pid **and** this suite's data dir (the old postmaster), or a parent pid
+    equal to the recorded postmaster (its leftover children).
+  Another worktree's binary path never matches, and another suite has its own file.
+- **Never touch a port it doesn't own.** If the port is still taken after that, the suite stops
+  with `port N is already in use by something that is not a leftover of this suite ... Not
+  touching it`, instead of the library's reason-less `FATAL: undefined`. (Picking a free port
+  instead isn't practical: every suite bakes its port into `DATABASE_URL` before the app's pool
+  is created.)
+- Startup failures now say which suite and port (the library rejects with no reason).
+
+### Checks
+- One suite: the log shows `received fast shutdown request`, then `database system is shut
+  down`; afterwards no worktree postgres processes, no pid file, no data dir.
+- Leftover simulation: a detached cluster (7 processes) recorded as this suite's leftover, plus a
+  detached foreign cluster (8 processes) with no record. Starting the suite stopped the leftover
+  (tree 7 -> 0), and the foreign cluster kept running and listening. Starting another suite on the
+  foreign cluster's port was refused with the message above, and nothing was killed. I then
+  stopped the foreign cluster myself.
+- **Two full runs back to back, no manual cleanup in between:** see "Test results" below.
+
+### Not covered
+Orphans left by runs before this fix have no pid record, so the new code can't (and won't)
+attribute them to a suite. None were present when the runs started (count 0).
+
+## 18. Suite 01 no longer hard-codes the migration count
+It now reads `server/migrations/*.js` and checks that at least one exists, that `pgmigrations` has
+as many rows as there are files, and that the applied names match the file names in order. That
+keeps what the old check meant ("migrate:up applied every migration") and is stricter: a skipped
+or unknown migration now fails too. Adding a migration needs no test edit, and merging with
+`company-timezone` (032) needs no bump. **This replaces the earlier note that the count has to go
+to 33.**
+
+## Test results (tasks 17-18)
+Two full `npm test` runs back to back with the fixed test kit, no cleanup in between (orphans
+counted as postgres processes from this worktree's binary whose parent has exited):
+
+| When | Suites | Worktree postgres processes | Orphans |
+|---|---|---|---|
+| Before run 1 | n/a | 0 | 0 |
+| After run 1 | 35 / 35 pass (exit 0) | 0 | **0** |
+| After run 2 | 35 / 35 pass (exit 0) | 0 | **0** |
+
+In each run, all 34 suites that start Postgres logged `received fast shutdown request` (08 doesn't
+start one). There were no `[testkit]` warnings: no failed pg_ctl stops, no forced kills, no leftovers
+cleared. For comparison, the last full run before the fix left 11 orphans. Suite 01 now
+reports 22 checks (found 32 files, all applied, names match in order).

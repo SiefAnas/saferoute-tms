@@ -203,14 +203,16 @@ token, or weak password. `429` rate limited.
   used or expired link, or account deactivated; `409` the address was registered by someone else
   in the meantime.
 
-### Data deletion request (driver, monitor, parent; branch `account-settings`)
+### Data deletion request (every role; branch `account-settings`)
 - `GET /users/me/deletion-request` → `{ request: null | { id, status: "open", reason, requested_at } }`
   (the caller's open request).
 - `POST /users/me/deletion-request` body `{ "reason"?: "…" }` (optional, ≤ 500 characters after
   trimming) → `201 { request }`. Records the request and emails SafeTurns support
-  (`SUPPORT_EMAIL` on the server) and every active company_admin of the person's company.
-  Nothing is deleted, approved or denied. `409` one is already open; `400` reason too long / not
-  text; `403` any other role (admins close the company account instead). Rate limited with the
+  (`SUPPORT_EMAIL` on the server) and the org's other active admins (never the requester): every
+  company_admin of the person's company for driver / monitor / parent / company_admin (the
+  request records the company), every school_admin of the person's school for school_admin /
+  school_staff (the request records the school). Nothing is deleted, approved or denied. `409`
+  one is already open; `400` reason too long / not text. Rate limited with the
   verify endpoints.
 
 ### Usage and billing (company_admin, read only, branch `account-settings`)

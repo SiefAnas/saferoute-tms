@@ -5,27 +5,18 @@ effective: 2026-10-02
 
 # Terms of Use
 
-> **PLACEHOLDER. NOT LEGAL TEXT.** This page only reserves the layout and the version number.
-> The real Terms of Use must be written or reviewed by a lawyer before anyone relies on them.
+## This document is being prepared
 
-## 1. PLACEHOLDER: Who we are
+SafeTurns is not yet open to the public, and its Terms of Use are not finished. We are preparing
+them and will publish them here before the service opens.
 
-PLACEHOLDER. Describe the company that operates SafeTurns and how to contact it.
+## If you have an account now
 
-## 2. PLACEHOLDER: Accounts
+If your company or school has set up a SafeTurns account for you and you have a question, write
+to us at support@safeturns.com.
 
-PLACEHOLDER. Who may create an account, who is responsible for the accounts an organization
-creates for its drivers, monitors, parents and staff, and what happens when an account is closed.
+## What this page is not
 
-## 3. PLACEHOLDER: Acceptable use
-
-- PLACEHOLDER item.
-- PLACEHOLDER item.
-
-## 4. PLACEHOLDER: Pilot, fees and changes
-
-PLACEHOLDER. How the free pilot works and how changes to these terms are announced.
-
-## 5. PLACEHOLDER: Liability, law and disputes
-
-PLACEHOLDER.
+This page is a notice, not terms of use. It does not set out any agreement, rights or
+obligations. Those will be in the finished document, and this page will be replaced when it is
+ready.

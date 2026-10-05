@@ -160,12 +160,17 @@ async function isShiftComplete(req, driverId, workDate, shiftPeriod, sessionIds)
 // this session's new "amount owed since last paid" would have been wrong in the same way
 // (already-settled adjustments re-appearing as still owed). Adjustments are now filtered by
 // `work_date` exactly like sessions are filtered by `check_in_at`.
-async function summary(req, driverId, { from, to } = {}) {
+//
+// `adjustmentsFrom` overrides `from` for adjustments only, and goes through periodBound like the
+// other bounds (a company-zone date, or an instant converted to its date in the company's zone).
+// unpaidSummary passes the paid day so the boundary it reports to the client is the one used here.
+async function summary(req, driverId, { from, to, adjustmentsFrom = from } = {}) {
   const rule = (await req.db.findMany('pay_rules', { where: { driver_id: driverId } }))[0];
   if (!rule) throw new HttpError(404, 'no pay rule for this driver');
   const timeZone = req.businessNow.timeZone;
   const start = periodBound(from, timeZone, 'from');
   const end = periodBound(to, timeZone, 'to');
+  const adjStart = adjustmentsFrom === from ? start : periodBound(adjustmentsFrom, timeZone, 'adjustmentsFrom');
 
   const range = [];
   let clause = 'user_id = $1 AND company_id = $2 AND check_out_at IS NOT NULL';
@@ -189,7 +194,9 @@ async function summary(req, driverId, { from, to } = {}) {
 
   const adjRange = [driverId, req.auth.tenantId];
   let adjClause = 'driver_id = $1 AND company_id = $2';
-  if (start) { adjRange.push(start.date); adjClause += ` AND work_date >= $${adjRange.length}::date`; }
+  // Adjustments have only a date: [adjStart.date, end.date) in the company's zone. adjStart is `from`
+  // unless the caller moved the adjustments' start (unpaidSummary, to the paid day).
+  if (adjStart) { adjRange.push(adjStart.date); adjClause += ` AND work_date >= $${adjRange.length}::date`; }
   if (end) { adjRange.push(end.date); adjClause += ` AND work_date < $${adjRange.length}::date`; }
   const adjResult = await pool.query(
     `SELECT COALESCE(SUM(amount_cents),0)::int AS total FROM pay_adjustments WHERE ${adjClause}`,
@@ -211,11 +218,18 @@ async function summary(req, driverId, { from, to } = {}) {
 
 // The "current unpaid cycle": everything since paid_through_at (or the beginning of time,
 // if never marked paid). Reuses summary() directly rather than duplicating its computation.
+//
+// The cutoff differs by kind: shifts start at the paid_through_at instant (check_in_at is a
+// timestamp), adjustments start on the paid DAY (work_date is a date), so an adjustment dated the
+// day the cycle was marked paid is in the new cycle. That day is the paid instant's date in the
+// company's time zone (periodBound), computed once here, used for the total and returned as
+// adjustments_from so the website lists exactly the adjustments this total counts.
 async function unpaidSummary(req, driverId) {
   const rule = (await req.db.findMany('pay_rules', { where: { driver_id: driverId } }))[0];
   if (!rule) throw new HttpError(404, 'no pay rule for this driver');
-  const result = await summary(req, driverId, { from: rule.paid_through_at ?? undefined });
-  return { ...result, paid_through_at: rule.paid_through_at };
+  const adjustmentsFrom = periodBound(rule.paid_through_at, req.businessNow.timeZone, 'paid_through_at')?.date ?? null;
+  const result = await summary(req, driverId, { from: rule.paid_through_at ?? undefined, adjustmentsFrom: adjustmentsFrom ?? undefined });
+  return { ...result, paid_through_at: rule.paid_through_at, adjustments_from: adjustmentsFrom };
 }
 
 // Marks the current unpaid cycle settled — resets the "owed since" counter to now. Does not

@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api'
-import { formatMoney, formatDuration, formatMonthDay, formatCalendarMonthDay, formatRate } from '../../lib/format'
+import { formatMoney, formatDuration, formatMonthDay, formatCalendarMonthDay, formatClock, formatRate } from '../../lib/format'
 import { parseDollarAmount } from '../../lib/money'
-import { isOnOrAfterCycleStart } from '../../lib/payrollCycle'
+import { isAdjustmentInCycle, isOnOrAfterCycleStart } from '../../lib/payrollCycle'
 import { currentAssignmentBy, vanLabel } from '../../lib/fleet'
 import { Button } from '../../components/Button'
 import { Field, Input, Select } from '../../components/Input'
@@ -475,6 +475,7 @@ function BreakdownDrawer({
   })
 
   const paidThroughAt = unpaidQuery.data?.paid_through_at ?? null
+  const adjustmentsFrom = unpaidQuery.data?.adjustments_from ?? null
 
   const shifts = useMemo(() => {
     const all = (sessionsQuery.data ?? []).filter((s) => s.user_id === driver.id && s.check_out_at)
@@ -483,14 +484,12 @@ function BreakdownDrawer({
       .sort((a, b) => b.check_in_at.localeCompare(a.check_in_at))
   }, [sessionsQuery.data, driver.id, paidThroughAt])
 
-  // BACKLOG bug fix: this used to compare `a.work_date >= paidThroughAt.slice(0, 10)` (a
-  // date-string-only compare), so a same-day adjustment still showed under the new cycle
-  // even though the server's own timestamp compare had already excluded it from
-  // base_pay_cents/adjustments_cents — see lib/payrollCycle.ts + its test.
+  // Cutoff: an adjustment dated the same day the cycle was marked paid carries into the next
+  // cycle. The server sends that day as adjustments_from; see lib/payrollCycle.ts.
   const adjustments = useMemo(() => {
     const all = adjustmentsQuery.data ?? []
-    return all.filter((a) => isOnOrAfterCycleStart(a.work_date, paidThroughAt)).sort((a, b) => b.work_date.localeCompare(a.work_date))
-  }, [adjustmentsQuery.data, paidThroughAt])
+    return all.filter((a) => isAdjustmentInCycle(a.work_date, adjustmentsFrom)).sort((a, b) => b.work_date.localeCompare(a.work_date))
+  }, [adjustmentsQuery.data, adjustmentsFrom])
 
   const s = unpaidQuery.data
   const owed = s?.total_pay_cents ?? 0
@@ -536,6 +535,12 @@ function BreakdownDrawer({
         <p className="text-[14px] text-muted">Loading…</p>
       ) : (
         <>
+          {paidThroughAt && (
+            <p className="text-[13px] text-muted">
+              Last marked paid {formatMonthDay(paidThroughAt)} at {formatClock(paidThroughAt)}. This cycle has the shifts that
+              started after that, and adjustments dated {adjustmentsFrom ? formatCalendarMonthDay(adjustmentsFrom) : formatMonthDay(paidThroughAt)} or later.
+            </p>
+          )}
           <DrawerSection title="Shifts worked">
             {shifts.length === 0 ? (
               <InlineEmpty icon="event_available" tone="success" text="New cycle started. No completed shifts yet." />
