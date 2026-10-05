@@ -418,3 +418,81 @@ Suite 01 expects **32** migrations on this branch. **After merging with `company
 - The full run leaked 11 orphaned Postgres workers (see Surprises); I stopped them afterwards.
 - Not checked live in the browser (same reason as last time: starting the API for the preview
   was refused).
+
+---
+
+# Addendum: tasks 17-18 (2026-10-05)
+
+Same branch and worktree. Checked first: `server/.env` `DATABASE_URL` host is `localhost:5499`
+(local). Nothing merged, nothing pushed, no Neon, no Render. Only test code changed.
+
+## 17. Test kit no longer leaks Postgres workers
+
+### Why it leaked
+`embedded-postgres` (18.4.0-beta.17) stops the server on Windows with
+`taskkill /pid <postmaster> /f /t`: a force-kill of the process tree. It doesn't wait for taskkill,
+and it resolves as soon as the postmaster exits. Postgres 18 runs separate `io_worker` processes.
+When the tree kill takes a worker before the postmaster, the still-running postmaster treats it as
+a crash and starts replacement workers that taskkill never listed. Those survive with no parent,
+hold the cluster's shared memory and sometimes its port, and the next run of that suite fails
+("pre-existing shared memory block is still in use", or `FATAL: undefined`). It's a race, which is
+why it was intermittent: one leak in one run of suite 36, 11 in one full run.
+
+### Fix (`server/test/lib/testkit.cjs`, test code only)
+- **Stop the way Postgres expects.** On Windows the suite's `epg.stop()` runs
+  `pg_ctl stop -m fast -w` (pg_ctl ships next to the postgres binary the library launched). The
+  postmaster shuts its own children down and exits last. It then waits for the postmaster to
+  exit. A tree force-kill is only the fallback if that fails, and it's awaited. Elsewhere it uses
+  SIGINT, then SIGKILL. The data dir is removed after the process has exited. Teardown problems
+  are logged, never thrown, as before. The library's own exit hook calls the same `stop`, so a
+  suite that crashes also shuts down cleanly.
+- **Clear only this suite's own leftovers.** Each run writes `test/.tmp/<suite>.postmaster.json`
+  (postmaster pid, this checkout's bin dir, data dir) and a clean stop deletes it. If the next run
+  of the same suite finds it, it stops only processes that match all of:
+  - this checkout's postgres binary;
+  - either the recorded pid **and** this suite's data dir (the old postmaster), or a parent pid
+    equal to the recorded postmaster (its leftover children).
+  Another worktree's binary path never matches, and another suite has its own file.
+- **Never touch a port it doesn't own.** If the port is still taken after that, the suite stops
+  with `port N is already in use by something that is not a leftover of this suite ... Not
+  touching it`, instead of the library's reason-less `FATAL: undefined`. (Picking a free port
+  instead isn't practical: every suite bakes its port into `DATABASE_URL` before the app's pool
+  is created.)
+- Startup failures now say which suite and port (the library rejects with no reason).
+
+### Checks
+- One suite: the log shows `received fast shutdown request`, then `database system is shut
+  down`; afterwards no worktree postgres processes, no pid file, no data dir.
+- Leftover simulation: a detached cluster (7 processes) recorded as this suite's leftover, plus a
+  detached foreign cluster (8 processes) with no record. Starting the suite stopped the leftover
+  (tree 7 -> 0), and the foreign cluster kept running and listening. Starting another suite on the
+  foreign cluster's port was refused with the message above, and nothing was killed. I then
+  stopped the foreign cluster myself.
+- **Two full runs back to back, no manual cleanup in between:** see "Test results" below.
+
+### Not covered
+Orphans left by runs before this fix have no pid record, so the new code can't (and won't)
+attribute them to a suite. None were present when the runs started (count 0).
+
+## 18. Suite 01 no longer hard-codes the migration count
+It now reads `server/migrations/*.js` and checks that at least one exists, that `pgmigrations` has
+as many rows as there are files, and that the applied names match the file names in order. That
+keeps what the old check meant ("migrate:up applied every migration") and is stricter: a skipped
+or unknown migration now fails too. Adding a migration needs no test edit, and merging with
+`company-timezone` (032) needs no bump. **This replaces the earlier note that the count has to go
+to 33.**
+
+## Test results (tasks 17-18)
+Two full `npm test` runs back to back with the fixed test kit, no cleanup in between (orphans
+counted as postgres processes from this worktree's binary whose parent has exited):
+
+| When | Suites | Worktree postgres processes | Orphans |
+|---|---|---|---|
+| Before run 1 | n/a | 0 | 0 |
+| After run 1 | 35 / 35 pass (exit 0) | 0 | **0** |
+| After run 2 | 35 / 35 pass (exit 0) | 0 | **0** |
+
+In each run, all 34 suites that start Postgres logged `received fast shutdown request` (08 doesn't
+start one). There were no `[testkit]` warnings: no failed pg_ctl stops, no forced kills, no leftovers
+cleared. For comparison, the last full run before the fix left 11 orphans. Suite 01 now
+reports 22 checks (found 32 files, all applied, names match in order).
