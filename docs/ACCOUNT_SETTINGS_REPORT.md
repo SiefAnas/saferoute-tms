@@ -351,3 +351,70 @@ will be 33.
 - **Not checked live in the browser.** Starting the API for the preview was refused by the
   session's permission check, so the two UI changes (school roles' deletion section, the payroll
   cutoff line) are checked only by type-check and build.
+
+---
+
+# Addendum: tasks 15-16 (2026-10-05)
+
+Same branch and worktree. Checked first: `server/.env` `DATABASE_URL` host is `localhost:5499`
+(local). Nothing merged, nothing pushed, no Neon, no Render. No new migration.
+
+## 15. Payroll drawer mismatch, fixed
+- **Server** (`services/payroll.js`): `unpaid-summary` now also returns `adjustments_from`, the
+  paid day as Postgres reckons it (`paid_through_at::date`, computed once). The same value is the
+  adjustments filter for the total (`work_date >= $n::date`), so the boundary the client gets is
+  exactly the one the sum used. `null` if never marked paid. Other callers of `summary()` are
+  unchanged (the explicit `::date` cast is what Postgres already inferred).
+- **Client**: the drawer lists adjustments with new `isAdjustmentInCycle(work_date,
+  adjustments_from)` (calendar-date compare), so an adjustment dated the paid day is listed and
+  the lines add up to the owed total. Shifts keep `isOnOrAfterCycleStart` (timestamp compare),
+  which already matched the server. The drawer's cutoff line now names the server's day too.
+  The browser never works the paid day out itself, because its time zone can differ from the
+  server's.
+- **Tests**: the client test's old "same day -> excluded (was the bug)" case is gone. The commit
+  message says why: it never matched the server, so passing it meant the list disagreed with the
+  total. New cases: same day included, day before excluded, and listed adjustments sum to
+  `adjustments_cents` (and base + listed = total) for the same-day case (13 checks). Server suite
+  11 does the same against the real API, using the client's own function: mark paid, add one
+  adjustment dated the paid day and one the day before, then check `adjustments_from` is the paid
+  day, the server counts only the same-day one, the drawer's filter lists exactly that one, and
+  the sums match (11 -> 18 checks).
+- `API_CONTRACT.md` doesn't describe the `unpaid-summary` response fields, so there was nothing
+  to update there. The new field is in `client/src/types/api.ts`.
+
+## 16. Company admins can request deletion
+- `company_admin` is now a company-side requester: the request records the company, and the
+  email goes to SafeTurns support and the company's **other** active admins (never the requester,
+  never an inactive admin, never another company's).
+- My account shows the section to company admins, with wording that says closing the company
+  closes it for everyone and this request is for their own data only.
+- Suite 36 (41 -> 49 checks): company admin happy path, row shape, exact recipients, email text,
+  duplicate refused with no emails, and a second admin's three-at-once race (one 201, two 409).
+  The old "company admin -> 403" checks are gone.
+- **Every role can now request deletion** (driver, monitor, parent, company_admin, school_admin,
+  school_staff). No role is missing it. The 403 branch stays as a guard for any future role.
+
+## Merging note
+Suite 01 expects **32** migrations on this branch. **After merging with `company-timezone`
+(032) it has to go to 33.**
+
+## Surprises
+- **Embedded Postgres leaks one `io_worker` per test run on Windows.** The test kit's teardown
+  stops the main Postgres process, but one worker survives with its parent gone and keeps the
+  shared-memory block. The next run of the same suite then fails with "pre-existing shared memory
+  block is still in use". This hit suite 36 today: 12 orphans from yesterday's full run were
+  still there. I stopped only orphans of this worktree's Postgres binary whose parent had exited,
+  and re-ran. I haven't fixed the test kit (it's outside these tasks).
+- My own text replacement once turned `$${…}` into `${…}` in the SQL (JavaScript's
+  `String.replace` treats `$$` specially). Suite 11 caught it straight away with a 500, and the
+  committed code is correct.
+
+## Test results (tasks 15-16)
+- Server `npm test`: **all 35 suites pass in one full run** (exit 0). 01-schema 20 (32
+  migrations), 11-payroll-paid 18, 36-deletion-request 49. Correction to the 11-14 addendum: the
+  server has 35 suites, not 36. It should have said "34 of 35 in the full run, 27 passed alone".
+- Client: `tsc -b`, `vite build`, and the `payrollCycle` (13), `localDate`, `markdown`,
+  `weekdays` and `money` tests pass. No lint output on the changed files.
+- The full run leaked 11 orphaned Postgres workers (see Surprises); I stopped them afterwards.
+- Not checked live in the browser (same reason as last time: starting the API for the preview
+  was refused).
