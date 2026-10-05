@@ -3,6 +3,8 @@
 const PG_PORT = 5450;
 process.env.DATABASE_URL = `postgres://saferoute:saferoute@localhost:${PG_PORT}/saferoute_dev`;
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { Client } = require('pg');
 const { createRecorder, startEmbeddedPostgres, runMigrateUp } = require('./lib/testkit.cjs');
 
@@ -18,8 +20,16 @@ async function main() {
     const client = new Client({ connectionString: process.env.DATABASE_URL });
     await client.connect();
     try {
-      const applied = (await client.query('SELECT count(*)::int AS n FROM pgmigrations')).rows[0].n;
-      eq('pgmigrations records 32 applied migrations', applied, 32);
+      // Every migration file was applied, in order, and nothing else. Counted from the folder so a
+      // branch that adds a migration doesn't have to edit this test (or conflict on it at merge).
+      const files = fs.readdirSync(path.join(__dirname, '..', 'migrations'))
+        .filter((f) => f.endsWith('.js'))
+        .map((f) => f.replace(/\.js$/, ''))
+        .sort();
+      const applied = (await client.query('SELECT name FROM pgmigrations ORDER BY run_on, id')).rows.map((r) => r.name);
+      (files.length > 0) ? ok(`found ${files.length} migration files`) : bad('no migration files found');
+      eq(`pgmigrations records all ${files.length} migration files as applied`, applied.length, files.length);
+      eq('applied migrations match the files, in order', JSON.stringify(applied), JSON.stringify(files));
       const tables = (await client.query(
         "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name<>'pgmigrations' ORDER BY 1"
       )).rows.map((r) => r.table_name);
