@@ -67,6 +67,19 @@ describe('request building', () => {
     })
   })
 
+  it('sends a PATCH with a JSON body and the token (own address edit)', async () => {
+    const { api, calls } = setup(jsonResponse(200, { id: 'm1' }), { token: 'abc123' })
+    const body = { street_address: '9 Oak Ave', city: 'Salem', state: 'MA', zip_code: '01970' }
+    await api.patch('/users/me', body)
+
+    expect(calls[0]!.url).toBe('https://api.test/users/me')
+    expect(calls[0]!.init.method).toBe('PATCH')
+    const headers = calls[0]!.init.headers as Record<string, string>
+    expect(headers.Authorization).toBe('Bearer abc123')
+    expect(headers['Content-Type']).toBe('application/json')
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual(body)
+  })
+
   it('sends no body and no Content-Type on a bodyless POST', async () => {
     const { api, calls } = setup(jsonResponse(200, { skipped: true }), { token: 't' })
     await api.post('/parent/students/1/skip-pickup')

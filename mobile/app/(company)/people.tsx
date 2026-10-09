@@ -10,6 +10,7 @@ import { Field, inputStyle } from '@/components/Form'
 import { Screen } from '@/components/Screen'
 import { ActionError, ErrorState, Loading, messageFor } from '@/components/States'
 import { Text } from '@/components/Text'
+import { HomeAddressInputs, homeAddressBody, homeAddressOf } from '@/components/HomeAddressInputs'
 import { PersonRow, SearchBox, Segmented, TemporaryPasswordPanel, WebsiteRow } from '@/features/admin/components'
 import { useCompanyAssignments, useCompanySessions, useCompanyVans, useDrivers, useMonitors, useParents } from '@/features/admin/companyData'
 import { accountStatusText, matches, WEBSITE_PAGES } from '@/features/admin/logic'
@@ -73,6 +74,7 @@ export default function PeopleScreen() {
       lines: [
         { label: 'Rides with', value: x.assignment?.driver_name ?? 'No driver yet' },
         { label: 'When', value: x.assignment ? `${formatWeekdays(x.assignment.days_of_week)} · ${SHIFT_TEXT[x.assignment.shift_period]}` : '—' },
+        { label: 'Home address', value: x.home_address ?? 'Not set' },
       ],
     }))
     const p: Person[] = (parents.data ?? []).map((u) => ({ user: u, kind: 'parent', onShiftSince: null, lines: [{ label: 'Address', value: u.address ?? '—' }] }))
@@ -248,11 +250,23 @@ function AddPersonSheet({ kind, onClose }: { kind: 'driver' | 'monitor'; onClose
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [homeAddress, setHomeAddress] = useState(homeAddressOf({}))
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<CreatedUser | null>(null)
   const noun = kind === 'driver' ? 'driver' : 'monitor'
   const add = useMutation({
-    mutationFn: () => api.post<CreatedUser>('/users', { role: kind, fullName: name.trim(), email: email.trim(), phone: phone.trim() || undefined }),
+    mutationFn: () => {
+      // A monitor's home address is optional here (the driver picks them up there).
+      const a = homeAddressBody(homeAddress)
+      const withAddress = kind === 'monitor' && (a.street_address || a.city || a.state || a.zip_code)
+      return api.post<CreatedUser>('/users', {
+        role: kind,
+        fullName: name.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        ...(withAddress ? { streetAddress: a.street_address, city: a.city, state: a.state, zipCode: a.zip_code } : {}),
+      })
+    },
     onMutate: () => setError(null),
     onSuccess: (u) => {
       setCreated(u)
@@ -296,6 +310,9 @@ function AddPersonSheet({ kind, onClose }: { kind: 'driver' | 'monitor'; onClose
           <Field label="Phone (optional)">
             <TextInput value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="555-123-4567" placeholderTextColor={colors.faint} style={input} accessibilityLabel="Phone" />
           </Field>
+          {kind === 'monitor' ? (
+            <HomeAddressInputs label="Home address (optional, where the driver picks them up)" value={homeAddress} onChange={setHomeAddress} />
+          ) : null}
           <Text size={13} color={colors.muted} style={{ lineHeight: 18 }}>
             SafeTurns makes a temporary password for you to give the {noun}. They choose their own the first time they sign in.
             {kind === 'monitor' ? ' Assign them to a driver on the website.' : ''}

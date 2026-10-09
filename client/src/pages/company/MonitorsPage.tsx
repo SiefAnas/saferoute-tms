@@ -9,6 +9,8 @@ import { TemporaryPasswordDialog } from '../../components/TemporaryPasswordDialo
 import { StatusBadge } from '../../components/StatusBadge'
 import { EditAccountModal } from '../../components/EditAccountModal'
 import { ContactLink } from '../../components/ContactLink'
+import { AddressText } from '../../components/AddressText'
+import { HomeAddressFields, homeAddressBody, homeAddressOf } from '../../components/HomeAddressFields'
 import { Modal } from '../../components/Modal'
 import { Drawer, DetailRows } from '../../components/Drawer'
 import { EmptyState } from '../../components/EmptyState'
@@ -18,10 +20,11 @@ import { PageTopBar } from '../../layouts/TopBar'
 import { clockTime } from '../driver/driverData'
 import type { CreatedUser, Monitor, MonitorAssignment, PayRule, PublicUser } from '../../types/api'
 
-const TEMPLATE = '1.8fr 1.1fr 1.4fr 1.3fr 1fr 1fr'
+const TEMPLATE = '1.8fr 1.1fr 1.6fr 1.4fr 1.3fr 1fr 1fr'
 const SHIFT_TEXT: Record<MonitorAssignment['shift_period'], string> = { morning: 'Mornings', afternoon: 'Afternoons', both: 'Morning + afternoon' }
 
-// EditAccountModal takes a PublicUser; a monitor has no address or license.
+// EditAccountModal takes a PublicUser; a monitor has no free-text address or license (their home
+// address is the street / city / state / zip fields, carried over by the spread).
 const asPublicUser = (m: Monitor): PublicUser => ({ ...m, address: null, license_number: null, email_verified_at: null })
 
 // Company Admin — Monitors (monitor-role). A monitor rides in a driver's van and checks in and out
@@ -45,15 +48,28 @@ export function MonitorsPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [homeAddress, setHomeAddress] = useState(homeAddressOf({}))
   const [addError, setAddError] = useState<string | null>(null)
   const addMonitor = useMutation({
-    mutationFn: () => api.post<CreatedUser>('/users', { role: 'monitor', fullName: name, email, phone: phone || undefined }),
+    mutationFn: () => {
+      const a = homeAddressBody(homeAddress)
+      return api.post<CreatedUser>('/users', {
+        role: 'monitor',
+        fullName: name,
+        email,
+        phone: phone || undefined,
+        ...(a.street_address || a.city || a.state || a.zip_code
+          ? { streetAddress: a.street_address, city: a.city, state: a.state, zipCode: a.zip_code }
+          : {}),
+      })
+    },
     onSuccess: (m) => {
       queryClient.invalidateQueries({ queryKey: ['monitors'] })
       setCreated(m)
       setName('')
       setEmail('')
       setPhone('')
+      setHomeAddress(homeAddressOf({}))
       setShowAdd(false)
       setDetailId(m.id)
     },
@@ -68,7 +84,7 @@ export function MonitorsPage() {
   const active = monitors.filter((m) => m.is_active)
   const onShift = active.filter((m) => m.open_session)
   const unassigned = active.filter((m) => !m.assignment)
-  const visible = monitors.filter((m) => matches(q, m.full_name, m.email, m.phone, m.assignment?.driver_name))
+  const visible = monitors.filter((m) => matches(q, m.full_name, m.email, m.phone, m.home_address, m.assignment?.driver_name))
   const detail = monitors.find((m) => m.id === detailId) ?? null
 
   const status = (m: Monitor) =>
@@ -100,7 +116,7 @@ export function MonitorsPage() {
 
       <TableCard
         template={TEMPLATE}
-        columns={[{ label: 'Monitor' }, { label: 'Phone' }, { label: 'Driver' }, { label: 'Days · shift' }, { label: 'Pay rate' }, { label: 'Status' }]}
+        columns={[{ label: 'Monitor' }, { label: 'Phone' }, { label: 'Home address' }, { label: 'Driver' }, { label: 'Days · shift' }, { label: 'Pay rate' }, { label: 'Status' }]}
       >
         {monitorsQuery.isLoading ? (
           <p className="border-t border-divider px-5 py-4 text-[14px] text-muted">Loading…</p>
@@ -120,6 +136,7 @@ export function MonitorsPage() {
               <TableRow key={m.id} template={TEMPLATE} selected={detailId === m.id} onClick={() => setDetailId(m.id)}>
                 <NameCell name={m.full_name} sub={m.email} />
                 <span className="truncate text-ink-sub tabular">{m.phone ?? '—'}</span>
+                <span className="truncate text-ink-sub">{m.home_address ?? '—'}</span>
                 <span className="truncate text-ink-sub">{m.assignment?.driver_name ?? 'Not assigned'}</span>
                 <span className="truncate text-ink-sub">
                   {m.assignment ? `${formatWeekdays(m.assignment.days_of_week)} · ${SHIFT_TEXT[m.assignment.shift_period]}` : '—'}
@@ -153,6 +170,7 @@ export function MonitorsPage() {
               { k: 'Status', v: status(detail) },
               { k: 'Phone', v: <ContactLink type="phone" value={detail.phone} /> },
               { k: 'Email', v: <ContactLink type="email" value={detail.email} /> },
+              { k: 'Home address', v: detail.home_address ? <AddressText address={detail.home_address} /> : 'Not set (Edit to add it)' },
               { k: 'Pay rate', v: rules.get(detail.id) ? formatRate(rules.get(detail.id)!.rate_cents, rules.get(detail.id)!.rate_type) : 'Not set (Payroll page)' },
             ]}
           />
@@ -174,6 +192,7 @@ export function MonitorsPage() {
                 <Input type="tel" placeholder="555-123-4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </Field>
             </div>
+            <HomeAddressFields label="Home address (optional, where the driver picks them up)" value={homeAddress} onChange={setHomeAddress} />
             <p className="text-[13px] text-muted">
               SafeTurns makes a temporary password for you to give the monitor. They choose their own the first time they sign in.
             </p>

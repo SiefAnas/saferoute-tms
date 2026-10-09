@@ -46,6 +46,7 @@ today's run for that shift (starts later, or the other shift) → `409`.
 | `GET /assignments`, `GET /assignments/:id` | company | 403 | 403 | own, not ended | 403 | 403 |
 | `GET /schedule/today`, `POST /schedule/:id/no-show` | 403 | 403 | 403 | own, today | 403 | 403 |
 | `GET /schedule/week?start=` | 403 | 403 | 403 | own, not-ended assignments | 403 | 403 |
+| `GET /schedule/monitors` | 403 | 403 | 403 | own monitors, today | 403 | 403 |
 | `GET /sessions`, `POST /sessions/checkin…` | read company | 403 | 403 | own | 403 | own |
 | `GET /trips`, `GET /trips/:id` | company | school | granted | trips on own shifts | 403 | 403 |
 | `POST /trips` | 403 | 403 | 403 | own students on today's run | 403 | 403 |
@@ -190,6 +191,11 @@ token, or weak password. `429` rate limited.
   `phone` / `address`). Anything else in the body (role, is_active, email, password, company_id…)
   → `400` and nothing is saved. `full_name` can't be blank. Parents can't clear phone or address.
   Same length limits as the admin edit. Returns the same shape as `GET /users/me`.
+  **Monitors** may also send their home address: `street_address`, `city`, `state`, `zip_code`,
+  all four together (all filled in to save, all `null`/blank to remove; otherwise `400`). State is
+  a two-letter US code (stored upper-case), zip `12345` or `12345-6789`. Other roles sending these
+  fields → `400`. User objects carry the four fields plus `home_address` (formatted
+  `"12 Oak St, Boston, MA 02139"`), all `null` for non-monitors.
 - `POST /users/me/email-change` body `{ "newEmail", "currentPassword" }` → `200` own account with
   `pending_email` set. The email doesn't change yet: a link `<website>/confirm-email-change?token=…`
   goes to the **new** address (24 hours, only the newest link works). `400` wrong password,
@@ -417,6 +423,23 @@ day's override, parent skips and no-shows. A `both` assignment is on both runs.
   as of today**. A past week doesn't show ended assignments.
 - `date`, `start`, `end` are calendar strings: use them as they are, never through `new Date()`.
 - Errors: `400` missing or invalid `start` (must be a real `YYYY-MM-DD` date), `403` not a driver.
+- Each day also has `monitors: { morning: RunMonitor[], afternoon: RunMonitor[] }`, the same as
+  `GET /schedule/monitors` below, for that day.
+
+### `GET /schedule/monitors` (driver only)
+Which monitor rides on today's runs (company business date). The driver picks each one up at
+their home address **before the first student stop**.
+```json
+{
+  "date": "2026-10-09",
+  "morning": [{ "id": "uuid", "full_name": "Sam Monitor", "phone": "555-0201", "address": "9 Oak Ave, Salem, MA 01970" }],
+  "afternoon": []
+}
+```
+- A monitor is on a run when the day's weekday is in their assignment's `days_of_week` and its
+  `shift_period` covers the run (`both` = both runs). Deactivated monitors never show.
+- No monitor on a run → empty list: show nothing. `phone` / `address` can be `null`.
+- Only the driver's own monitors in their own company. `403` for every other role.
 
 ### `POST /schedule/:assignmentId/no-show` (driver only)
 "Arrived, nobody came out." Body `{ "shift_period": "morning" }`. `200 {"reported": true}`.
@@ -484,6 +507,9 @@ A monitor rides in the van with one driver and checks in and out for their hours
 get student data**: `/students`, `/trips`, `/vans`, `/assignments`, `/schedule/*`, `/parent/*`,
 `/dashboard/*`, `/users` all answer `403`. Accounts are made by the company admin like drivers
 (`POST /users` with `role: 'monitor'`, name + email, phone optional, temporary password).
+Their home address is optional at creation (`streetAddress`, `city`, `state`, `zipCode`, all four
+or none) and editable with `PATCH /users/:id` (admin) or `PATCH /users/me` (the monitor) as
+`street_address`, `city`, `state`, `zip_code`. `GET /monitors` includes it (+ `home_address`).
 
 ### `GET /monitor/me` (monitor only)
 ```json

@@ -6,6 +6,7 @@ import type {
   DriverSession,
   ShiftPeriod,
   Student,
+  TodayMonitors,
   TodayScheduleItem,
   Trip,
   Van,
@@ -50,6 +51,12 @@ export function useDriverSessions() {
 
 export function useTodaySchedule(): UseQueryResult<TodayScheduleItem[]> {
   return useQuery({ queryKey: ['schedule-today'], queryFn: () => api.get<TodayScheduleItem[]>('/schedule/today') })
+}
+
+// The monitors riding on today's morning and afternoon runs (empty lists when none). Same key
+// as the web app.
+export function useTodayMonitors(): UseQueryResult<TodayMonitors> {
+  return useQuery({ queryKey: ['schedule-monitors'], queryFn: () => api.get<TodayMonitors>('/schedule/monitors') })
 }
 
 // The driver's 7 days from `start` (a Monday, "YYYY-MM-DD"). Same key as the web Week tab.

@@ -8,7 +8,8 @@ import { Screen } from '@/components/Screen'
 import { ErrorState, Loading } from '@/components/States'
 import { StatusBadge, type ToneName } from '@/components/StatusBadge'
 import { Text } from '@/components/Text'
-import type { ShiftPeriod, TodayScheduleItem, WeekScheduleDay } from '@/api/types'
+import type { RunMonitor, ShiftPeriod, TodayScheduleItem, WeekScheduleDay } from '@/api/types'
+import { MonitorStops } from '@/features/driver/MonitorStops'
 import { formatTimeOfDay } from '@/lib/format'
 import { addDaysISO, localDateOf, localISODate, mondayOf } from '@/lib/localDate'
 import { radius } from '@/theme/tokens'
@@ -118,15 +119,15 @@ function DayCard({ day, isToday }: { day: WeekScheduleDay; isToday: boolean }) {
         </Text>
       ) : (
         <>
-          <Run period="morning" items={day.morning} />
-          <Run period="afternoon" items={day.afternoon} />
+          <Run period="morning" items={day.morning} monitors={day.monitors?.morning ?? []} />
+          <Run period="afternoon" items={day.afternoon} monitors={day.monitors?.afternoon ?? []} />
         </>
       )}
     </Card>
   )
 }
 
-function Run({ period, items }: { period: ShiftPeriod; items: TodayScheduleItem[] }) {
+function Run({ period, items, monitors }: { period: ShiftPeriod; items: TodayScheduleItem[]; monitors: RunMonitor[] }) {
   const colors = useColors()
   if (items.length === 0) return null
   const rows = items
@@ -144,6 +145,7 @@ function Run({ period, items }: { period: ShiftPeriod; items: TodayScheduleItem[
           {period === 'morning' ? 'Morning pickups' : 'Afternoon drop-offs'} · {items.length}
         </Text>
       </View>
+      <MonitorStops monitors={monitors} inline />
       {rows.map(({ item, time, timeChanged }) => {
         const status = statusOf(item, period)
         return (

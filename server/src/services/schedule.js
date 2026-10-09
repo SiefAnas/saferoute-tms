@@ -9,6 +9,7 @@ const { assignmentNotEndedSql, assignmentRunsOnSql } = require('../db/scoped');
 const { routeJoinsSql, ROUTE_COLUMNS, route } = require('./stops');
 const { driverScope } = require('../middleware/authorize');
 const { addDays } = require('../time/businessDate');
+const { monitorAddressLine } = require('./monitorAddress');
 
 // Raw pool query (not req.db): "active today" is a date-range condition req.db's
 // equality-only `where` can't express — same precedent as payroll.js's summary() and
@@ -84,6 +85,42 @@ function toScheduleItem(r) {
   };
 }
 
+// The monitors riding with this driver on each of `dates` ('YYYY-MM-DD'), per run: a monitor is on
+// a day's run when the day's weekday is in their monitor_assignments.days_of_week and their
+// shift_period covers the run. Only active monitors. The driver picks each one up at their home
+// address before the first student stop, so the apps show them first on the run with their name,
+// phone (to call) and address. A run with no monitor has an empty list (the apps show nothing).
+// Same scope as the rest of /schedule: the driver's own id and company only.
+async function monitorsByDay(req, dates) {
+  const { rows } = await pool.query(
+    `SELECT d.day::text AS date, ma.shift_period,
+            u.id, u.full_name, u.phone, u.street_address, u.city, u.state, u.zip_code
+       FROM unnest($3::date[]) AS d(day)
+       JOIN monitor_assignments ma
+         ON ma.driver_user_id = $1 AND ma.company_id = $2
+        AND EXTRACT(ISODOW FROM d.day)::smallint = ANY(ma.days_of_week)
+       JOIN users u ON u.id = ma.monitor_user_id AND u.company_id = ma.company_id
+        AND u.role = 'monitor' AND u.is_active
+      ORDER BY d.day, u.full_name`,
+    [req.auth.userId, req.auth.tenantId, dates]
+  );
+  const byDate = new Map(dates.map((date) => [date, { morning: [], afternoon: [] }]));
+  for (const r of rows) {
+    const monitor = { id: r.id, full_name: r.full_name, phone: r.phone ?? null, address: monitorAddressLine(r) };
+    const day = byDate.get(r.date);
+    if (r.shift_period !== 'afternoon') day.morning.push(monitor);
+    if (r.shift_period !== 'morning') day.afternoon.push(monitor);
+  }
+  return byDate;
+}
+
+// GET /schedule/monitors: today's monitors (company business date), { date, morning, afternoon }.
+// Separate from /schedule/today so that response (a list of student stops) keeps its shape.
+async function getTodayMonitors(req) {
+  const runs = (await monitorsByDay(req, [req.businessDate])).get(req.businessDate);
+  return { date: req.businessDate, ...runs };
+}
+
 // A strict calendar date string, checked with plain arithmetic (no Date object, so no
 // timezone can shift it): YYYY-MM-DD with a real month and day, leap years included.
 function assertCalendarDate(value, field) {
@@ -129,8 +166,10 @@ async function getWeekSchedule(req, start) {
     [req.auth.userId, req.auth.tenantId, weekDays, req.businessDate]
   );
 
-  // Every day appears, with empty runs when the driver has nothing that day.
-  const days = dayRows.map((r) => ({ date: r.date, morning: [], afternoon: [] }));
+  // Every day appears, with empty runs when the driver has nothing that day. `monitors` lists who
+  // rides along on each run (see monitorsByDay).
+  const crew = await monitorsByDay(req, weekDays);
+  const days = dayRows.map((r) => ({ date: r.date, morning: [], afternoon: [], monitors: crew.get(r.date) }));
   const byDate = new Map(days.map((d) => [d.date, d]));
   for (const r of rows) {
     const item = toScheduleItem(r);
@@ -254,4 +293,4 @@ async function deleteOverride(req, assignmentId, overrideId) {
   return row;
 }
 
-module.exports = { getTodaySchedule, getWeekSchedule, upsertOverride, listOverrides, deleteOverride, markNoShow, findTodaysAssignment };
+module.exports = { getTodaySchedule, getWeekSchedule, getTodayMonitors, upsertOverride, listOverrides, deleteOverride, markNoShow, findTodaysAssignment };

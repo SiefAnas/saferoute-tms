@@ -16,6 +16,7 @@ const { assertValidEmail, assertMaxLength } = require('../validate');
 const { appUrl } = require('../config');
 const { publicUser } = require('./users');
 const { passwordChangedNow } = require('./passwords');
+const { ADDRESS_KEYS, readMonitorAddress } = require('./monitorAddress');
 
 const EMAIL_CHANGE_TTL_HOURS = 24;
 const EDITABLE = ['full_name', 'phone', 'address'];
@@ -40,10 +41,12 @@ async function getOwnAccount(req) {
 
 // Same limits as the admin edit (services/users.js updateUser). Anything else in the body is
 // refused rather than silently dropped, so a client can't believe it changed its role or email.
+// A monitor also edits their home address (the four fields together, services/monitorAddress.js).
 async function updateOwnAccount(req, body = {}) {
-  const extra = Object.keys(body).filter((k) => !EDITABLE.includes(k));
-  if (extra.length) throw new HttpError(400, `only ${EDITABLE.join(', ')} can be changed here (not ${extra.join(', ')})`);
-  const patch = {};
+  const editable = req.auth.role === 'monitor' ? [...EDITABLE, ...ADDRESS_KEYS] : EDITABLE;
+  const extra = Object.keys(body).filter((k) => !editable.includes(k));
+  if (extra.length) throw new HttpError(400, `only ${editable.join(', ')} can be changed here (not ${extra.join(', ')})`);
+  const patch = { ...(readMonitorAddress(body, req.auth.role) ?? {}) };
   for (const key of EDITABLE) {
     if (body[key] === undefined) continue;
     if (body[key] !== null && typeof body[key] !== 'string') throw new HttpError(400, `${key} must be text`);

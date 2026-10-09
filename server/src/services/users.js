@@ -16,6 +16,7 @@ const { HttpError } = require('../errors');
 const { assertValidEmail, assertMaxLength } = require('../validate');
 const { assignmentNotEndedSql } = require('../db/scoped');
 const { TEMP_PASSWORD_DAYS, tempPasswordExpired, generateTempPassword, setPassword, logPasswordReset } = require('./passwords');
+const { readMonitorAddress, monitorAddressLine } = require('./monitorAddress');
 
 // Which roles a given admin role may create (same tenant side).
 const CREATABLE = {
@@ -43,6 +44,8 @@ async function createUser(req, body = {}) {
   if (!allowed.includes(role)) {
     throw new HttpError(403, `a ${req.auth.role} cannot create a ${role}`);
   }
+  // A monitor's home address (optional at creation; services/monitorAddress.js).
+  const homeAddress = readMonitorAddress(body, role, { street_address: 'streetAddress', city: 'city', state: 'state', zip_code: 'zipCode' });
   // Parent phone/address (added for the parent<->student auto-match suggestion task,
   // 2026-09-01): the Add Parent form now collects both, and the match logic works far better
   // with real data to compare against, so required here too rather than left optional.
@@ -66,6 +69,7 @@ async function createUser(req, body = {}) {
       phone: phone ?? null,
       address: address ?? null,
       license_number: licenseNumber ?? null,
+      ...(homeAddress ?? {}),
       email_verified_at: new Date().toISOString(),
       created_by_user_id: req.auth.userId,
       must_change_password: true,
@@ -111,6 +115,7 @@ async function updateUser(req, id, body = {}) {
   for (const key of ['full_name', 'phone', 'is_active', 'address', 'license_number']) {
     if (body[key] !== undefined) patch[key] = body[key];
   }
+  Object.assign(patch, readMonitorAddress(body, existing.role) ?? {});
   if (body.email !== undefined) {
     assertValidEmail(body.email);
     patch.email = body.email;
@@ -204,6 +209,12 @@ function publicUser(u) {
     phone: u.phone,
     address: u.address ?? null,
     license_number: u.license_number ?? null,
+    // Monitors only (migration 034); null for everyone else.
+    street_address: u.street_address ?? null,
+    city: u.city ?? null,
+    state: u.state ?? null,
+    zip_code: u.zip_code ?? null,
+    home_address: monitorAddressLine(u),
     is_active: u.is_active,
     email_verified_at: u.email_verified_at,
     created_by_user_id: u.created_by_user_id ?? null,

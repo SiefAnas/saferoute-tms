@@ -104,11 +104,28 @@ export interface WeekScheduleDay {
   date: string // "YYYY-MM-DD", a calendar string: never through new Date(string)
   morning: TodayScheduleItem[]
   afternoon: TodayScheduleItem[]
+  monitors?: RunMonitors // optional: older API versions omit it
 }
 export interface WeekSchedule {
   start: string
   end: string
   days: WeekScheduleDay[]
+}
+
+// A monitor riding on one of the driver's runs, picked up at their address before the first
+// student stop. GET /schedule/monitors (today) and each day of /schedule/week.
+export interface RunMonitor {
+  id: string
+  full_name: string
+  phone: string | null
+  address: string | null
+}
+export interface RunMonitors {
+  morning: RunMonitor[]
+  afternoon: RunMonitor[]
+}
+export interface TodayMonitors extends RunMonitors {
+  date: string
 }
 
 export interface TodayScheduleItem {
@@ -249,6 +266,12 @@ export interface PublicUser {
   phone: string | null
   address: string | null
   license_number: string | null
+  // A monitor's home address (where the driver picks them up); null for every other role.
+  street_address?: string | null
+  city?: string | null
+  state?: string | null
+  zip_code?: string | null
+  home_address?: string | null
   is_active: boolean
   email_verified_at: string | null
   created_by_user_id: string | null
@@ -277,6 +300,7 @@ export interface Monitor {
   full_name: string
   role: 'monitor'
   phone: string | null
+  home_address?: string | null // formatted street, city, state zip (where the driver picks them up)
   is_active: boolean
   created_by_user_id: string | null
   must_change_password: boolean

@@ -13,6 +13,7 @@ import { ActionError, EmptyState, ErrorState, Loading, messageFor } from '@/comp
 import { StatusBadge } from '@/components/StatusBadge'
 import { Text } from '@/components/Text'
 import { shiftName } from '@/features/driver/shift'
+import { MyAddressCard } from '@/features/monitor/MyAddressCard'
 import { defaultMonitorShift, ridesToday, SHIFT_TEXT, useMonitorHome } from '@/features/monitor/data'
 import { vanName } from '@/lib/fleet'
 import { formatClock, formatDuration } from '@/lib/format'
@@ -189,6 +190,8 @@ export default function MonitorHomeScreen() {
           </Text>
         )}
       </Card>
+
+      <MyAddressCard />
 
       <SectionHeader title="Today's hours" aside={formatDuration(minutesToday)} />
       <Card style={{ marginHorizontal: 16 }}>

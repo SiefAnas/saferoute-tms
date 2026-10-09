@@ -3,7 +3,7 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import { isToday } from '../../lib/format'
 import { currentAssignmentBy } from '../../lib/fleet'
-import type { Assignment, DriverSession, ShiftPeriod, Student, TodayScheduleItem, Trip, Van } from '../../types/api'
+import type { Assignment, DriverSession, ShiftPeriod, Student, TodayMonitors, TodayScheduleItem, Trip, Van } from '../../types/api'
 
 // Data shared by the driver app's tabs. Every query key matches the one the rest of the app
 // already uses, so invalidation after check-in / logging a trip keeps working unchanged.
@@ -38,6 +38,11 @@ export function useDriverSessions() {
 
 export function useTodaySchedule() {
   return useQuery({ queryKey: ['schedule-today'], queryFn: () => api.get<TodayScheduleItem[]>('/schedule/today') })
+}
+
+// The monitors riding on today's morning and afternoon runs (empty lists when none).
+export function useTodayMonitors() {
+  return useQuery({ queryKey: ['schedule-monitors'], queryFn: () => api.get<TodayMonitors>('/schedule/monitors') })
 }
 
 export function useTodaysTrips() {

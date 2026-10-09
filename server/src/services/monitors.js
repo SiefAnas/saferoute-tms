@@ -8,6 +8,7 @@ const pool = require('../db/pool');
 const { HttpError } = require('../errors');
 const { assignmentNotEndedSql, assignmentRunsOnSql } = require('../db/scoped');
 const { dayRange } = require('../time/businessDate');
+const { monitorAddressLine } = require('./monitorAddress');
 
 const SHIFTS = ['morning', 'afternoon', 'both'];
 
@@ -38,6 +39,7 @@ function openSession(r) {
 async function listMonitors(req) {
   const { rows } = await pool.query(
     `SELECT u.id, u.email, u.full_name, u.phone, u.is_active, u.created_by_user_id, u.must_change_password,
+            u.street_address, u.city, u.state, u.zip_code,
             ma.id AS assignment_id, ma.driver_user_id, ma.days_of_week, ma.shift_period,
             d.full_name AS driver_name, d.phone AS driver_phone,
             s.id AS open_session_id, s.shift_period AS open_shift_period, s.check_in_at AS open_check_in_at
@@ -62,6 +64,11 @@ async function listMonitors(req) {
     is_active: r.is_active,
     created_by_user_id: r.created_by_user_id ?? null,
     must_change_password: Boolean(r.must_change_password),
+    street_address: r.street_address ?? null,
+    city: r.city ?? null,
+    state: r.state ?? null,
+    zip_code: r.zip_code ?? null,
+    home_address: monitorAddressLine(r),
     assignment: publicAssignment(r),
     open_session: openSession(r),
   }));

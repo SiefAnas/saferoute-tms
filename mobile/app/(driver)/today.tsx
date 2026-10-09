@@ -22,9 +22,11 @@ import {
   tripTypeFor,
   useDriverSessions,
   useStudentDetails,
+  useTodayMonitors,
   useTodaySchedule,
   useTodaysTrips,
 } from '@/features/driver/data'
+import { MonitorStops } from '@/features/driver/MonitorStops'
 import { buildStops, defaultShift, STATE_LABEL, type Stop } from '@/features/driver/stops'
 import { StudentSheet, type SheetTarget } from '@/features/driver/StudentSheet'
 
@@ -41,6 +43,7 @@ export default function TodayScreen() {
 
   const { query: sessionsQuery, openSession, endedToday } = useDriverSessions()
   const scheduleQuery = useTodaySchedule()
+  const monitorsQuery = useTodayMonitors()
   const { query: tripsQuery, today: todaysTrips } = useTodaysTrips()
 
   const items = useMemo(() => scheduleQuery.data ?? [], [scheduleQuery.data])
@@ -148,6 +151,7 @@ export default function TodayScreen() {
     void queryClient.invalidateQueries({ queryKey: ['sessions'] })
     void queryClient.invalidateQueries({ queryKey: ['schedule-today'] })
     void queryClient.invalidateQueries({ queryKey: ['trips'] })
+    void queryClient.invalidateQueries({ queryKey: ['schedule-monitors'] })
   }
 
   function requestCheckIn() {
@@ -334,6 +338,9 @@ export default function TodayScreen() {
             />
           </View>
         ) : null}
+
+        {/* Who rides along on this run: picked up before the first student stop. */}
+        <MonitorStops monitors={monitorsQuery.data?.[shift] ?? []} />
 
         {stops.length === 0 ? (
           <EmptyState

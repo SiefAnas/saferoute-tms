@@ -5,6 +5,7 @@ import { Modal } from './Modal'
 import { Button } from './Button'
 import { Field, Input } from './Input'
 import { TemporaryPasswordDialog } from './TemporaryPasswordDialog'
+import { HomeAddressFields, homeAddressBody, homeAddressOf } from './HomeAddressFields'
 import type { PasswordResetResult, PublicUser } from '../types/api'
 
 // Shared edit form for an admin-created account (driver/parent/school_staff) — gives the
@@ -24,6 +25,7 @@ export function EditAccountModal({
   const [fullName, setFullName] = useState(user.full_name)
   const [phone, setPhone] = useState(user.phone ?? '')
   const [address, setAddress] = useState(user.address ?? '')
+  const [homeAddress, setHomeAddress] = useState(homeAddressOf(user))
   const [licenseNumber, setLicenseNumber] = useState(user.license_number ?? '')
   const [email, setEmail] = useState(user.email)
   const [isActive, setIsActive] = useState(user.is_active)
@@ -54,6 +56,7 @@ export function EditAccountModal({
         phone: phone || null,
         ...(user.role === 'driver' || user.role === 'parent' ? { address: address || null } : {}),
         ...(user.role === 'driver' ? { license_number: licenseNumber || null } : {}),
+        ...(user.role === 'monitor' ? homeAddressBody(homeAddress) : {}),
         email,
         is_active: isActive,
       }),
@@ -108,6 +111,7 @@ export function EditAccountModal({
             <Input required={contactRequired} placeholder="Street, city, state, zip" value={address} onChange={(e) => setAddress(e.target.value)} />
           </Field>
         )}
+        {user.role === 'monitor' && <HomeAddressFields value={homeAddress} onChange={setHomeAddress} />}
         {user.role === 'driver' && (
           <Field label="Driver license number">
             <Input value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} />

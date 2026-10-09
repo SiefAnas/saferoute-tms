@@ -18,9 +18,11 @@ import {
   tripTypeFor,
   useDriverSessions,
   useStudentDetails,
+  useTodayMonitors,
   useTodaySchedule,
   useTodaysTrips,
 } from './driverData'
+import { MonitorStops } from './MonitorStops'
 import type { DriverSession, ShiftPeriod, TodayScheduleItem, Trip } from '../../types/api'
 
 type StopState = 'todo' | 'awaiting' | 'confirmed' | 'noshow' | 'skipped'
@@ -77,6 +79,7 @@ export function DriverTodayPage() {
   const wide = useMediaQuery(MD_QUERY)
   const { query: sessionsQuery, openSession, endedToday } = useDriverSessions()
   const scheduleQuery = useTodaySchedule()
+  const monitorsQuery = useTodayMonitors()
   const { today: todaysTrips } = useTodaysTrips()
   const items = useMemo(() => scheduleQuery.data ?? [], [scheduleQuery.data])
   const details = useStudentDetails(useMemo(() => [...new Set(items.map((i) => i.student.id))], [items]))
@@ -102,6 +105,8 @@ export function DriverTodayPage() {
   }, [selected, sessionsQuery.data, openSession])
 
   const stops = useMemo(() => buildStops(items, shift, todaysTrips), [items, shift, todaysTrips])
+  // Who rides along on this run: picked up before the first student stop.
+  const runMonitors = monitorsQuery.data?.[shift] ?? []
   const counts = { morning: itemsForShift(items, 'morning').length, afternoon: itemsForShift(items, 'afternoon').length }
 
   const isOpenHere = openSession?.shift_period === shift
@@ -316,6 +321,8 @@ export function DriverTodayPage() {
           />
         </StatRow>
 
+        <MonitorStops monitors={runMonitors} period={shift} />
+
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
           {stops.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-card bg-surface px-6 py-10 text-center shadow-card">
@@ -460,6 +467,12 @@ export function DriverTodayPage() {
           <Button size="lg" variant="outline" disabled={busy} onClick={() => checkOut.mutate(openSession.id)}>
             {checkOut.isPending ? 'Please wait…' : 'Check out of old shift'}
           </Button>
+        </div>
+      )}
+
+      {runMonitors.length > 0 && (
+        <div className="mx-4 mb-3">
+          <MonitorStops monitors={runMonitors} period={shift} />
         </div>
       )}
 
