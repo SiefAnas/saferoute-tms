@@ -1,3 +1,8 @@
+# Disabled on purpose. The upload step put an unencrypted pg_dump into
+# a 90-day artifact on a PUBLIC repo. Do not re-enable until the dump
+# is encrypted before upload or stored privately. Neon's own PITR
+# backups cover us meanwhile.
+
 name: Database Backup
 
 # Daily pg_dump of the live Neon database, kept as a 90-day workflow artifact.
@@ -5,8 +10,8 @@ name: Database Backup
 # at the live Neon connection string — not stored in this file or anywhere in git.
 
 on:
-  schedule:
-    - cron: '0 8 * * *' # 08:00 UTC daily
+  # schedule:
+  #   - cron: '0 8 * * *' # 08:00 UTC daily
   workflow_dispatch: {} # manual runs from the Actions tab
 
 jobs:
