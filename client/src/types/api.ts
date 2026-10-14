@@ -727,3 +727,16 @@ export interface FuelEntry {
   edited_at: string | null
   created_at: string
 }
+
+// Driver sign-in reminder (branch signin-reminder). GET /signin-reminders (company admin).
+export interface SigninReminderDriver {
+  id: string
+  full_name: string
+  mode: 'default' | 'custom' | 'off'
+  minutes: number | null // own minutes when mode is 'custom'
+  effective_minutes: number | null // what applies to this driver now (null = no reminder)
+}
+export interface SigninReminderSettings {
+  default_minutes: number | null // null = off for the company
+  drivers: SigninReminderDriver[]
+}

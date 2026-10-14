@@ -11,6 +11,7 @@ import { Screen } from '@/components/Screen'
 import { ActionError, ErrorState, Loading, messageFor } from '@/components/States'
 import { Text } from '@/components/Text'
 import { HomeAddressInputs, homeAddressBody, homeAddressOf } from '@/components/HomeAddressInputs'
+import { DriverSigninReminder } from '@/features/admin/SigninReminder'
 import { PersonRow, SearchBox, Segmented, TemporaryPasswordPanel, WebsiteRow } from '@/features/admin/components'
 import { useCompanyAssignments, useCompanySessions, useCompanyVans, useDrivers, useMonitors, useParents } from '@/features/admin/companyData'
 import { accountStatusText, matches, WEBSITE_PAGES } from '@/features/admin/logic'
@@ -220,6 +221,7 @@ function PersonSheet({ person, onClose }: { person: Person; onClose: () => void 
             ) : null}
             <Button label="Email" icon="mail-outline" variant="outline" style={{ flex: 1 }} onPress={() => void Linking.openURL(`mailto:${user.email}`)} />
           </View>
+          {person.kind === 'driver' && user.is_active ? <DriverSigninReminder driverId={user.id} /> : null}
           {error ? <ActionError message={error} /> : null}
           {confirmReset ? (
             <View style={{ gap: 8 }}>

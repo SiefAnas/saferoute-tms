@@ -485,3 +485,16 @@ export interface MyFuel {
   vans: { id: string; label: string; current_miles: number | null }[]
   entries: FuelEntry[]
 }
+
+// Driver sign-in reminder (branch signin-reminder). GET /signin-reminders (company admin).
+export interface SigninReminderDriver {
+  id: string
+  full_name: string
+  mode: 'default' | 'custom' | 'off'
+  minutes: number | null
+  effective_minutes: number | null // null = this driver gets none
+}
+export interface SigninReminderSettings {
+  default_minutes: number | null // null = off for the company
+  drivers: SigninReminderDriver[]
+}

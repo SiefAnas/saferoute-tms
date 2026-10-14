@@ -1,10 +1,12 @@
 import { MoreScreen } from '@/features/admin/MoreScreen'
 import { WEBSITE_PAGES } from '@/features/admin/logic'
+import { CompanySigninReminder } from '@/features/admin/SigninReminder'
 
 // Company admin, More tab: everything the app doesn't do opens the website.
 export default function CompanyMoreScreen() {
   return (
     <MoreScreen
+      settings={<CompanySigninReminder />}
       links={[
         { label: 'Assignments', path: WEBSITE_PAGES.assignments, icon: 'assignment' },
         { label: 'Fleet (vans)', path: WEBSITE_PAGES.fleet, icon: 'local-shipping' },

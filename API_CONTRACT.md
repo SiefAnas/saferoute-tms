@@ -716,6 +716,16 @@ Driver: `POST /fleet/fuel`, `GET /fleet/fuel/mine` only. Everything else: compan
   days without a reading (`data.kind: "odometer_reminder"`). The sweep sends 07:00–20:00 company time;
   a new reading is checked at once.
 
+## 5d. Driver sign-in reminder (company admin, branch `signin-reminder`)
+- `GET /signin-reminders` → `{ default_minutes: number|null, drivers: [{ id, full_name, mode: default|custom|off, minutes, effective_minutes }] }`.
+- `PUT /signin-reminders { default_minutes: 5..240 | null }` (null = off for everyone).
+- `PUT /signin-reminders/drivers/:id { mode: 'default'|'custom'|'off', minutes? }` (minutes 5..240 with `custom`).
+- The push (`data.kind: "signin_reminder"`, opens Today) goes N minutes before the **first stop** of
+  each run that day (earliest pickup for the morning run, earliest drop-off for the afternoon run,
+  with that day's schedule changes; cancelled stops and parent skips left out), only if the driver
+  has not checked in for that run yet, once per run, never after the first stop. No run, no push.
+- Checked every minute by the API and by the Render cron job (`docs/render-cron-job.md`).
+
 ## 6. CORS and networking notes for mobile
 - CORS only applies to browsers. Native iOS/Android HTTP clients don't send an `Origin`
   header, so `ALLOWED_ORIGINS` on the server doesn't affect them. No change needed for the app.

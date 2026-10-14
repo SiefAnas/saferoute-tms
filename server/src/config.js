@@ -51,4 +51,6 @@ module.exports = {
   monitorLateEscalateMinutes: Number(process.env.MONITOR_LATE_ESCALATE_MINUTES) || 4,
   // How often the van maintenance / odometer reminder check runs (services/fleet.js).
   fleetSweepMs: Number(process.env.FLEET_SWEEP_MS) || 15 * 60 * 1000,
+  // How often the driver sign-in reminder check runs (services/signinReminders.js).
+  signinSweepMs: Number(process.env.SIGNIN_SWEEP_MS) || 60 * 1000,
 };
