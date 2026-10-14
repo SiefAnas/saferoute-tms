@@ -115,7 +115,7 @@ async function main() {
       eq('afternoon run shows nobody (mornings only)', today.afternoon.length, 0);
       const m = today.morning[0];
       eq('driver sees the monitor\'s name, phone and address', `${m.full_name}|${m.phone}|${m.address}`, 'Sam Monitor|555-0201|22 Birch Ln, Peabody, MA 01960');
-      eq('only those four fields (no email etc.)', Object.keys(m).sort().join(','), 'address,full_name,id,phone');
+      eq('only these fields (no email etc.)', Object.keys(m).sort().join(','), 'address,full_name,id,phone,stop');
       eq('another driver in the same company sees nobody', names((await api('GET', '/schedule/monitors', tLonely)).body.morning), '');
       eq('another company\'s driver sees nobody', names((await api('GET', '/schedule/monitors', tDriverB)).body.morning), '');
       eq('a monitor cannot open /schedule/monitors -> 403', (await api('GET', '/schedule/monitors', tSam)).status, 403);

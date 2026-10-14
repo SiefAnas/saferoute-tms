@@ -9,6 +9,7 @@ const { HttpError } = require('../errors');
 const { assignmentNotEndedSql, assignmentRunsOnSql } = require('../db/scoped');
 const { dayRange } = require('../time/businessDate');
 const { monitorAddressLine } = require('./monitorAddress');
+const { stopsForDay, publicStop } = require('./monitorStops');
 
 const SHIFTS = ['morning', 'afternoon', 'both'];
 
@@ -165,8 +166,12 @@ async function monitorHome(req) {
     ),
   ]);
 
+  // Today's stop on each run (picked up / no show / dropped off / running late), or null.
+  const stops = await stopsForDay(tenantId, { monitorId: userId }, req.businessDate);
+
   return {
     monitor: { id: me.id, full_name: me.full_name },
+    stops: { morning: publicStop(stops.get(`${userId}:morning`)), afternoon: publicStop(stops.get(`${userId}:afternoon`)) },
     assignment: assignment && { days_of_week: assignment.days_of_week, shift_period: assignment.shift_period },
     driver: assignment && { full_name: assignment.driver_name, phone: assignment.driver_phone },
     van,

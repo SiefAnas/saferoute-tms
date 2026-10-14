@@ -367,6 +367,20 @@ export interface RunMonitor {
   full_name: string
   phone: string | null
   address: string | null
+  stop?: MonitorStop | null // today only (GET /schedule/monitors); null until something is pressed
+}
+// What has happened at the monitor's stop on one run (branch monitor-crew-status). Separate from
+// the monitor's check-in / check-out hours.
+export type MonitorStopStatus = 'pending' | 'late' | 'no_show' | 'picked_up' | 'dropped_off'
+export type MonitorStopAction = 'picked_up' | 'no_show' | 'dropped_off' | 'running_late'
+export interface MonitorStop {
+  status: MonitorStopStatus
+  picked_up_at: string | null
+  no_show_at: string | null
+  dropped_off_at: string | null
+  late_reported_at: string | null
+  late_reported_by: 'driver' | 'monitor' | null
+  escalate_at: string | null // when the office is told if still not picked up
 }
 export interface RunMonitors {
   morning: RunMonitor[]
@@ -448,6 +462,8 @@ export interface MonitorHome {
   van: { id: string; number: string | null; license_plate: string; brand: string; model: string; color: string | null } | null
   open_session: MonitorOpenSession | null
   today_sessions: { id: string; shift_period: ShiftPeriod | null; check_in_at: string; check_out_at: string | null; duration_minutes: number | null }[]
+  // Today's stop on each run (picked up / no show / running late…), separate from the hours above.
+  stops?: { morning: MonitorStop | null; afternoon: MonitorStop | null }
 }
 
 export interface PaySummary {

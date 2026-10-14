@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { Text } from '@/components/Text'
 import { shiftName } from '@/features/driver/shift'
 import { MyAddressCard } from '@/features/monitor/MyAddressCard'
+import { PickupCard } from '@/features/monitor/PickupCard'
 import { defaultMonitorShift, ridesToday, SHIFT_TEXT, useMonitorHome } from '@/features/monitor/data'
 import { vanName } from '@/lib/fleet'
 import { formatClock, formatDuration } from '@/lib/format'
@@ -143,6 +144,8 @@ export default function MonitorHomeScreen() {
           <EmptyState icon="person-off" title="No driver yet" body="The office hasn't assigned you to a driver. Ask them to add you." />
         </View>
       )}
+
+      <PickupCard home={home} shift={shift} />
 
       <Card style={{ marginHorizontal: 16, marginTop: 12, padding: 16, gap: 2 }}>
         <Text size={12} color={colors.muted}>

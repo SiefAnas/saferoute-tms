@@ -340,7 +340,7 @@ export default function TodayScreen() {
         ) : null}
 
         {/* Who rides along on this run: picked up before the first student stop. */}
-        <MonitorStops monitors={monitorsQuery.data?.[shift] ?? []} />
+        <MonitorStops monitors={monitorsQuery.data?.[shift] ?? []} period={shift} actions />
 
         {stops.length === 0 ? (
           <EmptyState

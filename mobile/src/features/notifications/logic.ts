@@ -29,3 +29,14 @@ export function badgeText(count: number): string | null {
   if (!count || count < 1) return null
   return count > 99 ? '99+' : String(count)
 }
+
+// The admin banner's two lines for a monitor alert (data.kind 'monitor_alert'): what happened to
+// which monitor and when, then the push text (which names the driver, the run and the van).
+export function alertLines(
+  n: { body: string; sent_at: string; data: Record<string, unknown> },
+  clock: (iso: string) => string,
+): { title: string; detail: string } {
+  const d = n.data as { event?: string; monitor_name?: string }
+  const what = d.event === 'no_show' ? 'no show' : 'not picked up'
+  return { title: `Monitor ${what}: ${d.monitor_name ?? 'monitor'} · ${clock(n.sent_at)}`, detail: n.body }
+}
