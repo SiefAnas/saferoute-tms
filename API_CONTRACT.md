@@ -441,6 +441,22 @@ their home address **before the first student stop**.
 - No monitor on a run → empty list: show nothing. `phone` / `address` can be `null`.
 - Only the driver's own monitors in their own company. `403` for every other role.
 
+### `POST /schedule/monitors/:monitorId/status` (driver only, branch `monitor-crew-status`)
+Body `{ "shift_period": "morning"|"afternoon", "action": "picked_up"|"no_show"|"dropped_off"|"running_late" }`
+→ the stop `{ status: pending|late|no_show|picked_up|dropped_off, picked_up_at, no_show_at,
+dropped_off_at, late_reported_at, late_reported_by, escalate_at }`. Only a monitor on this driver's
+run today (`404` otherwise). `409`: late or no show after pickup, late after no show, dropped off
+after a no show without pickup. Repeating a press keeps the first time. **Never blocks the run** and
+is **not** the monitor's hours (those stay their own check-in / check-out).
+- `running_late`: the monitor gets a push; the company admins get one 4 minutes later
+  (`MONITOR_LATE_ESCALATE_MINUTES`) unless the monitor is picked up (or marked no show) first.
+  Pressing again restarts the 4 minutes.
+- `no_show`: the company admins get a push right away.
+- Admin pushes carry `data.kind: "monitor_alert"`, `event` (`no_show` | `not_picked_up`),
+  `driver_name`, `monitor_name`, `shift_period`, `run_date`, `van`. The admin's red banner reads
+  `GET /notifications?kind=monitor_alert&unread=1&since=<iso>`.
+- `GET /schedule/monitors`: each monitor now has `stop` (null until something is pressed).
+
 ### `POST /schedule/:assignmentId/no-show` (driver only)
 "Arrived, nobody came out." Body `{ "shift_period": "morning" }`. `200 {"reported": true}`.
 Notifies the school and company admins. Errors: `409 "check in for that shift before reporting a no-show"`,
@@ -522,6 +538,10 @@ or none) and editable with `PATCH /users/:id` (admin) or `PATCH /users/me` (the 
   "today_sessions": [{ "id": "uuid", "shift_period": "morning", "check_in_at": "…", "check_out_at": null, "duration_minutes": null }]
 }
 ```
+`stops: { morning, afternoon }`: today's stop per run (same shape as the driver's buttons
+return, or `null`). `POST /monitor/running-late { shift_period }`: the driver gets a push, and the
+same 4-minute admin escalation starts (`404` if not riding that run today, `409` once picked up or
+marked no show).
 `assignment`, `driver` are `null` until the admin assigns them to a driver; `van` is the van on
 the driver's current runs (today's first), or `null`.
 
@@ -656,7 +676,7 @@ notification is stored; each person only ever sees their own.
 - `DELETE /notifications/devices` body `{ "token" }` (or `{ "subscription": { "endpoint" } }`). **No
   session needed** (so it works after a 401). Call at log out. `204`.
 - `GET /notifications/web-push-key` (public) → `{ "public_key": "…" | null }` (`null` = web push off).
-- `GET /notifications?limit=30&before=<iso>` → `{ "items": [ { id, title, body, data, category,
+- `GET /notifications?limit=30&before=<iso>[&kind=<data.kind>&unread=1&since=<iso>]` → `{ "items": [ { id, title, body, data, category,
   sent_at, read_at } ], "unread_count" }`, newest first. Scheduled ones that haven't gone out are
   not listed.
 - `GET /notifications/unread-count` → `{ "unread_count" }` (the bell).

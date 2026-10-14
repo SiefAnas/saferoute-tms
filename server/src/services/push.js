@@ -342,18 +342,29 @@ async function unreadCount(userId) {
 
 // GET /notifications?limit=&before= : the person's sent notifications, newest first (scheduled
 // ones that haven't gone out yet are not shown), plus the unread count for the bell.
-async function listNotifications(req, { limit, before } = {}) {
+// Optional filters: kind (data.kind, e.g. 'monitor_alert' for the admin's red banner), unread=1,
+// since=<iso> (sent after).
+async function listNotifications(req, { limit, before, kind, unread, since } = {}) {
   const n = Math.min(Math.max(Number.parseInt(limit, 10) || 30, 1), 100);
   let beforeDate = null;
   if (before) {
     beforeDate = new Date(before);
     if (Number.isNaN(beforeDate.getTime())) throw new HttpError(400, 'before must be a date');
   }
+  let sinceDate = null;
+  if (since) {
+    sinceDate = new Date(since);
+    if (Number.isNaN(sinceDate.getTime())) throw new HttpError(400, 'since must be a date');
+  }
   const { rows } = await pool.query(
     `SELECT * FROM notifications
       WHERE user_id = $1 AND status = 'sent' AND ($2::timestamptz IS NULL OR sent_at < $2)
+        AND ($4::text IS NULL OR data->>'kind' = $4)
+        AND (NOT $5 OR read_at IS NULL)
+        AND ($6::timestamptz IS NULL OR sent_at > $6)
       ORDER BY sent_at DESC LIMIT $3`,
-    [req.auth.userId, beforeDate ? beforeDate.toISOString() : null, n]
+    [req.auth.userId, beforeDate ? beforeDate.toISOString() : null, n, typeof kind === 'string' && kind ? kind : null,
+      unread === '1' || unread === 'true' || unread === true, sinceDate ? sinceDate.toISOString() : null]
   );
   return { items: rows.map(publicNotification), unread_count: await unreadCount(req.auth.userId) };
 }

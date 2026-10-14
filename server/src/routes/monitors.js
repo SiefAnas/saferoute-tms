@@ -7,6 +7,7 @@ const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
 const { listMonitors, setAssignment, removeAssignment, monitorHome } = require('../services/monitors');
+const { monitorRunningLate } = require('../services/monitorStops');
 
 const admin = express.Router();
 admin.use(authenticate, requireOperable, attachScopedDb, requireRole('company_admin'));
@@ -26,6 +27,10 @@ self.use(authenticate, requireOperable, attachScopedDb, requireRole('monitor'));
 
 self.get('/me', async (req, res, next) => {
   try { res.json(await monitorHome(req)); } catch (e) { next(e); }
+});
+// "Running late" from the monitor's side: the driver gets a push (services/monitorStops.js).
+self.post('/running-late', async (req, res, next) => {
+  try { res.json(await monitorRunningLate(req, req.body || {})); } catch (e) { next(e); }
 });
 
 module.exports = { admin, self };

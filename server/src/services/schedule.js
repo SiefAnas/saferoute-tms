@@ -10,6 +10,7 @@ const { routeJoinsSql, ROUTE_COLUMNS, route } = require('./stops');
 const { driverScope } = require('../middleware/authorize');
 const { addDays } = require('../time/businessDate');
 const { monitorAddressLine } = require('./monitorAddress');
+const { stopsForDay, publicStop } = require('./monitorStops');
 
 // Raw pool query (not req.db): "active today" is a date-range condition req.db's
 // equality-only `where` can't express — same precedent as payroll.js's summary() and
@@ -116,9 +117,13 @@ async function monitorsByDay(req, dates) {
 
 // GET /schedule/monitors: today's monitors (company business date), { date, morning, afternoon }.
 // Separate from /schedule/today so that response (a list of student stops) keeps its shape.
+// Each monitor carries `stop`: what has been pressed on that run today (services/monitorStops.js),
+// or null when nothing has.
 async function getTodayMonitors(req) {
   const runs = (await monitorsByDay(req, [req.businessDate])).get(req.businessDate);
-  return { date: req.businessDate, ...runs };
+  const stops = await stopsForDay(req.auth.tenantId, { driverId: req.auth.userId }, req.businessDate);
+  const withStop = (shift) => runs[shift].map((m) => ({ ...m, stop: publicStop(stops.get(`${m.id}:${shift}`)) }));
+  return { date: req.businessDate, morning: withStop('morning'), afternoon: withStop('afternoon') };
 }
 
 // A strict calendar date string, checked with plain arithmetic (no Date object, so no

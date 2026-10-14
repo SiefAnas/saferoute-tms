@@ -46,4 +46,7 @@ module.exports = {
   vapidSubject: (process.env.VAPID_SUBJECT || '').trim() || `mailto:${(process.env.SUPPORT_EMAIL || 'support@safeturns.com').trim()}`,
   // How often the in-process sweep sends notifications that have come due (scheduled sends).
   notificationSweepMs: Number(process.env.NOTIFICATION_SWEEP_MS) || 30000,
+  // Monitor "Running late": minutes until the company admins are told the monitor still isn't
+  // picked up (services/monitorStops.js).
+  monitorLateEscalateMinutes: Number(process.env.MONITOR_LATE_ESCALATE_MINUTES) || 4,
 };

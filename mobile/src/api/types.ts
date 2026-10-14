@@ -119,6 +119,20 @@ export interface RunMonitor {
   full_name: string
   phone: string | null
   address: string | null
+  stop?: MonitorStop | null // today only (GET /schedule/monitors); null until something is pressed
+}
+// What has happened at the monitor's stop on one run (branch monitor-crew-status). Separate from
+// the monitor's check-in / check-out hours.
+export type MonitorStopStatus = 'pending' | 'late' | 'no_show' | 'picked_up' | 'dropped_off'
+export type MonitorStopAction = 'picked_up' | 'no_show' | 'dropped_off' | 'running_late'
+export interface MonitorStop {
+  status: MonitorStopStatus
+  picked_up_at: string | null
+  no_show_at: string | null
+  dropped_off_at: string | null
+  late_reported_at: string | null
+  late_reported_by: 'driver' | 'monitor' | null
+  escalate_at: string | null
 }
 export interface RunMonitors {
   morning: RunMonitor[]
@@ -243,6 +257,8 @@ export type RateType = 'hourly' | 'daily'
 // the van, the days and shift, and their shifts today. Never any student data.
 export interface MonitorHome {
   monitor: { id: string; full_name: string }
+  // Today's stop on each run, separate from the hours (open_session / today_sessions).
+  stops?: { morning: MonitorStop | null; afternoon: MonitorStop | null }
   assignment: { days_of_week: number[]; shift_period: AssignmentShiftPeriod } | null
   driver: { full_name: string; phone: string | null } | null
   van: { id: string; number: string | null; license_plate: string; brand: string; model: string; color: string | null } | null

@@ -321,7 +321,7 @@ export function DriverTodayPage() {
           />
         </StatRow>
 
-        <MonitorStops monitors={runMonitors} period={shift} />
+        <MonitorStops monitors={runMonitors} period={shift} actions />
 
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
           {stops.length === 0 ? (
@@ -472,7 +472,7 @@ export function DriverTodayPage() {
 
       {runMonitors.length > 0 && (
         <div className="mx-4 mb-3">
-          <MonitorStops monitors={runMonitors} period={shift} />
+          <MonitorStops monitors={runMonitors} period={shift} actions />
         </div>
       )}
 

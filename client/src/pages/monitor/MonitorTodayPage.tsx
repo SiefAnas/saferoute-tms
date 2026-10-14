@@ -15,7 +15,7 @@ import { StatusBadge } from '../../components/StatusBadge'
 import { PageTopBar } from '../../layouts/TopBar'
 import { useMonitorHome } from './monitorData'
 import { clockTime, shiftName } from '../driver/driverData'
-import type { DriverSession, MonitorHome, ShiftPeriod } from '../../types/api'
+import type { DriverSession, MonitorHome, MonitorStop, ShiftPeriod } from '../../types/api'
 
 const SHIFT_TEXT = { morning: 'Mornings', afternoon: 'Afternoons', both: 'Mornings and afternoons' } as const
 
@@ -74,6 +74,18 @@ export function MonitorTodayPage() {
   })
   const busy = checkIn.isPending || checkOut.isPending
 
+  // "Running late" (branch monitor-crew-status): the driver gets a push. Separate from the hours.
+  const [lateNotice, setLateNotice] = useState<string | null>(null)
+  const runningLate = useMutation({
+    mutationFn: () => api.post<MonitorStop>('/monitor/running-late', { shift_period: shift }),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      setLateNotice('Your driver has been told you are running late.')
+      refresh()
+    },
+    onError: fail('Could not tell your driver.'),
+  })
+
   function mainAction() {
     if (isOpenHere && open) checkOut.mutate(open.id)
     else if (open) setPendingSwitch(shift)
@@ -98,6 +110,35 @@ export function MonitorTodayPage() {
   ) : (
     <StatusBadge tone="neutral" label="Not checked in" />
   )
+
+  // This run today, as the driver marked it.
+  const ridesThisShift = ridesToday && (home.assignment?.shift_period === 'both' || home.assignment?.shift_period === shift)
+  const stop = home.stops?.[shift] ?? null
+  const stopText: Record<MonitorStop['status'], string> = {
+    pending: 'Your driver picks you up at your address before the students.',
+    late: stop?.late_reported_by === 'driver' ? 'Your driver is running late and will be there shortly.' : 'Your driver knows you are running late.',
+    no_show: 'Your driver marked you as not there. Call your driver if you are on your way.',
+    picked_up: `Picked up${stop?.picked_up_at ? ` at ${clockTime(stop.picked_up_at)}` : ''}.`,
+    dropped_off: `Dropped off${stop?.dropped_off_at ? ` at ${clockTime(stop.dropped_off_at)}` : ''}.`,
+  }
+  const stopStatus = stop?.status ?? 'pending'
+  const pickupCard = ridesThisShift && home.driver ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>{shiftName(shift)} pickup</CardTitle>
+      </CardHeader>
+      <div className="flex flex-col gap-3 px-5 py-4">
+        <p className="text-[14px] text-ink">{stopText[stopStatus]}</p>
+        {lateNotice && stopStatus === 'late' && <p role="status" className="text-[13px] text-success-fg">{lateNotice}</p>}
+        {(stopStatus === 'pending' || stopStatus === 'late') && (
+          <Button variant="outline" disabled={runningLate.isPending} onClick={() => runningLate.mutate()}>
+            <span className="material-symbols-outlined !text-[18px]">schedule</span>
+            {runningLate.isPending ? 'Telling your driver…' : "I'm running late"}
+          </Button>
+        )}
+      </div>
+    </Card>
+  ) : null
 
   const driverCard = (
     <Card>
@@ -217,6 +258,7 @@ export function MonitorTodayPage() {
         {error && <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">{error}</p>}
         <div className="grid items-start gap-5 lg:grid-cols-3">
           {driverCard}
+          {pickupCard}
           {vanCard}
           {scheduleCard}
         </div>
@@ -233,6 +275,7 @@ export function MonitorTodayPage() {
         <div className="self-start">{shiftSwitch}</div>
         {error && <p role="alert" className="rounded-row bg-alert-bg px-3 py-2 text-[13px] text-alert-fg">{error}</p>}
         {driverCard}
+        {pickupCard}
         {vanCard}
         {scheduleCard}
         {shiftsCard}

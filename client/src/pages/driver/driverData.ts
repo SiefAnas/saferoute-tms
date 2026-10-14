@@ -42,7 +42,7 @@ export function useTodaySchedule() {
 
 // The monitors riding on today's morning and afternoon runs (empty lists when none).
 export function useTodayMonitors() {
-  return useQuery({ queryKey: ['schedule-monitors'], queryFn: () => api.get<TodayMonitors>('/schedule/monitors') })
+  return useQuery({ queryKey: ['schedule-monitors'], queryFn: () => api.get<TodayMonitors>('/schedule/monitors'), refetchInterval: 30_000 })
 }
 
 export function useTodaysTrips() {

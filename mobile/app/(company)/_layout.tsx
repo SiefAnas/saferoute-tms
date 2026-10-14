@@ -1,6 +1,8 @@
 import { Redirect, Tabs } from 'expo-router'
 import { useAuth } from '@/auth/auth'
+import { View } from 'react-native'
 import { AppHeader } from '@/components/AppHeader'
+import { MonitorAlertBanner } from '@/features/notifications/MonitorAlertBanner'
 import { Icon } from '@/components/Icon'
 import { font } from '@/theme/tokens'
 import { useColors } from '@/theme/theme'
@@ -17,7 +19,12 @@ export default function CompanyLayout() {
   return (
     <Tabs
       screenOptions={{
-        header: () => <AppHeader subtitle="Company admin" />,
+        header: () => (
+          <View>
+            <AppHeader subtitle="Company admin" />
+            <MonitorAlertBanner />
+          </View>
+        ),
         tabBarActiveTintColor: colors.tabOn,
         tabBarInactiveTintColor: colors.tabOff,
         tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.line, borderTopWidth: 1 },

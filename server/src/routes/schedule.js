@@ -5,6 +5,7 @@ const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole } = require('../middleware/authorize');
 const { getTodaySchedule, getWeekSchedule, getTodayMonitors, markNoShow } = require('../services/schedule');
+const { driverStopAction } = require('../services/monitorStops');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb, requireRole('driver'));
@@ -17,6 +18,12 @@ router.get('/today', async (req, res, next) => {
 // Who rides along today: the monitors on the morning and afternoon runs (name, phone, address).
 router.get('/monitors', async (req, res, next) => {
   try { res.json(await getTodayMonitors(req)); }
+  catch (e) { next(e); }
+});
+
+// The monitor stop buttons: { shift_period, action: picked_up | no_show | dropped_off | running_late }.
+router.post('/monitors/:monitorId/status', async (req, res, next) => {
+  try { res.json(await driverStopAction(req, req.params.monitorId, req.body || {})); }
   catch (e) { next(e); }
 });
 
