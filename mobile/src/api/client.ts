@@ -48,6 +48,7 @@ export interface ApiDeps {
 export interface Api {
   get: <T>(path: string) => Promise<T>
   post: <T>(path: string, body?: unknown) => Promise<T>
+  patch: <T>(path: string, body?: unknown) => Promise<T>
   delete: <T>(path: string, body?: unknown) => Promise<T>
   login: (email: string, password: string) => Promise<LoginResponse>
 }
@@ -56,7 +57,7 @@ export function createApi(deps: ApiDeps): Api {
   const doFetch = deps.fetchImpl ?? fetch
   const timeoutMs = deps.timeoutMs ?? 45_000
 
-  async function request<T>(path: string, method: 'GET' | 'POST' | 'DELETE', body?: unknown): Promise<T> {
+  async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', body?: unknown): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
 
@@ -108,6 +109,7 @@ export function createApi(deps: ApiDeps): Api {
   return {
     get: (path) => request(path, 'GET'),
     post: (path, body) => request(path, 'POST', body),
+    patch: (path, body) => request(path, 'PATCH', body),
     delete: (path, body) => request(path, 'DELETE', body),
     login: (email, password) => request<LoginResponse>('/auth/login', 'POST', { email, password }),
   }

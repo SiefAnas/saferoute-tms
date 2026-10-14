@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle } from '../../components/Card'
 import { Field, Input } from '../../components/Input'
 import { PasswordField } from '../../components/PasswordField'
 import { ProfileCard } from '../../components/ProfileCard'
+import { HomeAddressFields, homeAddressBody, homeAddressOf, sameHomeAddress } from '../../components/HomeAddressFields'
 import { PageIntro } from '../../components/Records'
 import { useToast } from '../../components/Toast'
 import { PageTopBar } from '../../layouts/TopBar'
@@ -83,23 +84,37 @@ function ProfileSection({ account }: { account: OwnAccount }) {
   const toast = useToast()
   const { token, user, setSession } = useAuth()
   const hasAddress = ADDRESS_ROLES.includes(account.role)
+  // A monitor's address is street / city / state / zip: the driver picks them up there.
+  const isMonitor = account.role === 'monitor'
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
+  const [homeAddress, setHomeAddress] = useState(homeAddressOf(account))
   const [error, setError] = useState<string | null>(null)
 
   function load(a: OwnAccount) {
     setName(a.full_name)
     setPhone(a.phone ?? '')
     setAddress(a.address ?? '')
+    setHomeAddress(homeAddressOf(a))
     setError(null)
   }
   useEffect(() => load(account), [account])
 
-  const dirty = name !== account.full_name || phone !== (account.phone ?? '') || (hasAddress && address !== (account.address ?? ''))
+  const dirty =
+    name !== account.full_name ||
+    phone !== (account.phone ?? '') ||
+    (hasAddress && address !== (account.address ?? '')) ||
+    (isMonitor && !sameHomeAddress(homeAddress, homeAddressOf(account)))
 
   const save = useMutation({
-    mutationFn: () => api.patch<OwnAccount>('/users/me', { full_name: name, phone, ...(hasAddress ? { address } : {}) }),
+    mutationFn: () =>
+      api.patch<OwnAccount>('/users/me', {
+        full_name: name,
+        phone,
+        ...(hasAddress ? { address } : {}),
+        ...(isMonitor ? homeAddressBody(homeAddress) : {}),
+      }),
     onSuccess: (a) => {
       queryClient.setQueryData(['account-me'], a)
       // The sidebar shows the name from the stored session.
@@ -131,6 +146,9 @@ function ProfileSection({ account }: { account: OwnAccount }) {
           <Field label="Home address" className="sm:col-span-2">
             <Input required={account.role === 'parent'} value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" />
           </Field>
+        )}
+        {isMonitor && (
+          <HomeAddressFields className="sm:col-span-2" label="Home address (your driver picks you up here)" value={homeAddress} onChange={setHomeAddress} />
         )}
       </ProfileCard>
       {toast.node}
