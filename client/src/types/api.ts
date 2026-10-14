@@ -634,3 +634,20 @@ export interface ImportCommitResult {
   // Students import only: saved rows whose student now shares a name with another at the same school.
   duplicates?: { index: number; full_name: string; status: 'created' | 'updated' }[]
 }
+
+// Push notifications (branch push-notifications). GET /notifications: the signed-in person's sent
+// notifications, newest first, and the bell's unread count. data.web_route is the website page to
+// open on click; data.route is the mobile app's screen.
+export interface AppNotification {
+  id: string
+  title: string
+  body: string
+  data: { route?: string; web_route?: string; notification_id?: string; [key: string]: unknown }
+  category: string | null
+  sent_at: string
+  read_at: string | null
+}
+export interface NotificationList {
+  items: AppNotification[]
+  unread_count: number
+}

@@ -646,6 +646,28 @@ organization isn't claimable). The SafeTurns owner approves or rejects it
 
 ---
 
+## 5b. Notifications (every role, branch `push-notifications`)
+Push goes through the **Expo push service** (mobile) and **Web Push / VAPID** (website). Every
+notification is stored; each person only ever sees their own.
+- `POST /notifications/devices` (signed in). Mobile: `{ "kind": "expo", "token": "ExponentPushToken[…]",
+  "platform": "ios"|"android", "device_name"? }`. Website: `{ "kind": "web", "subscription": <PushSubscription.toJSON()> }`.
+  `201`. Call after sign-in and whenever the app starts with a session. A token belongs to whoever
+  registered it last; at most 10 devices per person (least recently seen dropped). `400` bad token.
+- `DELETE /notifications/devices` body `{ "token" }` (or `{ "subscription": { "endpoint" } }`). **No
+  session needed** (so it works after a 401). Call at log out. `204`.
+- `GET /notifications/web-push-key` (public) → `{ "public_key": "…" | null }` (`null` = web push off).
+- `GET /notifications?limit=30&before=<iso>` → `{ "items": [ { id, title, body, data, category,
+  sent_at, read_at } ], "unread_count" }`, newest first. Scheduled ones that haven't gone out are
+  not listed.
+- `GET /notifications/unread-count` → `{ "unread_count" }` (the bell).
+- `POST /notifications/:id/read` → the item + `unread_count` (`404` if not yours).
+  `POST /notifications/read-all` → `{ updated, unread_count: 0 }`.
+- Push payload `data`: whatever the feature put in, plus `notification_id` (mark it read on tap).
+  `data.route` = mobile screen to open (e.g. `/(driver)/today`), `data.web_route` = website page
+  (e.g. `/driver`). Neither set → open the notification list.
+- Server side, features call `sendPush(userId, title, body, data, { sendAt?, category? })`
+  (`server/src/services/push.js`); `cancelScheduled({ id } | { userId, category })`.
+
 ## 6. CORS and networking notes for mobile
 - CORS only applies to browsers. Native iOS/Android HTTP clients don't send an `Origin`
   header, so `ALLOWED_ORIGINS` on the server doesn't affect them. No change needed for the app.

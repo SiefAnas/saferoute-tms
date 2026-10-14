@@ -37,6 +37,7 @@ const SchoolProfilePage = lazy(() => import('./pages/school-admin/SchoolProfileP
 const SchoolStaffDashboard = lazy(() => import('./pages/school-staff/SchoolStaffDashboard').then((m) => ({ default: m.SchoolStaffDashboard })))
 const ParentHomePage = lazy(() => import('./pages/parent/ParentHomePage').then((m) => ({ default: m.ParentHomePage })))
 const ImportPage = lazy(() => import('./pages/ImportPage').then((m) => ({ default: m.ImportPage })))
+const NotificationsPage = lazy(() => import('./pages/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })))
 const AccountPage = lazy(() => import('./pages/account/AccountPage').then((m) => ({ default: m.AccountPage })))
 const ParentProfilePage = lazy(() => import('./pages/parent/ParentProfilePage').then((m) => ({ default: m.ParentProfilePage })))
 
@@ -136,6 +137,7 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<RoleShell />}>
             <Route path="/account" element={<AccountPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
           </Route>
         </Route>
 

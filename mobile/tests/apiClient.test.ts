@@ -67,6 +67,14 @@ describe('request building', () => {
     })
   })
 
+  it('sends a DELETE with a JSON body (removing this device at log out)', async () => {
+    const { api, calls } = setup(jsonResponse(204, null), { token: null })
+    await api.delete('/notifications/devices', { token: 'ExponentPushToken[x]' })
+    expect(calls[0]!.url).toBe('https://api.test/notifications/devices')
+    expect(calls[0]!.init.method).toBe('DELETE')
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ token: 'ExponentPushToken[x]' })
+  })
+
   it('sends a PATCH with a JSON body and the token (own address edit)', async () => {
     const { api, calls } = setup(jsonResponse(200, { id: 'm1' }), { token: 'abc123' })
     const body = { street_address: '9 Oak Ave', city: 'Salem', state: 'MA', zip_code: '01970' }

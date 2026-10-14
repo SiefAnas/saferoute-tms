@@ -2,6 +2,7 @@ import { createContext, Suspense, useCallback, useContext, useEffect, useState, 
 import { createPortal } from 'react-dom'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ThemeToggle } from './ThemeToggle'
+import { NotificationBell } from './NotificationBell'
 import { Copyright } from './Copyright'
 import { LegalLinks } from './LegalLinks'
 import { Logo } from './Logo'
@@ -176,6 +177,7 @@ function WideShell({ hubName, title, sub, onLogout, tabs, children }: ShellProps
             <span className="truncate text-[13px] font-semibold text-sidebar-strong">{user?.full_name}</span>
             <span className="truncate text-[12px] text-sidebar-icon">{hubName}</span>
           </div>
+          <NotificationBell variant="sidebar" />
           <ThemeToggle variant="sidebar" />
           <NavLink
             to="/account"
@@ -269,6 +271,7 @@ export function MobileHeader({ title, sub, onLogout }: { title: string; sub: Rea
         <span className="text-[13px] text-muted">{sub}</span>
       </div>
       <div className="flex shrink-0 gap-2">
+        <NotificationBell variant="mobile" />
         <ThemeToggle variant="mobile" />
         <NavLink
           to="/account"

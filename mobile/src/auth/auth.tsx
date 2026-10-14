@@ -3,6 +3,7 @@ import { AppState } from 'react-native'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, NetworkError, setAuthToken, setPasswordChangeRequiredHandler, setUnauthorizedHandler } from '@/api'
 import type { AuthUser, LoginResponse, MeResponse } from '@/api/types'
+import { unregisterThisDevice } from '@/features/notifications/push'
 import { sessionEndedMessage } from './sessionMessages'
 import { clearSession, loadSession, saveSession } from './storage'
 
@@ -39,6 +40,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // phone would see the previous driver's students for a moment (API_CONTRACT.md §7).
   const teardown = useCallback(
     async (message: string | null) => {
+      // Stop pushes to this phone for the person leaving (works without a session; not awaited,
+      // so signing out never waits on the network).
+      void unregisterThisDevice()
       setAuthToken(null)
       tokenRef.current = null
       setUser(null)
