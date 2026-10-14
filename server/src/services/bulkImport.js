@@ -15,6 +15,7 @@ const { hashPassword } = require('../auth/password');
 const { assertValidEmail, assertValidZip, assertValidState } = require('../validate');
 const { TEMP_PASSWORD_DAYS, generateTempPassword } = require('./passwords');
 const { listCompanySchools } = require('./schools');
+const { createBuiltins } = require('./fleet');
 
 const MAX_ROWS = 100;
 const MAX_CELL = 500;
@@ -234,10 +235,12 @@ async function execVan(req, plan) {
     await withTx((c) => updateFields(c, 'vans', plan.existingId, 'company_id', req.auth.tenantId, vanUpdatePatch(plan)));
     return;
   }
-  await pool.query(
-    'INSERT INTO vans (company_id, license_plate, brand, model, year, color, number) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+  const { rows: [van] } = await pool.query(
+    'INSERT INTO vans (company_id, license_plate, brand, model, year, color, number) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
     [req.auth.tenantId, row.license_plate, row.brand, row.model, Number(row.year), row.color, row.number || null]
   );
+  // Same as POST /vans: every van starts with the built-in maintenance items.
+  await createBuiltins(pool, req.auth.tenantId, van.id);
 }
 
 // ---- students -----------------------------------------------------------------------------------

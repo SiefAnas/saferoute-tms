@@ -19,6 +19,7 @@ import { UndoClosurePage } from './pages/company/UndoClosurePage'
 const DriverTodayPage = lazy(() => import('./pages/driver/DriverTodayPage').then((m) => ({ default: m.DriverTodayPage })))
 const DriverTripsPage = lazy(() => import('./pages/driver/DriverTripsPage').then((m) => ({ default: m.DriverTripsPage })))
 const DriverWeekPage = lazy(() => import('./pages/driver/DriverWeekPage').then((m) => ({ default: m.DriverWeekPage })))
+const DriverFuelPage = lazy(() => import('./pages/driver/DriverFuelPage').then((m) => ({ default: m.DriverFuelPage })))
 const DriverPayPage = lazy(() => import('./pages/driver/DriverPayPage').then((m) => ({ default: m.DriverPayPage })))
 const MonitorTodayPage = lazy(() => import('./pages/monitor/MonitorTodayPage').then((m) => ({ default: m.MonitorTodayPage })))
 const MonitorsPage = lazy(() => import('./pages/company/MonitorsPage').then((m) => ({ default: m.MonitorsPage })))
@@ -146,6 +147,7 @@ function App() {
             <Route path="/driver" element={<DriverTodayPage />} />
             <Route path="/driver/trips" element={<DriverTripsPage />} />
             <Route path="/driver/week" element={<DriverWeekPage />} />
+            <Route path="/driver/fuel" element={<DriverFuelPage />} />
             <Route path="/driver/pay" element={<DriverPayPage />} />
           </Route>
         </Route>

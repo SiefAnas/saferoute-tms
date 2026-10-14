@@ -34,6 +34,7 @@ export default function CompanyLayout() {
     >
       <Tabs.Screen name="home" options={{ title: 'Today', tabBarIcon: ({ color }) => <Icon name="dashboard" size={22} color={color} /> }} />
       <Tabs.Screen name="people" options={{ title: 'People', tabBarIcon: ({ color }) => <Icon name="groups" size={22} color={color} /> }} />
+      <Tabs.Screen name="fleet" options={{ title: 'Fleet', tabBarIcon: ({ color }) => <Icon name="airport-shuttle" size={22} color={color} /> }} />
       <Tabs.Screen name="students" options={{ title: 'Students', tabBarIcon: ({ color }) => <Icon name="school" size={22} color={color} /> }} />
       <Tabs.Screen name="more" options={{ title: 'More', tabBarIcon: ({ color }) => <Icon name="more-horiz" size={22} color={color} /> }} />
     </Tabs>

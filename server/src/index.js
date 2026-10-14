@@ -4,9 +4,10 @@
 require('./db/productionGuard').assertTargetAllowed({ purpose: 'start the API' });
 
 const createApp = require('./app');
-const { port, sweepIntervalMs, notificationSweepMs } = require('./config');
+const { port, sweepIntervalMs, notificationSweepMs, fleetSweepMs } = require('./config');
 const { autoCompleteStaleTrips } = require('./services/trips');
 const { sendDueNotifications, checkExpoReceipts } = require('./services/push');
+const { runFleetReminders } = require('./services/fleet');
 const { loadLegalDocuments, LEGAL_DIR } = require('./services/legal');
 
 // The Terms / Privacy files ship with this code (src/legal). Without them signup can't check
@@ -46,3 +47,10 @@ const pushSweep = setInterval(() => {
     .finally(() => { pushSweepRunning = false; });
 }, notificationSweepMs);
 pushSweep.unref();
+
+// Van maintenance + odometer reminders (services/fleet.js): only sends 07:00-20:00 local, once per
+// cycle, claimed in the database so several instances (or the cron script) never double-send.
+const fleetSweep = setInterval(() => {
+  runFleetReminders().catch((err) => console.error('[fleet-sweep]', err));
+}, fleetSweepMs);
+fleetSweep.unref();

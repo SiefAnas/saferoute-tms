@@ -49,4 +49,6 @@ module.exports = {
   // Monitor "Running late": minutes until the company admins are told the monitor still isn't
   // picked up (services/monitorStops.js).
   monitorLateEscalateMinutes: Number(process.env.MONITOR_LATE_ESCALATE_MINUTES) || 4,
+  // How often the van maintenance / odometer reminder check runs (services/fleet.js).
+  fleetSweepMs: Number(process.env.FLEET_SWEEP_MS) || 15 * 60 * 1000,
 };

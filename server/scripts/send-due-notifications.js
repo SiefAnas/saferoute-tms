@@ -8,11 +8,14 @@
 require('dotenv').config();
 const pool = require('../src/db/pool');
 const { sendDueNotifications, checkExpoReceipts } = require('../src/services/push');
+const { runFleetReminders } = require('../src/services/fleet');
 
 (async () => {
   const sent = await sendDueNotifications();
   const checked = await checkExpoReceipts();
-  console.log(`[push] sent ${sent} due notification(s), checked ${checked} receipt(s)`);
+  // Van maintenance and odometer reminders (only between 07:00 and 20:00 company time).
+  const fleet = await runFleetReminders();
+  console.log(`[push] sent ${sent} due notification(s), checked ${checked} receipt(s), ${fleet} fleet reminder(s)`);
 })()
   .catch((err) => { console.error('[push] FAILED', err); process.exitCode = 1; })
   .finally(() => pool.end());
