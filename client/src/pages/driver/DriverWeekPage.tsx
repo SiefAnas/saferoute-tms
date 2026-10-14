@@ -8,7 +8,8 @@ import { MD_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import { PageTopBar } from '../../layouts/TopBar'
 import { DifferentAddressNote, homeEnd, isDifferent, legOf, placeName } from '../../components/Route'
 import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
-import type { ShiftPeriod, TodayScheduleItem, WeekSchedule, WeekScheduleDay } from '../../types/api'
+import type { RunMonitor, ShiftPeriod, TodayScheduleItem, WeekSchedule, WeekScheduleDay } from '../../types/api'
+import { MonitorStops } from './MonitorStops'
 
 // Driver app, Week tab: the real week from GET /schedule/week (Monday to Sunday), each day's
 // morning and afternoon runs with that day's changes, parent skips and no-shows. Previous/next
@@ -121,15 +122,15 @@ function DayCard({ day, isToday }: { day: WeekScheduleDay; isToday: boolean }) {
         <p className="px-3.5 pb-3 text-[13px] text-muted">No runs</p>
       ) : (
         <>
-          <Run period="morning" items={day.morning} />
-          <Run period="afternoon" items={day.afternoon} />
+          <Run period="morning" items={day.morning} monitors={day.monitors?.morning ?? []} />
+          <Run period="afternoon" items={day.afternoon} monitors={day.monitors?.afternoon ?? []} />
         </>
       )}
     </section>
   )
 }
 
-function Run({ period, items }: { period: ShiftPeriod; items: TodayScheduleItem[] }) {
+function Run({ period, items, monitors }: { period: ShiftPeriod; items: TodayScheduleItem[]; monitors: RunMonitor[] }) {
   if (items.length === 0) return null
   const rows = items
     .map((item) => {
@@ -144,6 +145,7 @@ function Run({ period, items }: { period: ShiftPeriod; items: TodayScheduleItem[
         <span className="material-symbols-outlined !text-[16px]">{period === 'morning' ? 'wb_twilight' : 'wb_sunny'}</span>
         {period === 'morning' ? 'Morning pickups' : 'Afternoon drop-offs'} · {items.length}
       </div>
+      <MonitorStops monitors={monitors} period={period} compact />
       {rows.map(({ item, time, timeChanged }) => {
         const status = statusOf(item, period)
         return (
