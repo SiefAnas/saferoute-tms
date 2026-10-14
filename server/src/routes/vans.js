@@ -19,6 +19,7 @@ const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole, denyRoles, driverScope } = require('../middleware/authorize');
 const { HttpError } = require('../errors');
 const pool = require('../db/pool');
+const { createBuiltins } = require('../services/fleet');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent', 'monitor'));
@@ -58,6 +59,8 @@ router.post('/', companyAdmin, async (req, res, next) => {
     assertValidYear(year);
     const number = normalizeNumber(req.body?.number);
     const row = await req.db.insert('vans', { license_plate, brand, model, year, color, ...(number ? { number } : {}) });
+    // Every van starts with the built-in maintenance items (services/fleet.js), nothing due yet.
+    await createBuiltins(pool, req.auth.tenantId, row.id);
     res.status(201).json(row);
   } catch (e) { next(mapVanError(e)); }
 });
@@ -105,6 +108,12 @@ router.delete('/:id', companyAdmin, async (req, res, next) => {
            FROM assignments WHERE van_id = $1 AND company_id = $2`,
         [req.params.id, req.auth.tenantId, req.businessDate]
       );
+      // No assignments: it's the maintenance or fuel history (kept for audits) that holds it.
+      if (!c.total) {
+        const err = new HttpError(409, "This van can't be deleted: it has maintenance or fuel records, which are kept for audits. Keep it out of new assignments instead.");
+        err.code = 'VAN_HAS_HISTORY';
+        return next(err);
+      }
       const what = c.current
         ? `${c.current} current or upcoming assignment${c.current === 1 ? '' : 's'}${c.total > c.current ? ` and ${c.total - c.current} past one${c.total - c.current === 1 ? '' : 's'}` : ''}`
         : `${c.total} past assignment${c.total === 1 ? '' : 's'}`;

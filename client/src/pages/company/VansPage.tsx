@@ -6,6 +6,10 @@ import { Button } from '../../components/Button'
 import { Field, Input } from '../../components/Input'
 import { Modal } from '../../components/Modal'
 import { Drawer, DetailRows } from '../../components/Drawer'
+import { FleetSettingsModal } from './fleet/FleetSettingsModal'
+import { MaintenanceDueCard } from './fleet/MaintenanceDueCard'
+import { VanMaintenancePanel } from './fleet/VanMaintenancePanel'
+import type { FleetSettings } from '../../types/api'
 import { EmptyState } from '../../components/EmptyState'
 import { StatusBadge, type BadgeTone } from '../../components/StatusBadge'
 import { CsvImportExport } from '../../components/CsvImportExport'
@@ -43,6 +47,9 @@ export function VansPage() {
 
   const [q, setQ] = useState('')
   const [detailId, setDetailId] = useState<string | null>(null)
+  // Maintenance reminder defaults: asked right after the first van is added (branch van-maintenance).
+  const settingsQuery = useQuery({ queryKey: ['fleet', 'settings'], queryFn: () => api.get<FleetSettings>('/fleet/settings') })
+  const [settingsOpen, setSettingsOpen] = useState<'first' | 'edit' | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   // A van can have more than one driver active today (different students, or a morning and an
@@ -126,6 +133,8 @@ export function VansPage() {
       invalidateVans()
       resetForm()
       toast.show(`${vanLabel(van)} added`)
+      queryClient.invalidateQueries({ queryKey: ['fleet'] })
+      if (settingsQuery.data && !settingsQuery.data.configured) setSettingsOpen('first')
     },
     onError: (err) => setFormError(err instanceof ApiError ? err.message : 'Could not create van.'),
   })
@@ -209,6 +218,10 @@ export function VansPage() {
       <PageTopBar title="Fleet">
         <SearchField value={q} onChange={setQ} placeholder="Search vans" />
         <CsvImportExport entityName="Fleet" columns={CSV_COLUMNS} rows={vansQuery.data ?? []} onImportRow={handleImportRow} onImportComplete={invalidateVans} />
+        <Button variant="outline" onClick={() => setSettingsOpen('edit')} disabled={!settingsQuery.data}>
+          <span className="material-symbols-outlined !text-[18px]">notifications</span>
+          Reminder settings
+        </Button>
         <Button onClick={startAdd}>
           <span className="material-symbols-outlined !text-[18px]">add</span>
           Add van
@@ -227,6 +240,8 @@ export function VansPage() {
           sub={noDriver.length ? noDriver.map((r) => vanShort(r.van)).join(', ') : 'Every van has a driver today'}
         />
       </StatRow>
+
+      {rows.length > 0 && <MaintenanceDueCard onOpenVan={setDetailId} />}
 
       <TableCard template={TEMPLATE} columns={[{ label: 'Van' }, { label: 'Plate' }, { label: 'Color' }, { label: 'Assigned driver' }, { label: 'Status' }]}>
         {vansQuery.isLoading ? (
@@ -257,6 +272,7 @@ export function VansPage() {
 
       {detail && (
         <Drawer
+          width={540}
           eyebrow="DETAILS"
           title={vanName(detail.van)}
           subtitle={`${detail.van.license_plate} · ${detail.van.year}`}
@@ -308,7 +324,12 @@ export function VansPage() {
             ]}
           />
           <p className="text-[13px] text-muted">Who drives this van comes from today&apos;s assignments. Change it on the Assignments page.</p>
+          <VanMaintenancePanel key={detail.van.id} vanId={detail.van.id} />
         </Drawer>
+      )}
+
+      {settingsOpen && settingsQuery.data && (
+        <FleetSettingsModal settings={settingsQuery.data} firstTime={settingsOpen === 'first'} onClose={() => setSettingsOpen(null)} />
       )}
 
       {showModal && (

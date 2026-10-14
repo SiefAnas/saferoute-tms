@@ -9,6 +9,7 @@ const TABS: MobileTab[] = [
   { to: '/driver', label: 'Today', icon: 'route', end: true },
   { to: '/driver/trips', label: 'Trips', icon: 'receipt_long' },
   { to: '/driver/week', label: 'Week', icon: 'calendar_view_week' },
+  { to: '/driver/fuel', label: 'Fuel', icon: 'local_gas_station' },
   { to: '/driver/pay', label: 'Pay', icon: 'payments' },
 ]
 

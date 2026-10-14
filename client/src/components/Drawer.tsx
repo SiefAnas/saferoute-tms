@@ -17,7 +17,7 @@ export function Drawer({
   subtitle?: ReactNode
   headerExtra?: ReactNode
   footer?: ReactNode
-  width?: 400 | 420
+  width?: 400 | 420 | 540
   onClose: () => void
   children: ReactNode
 }) {

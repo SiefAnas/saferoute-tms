@@ -56,6 +56,13 @@ export default function DriverLayout() {
         }}
       />
       <Tabs.Screen
+        name="fuel"
+        options={{
+          title: 'Fuel',
+          tabBarIcon: ({ color }) => <Icon name="local-gas-station" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="pay"
         options={{
           title: 'Pay',

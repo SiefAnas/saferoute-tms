@@ -667,3 +667,63 @@ export interface NotificationList {
   items: AppNotification[]
   unread_count: number
 }
+
+// Van maintenance and fuel (branch van-maintenance). /fleet/*
+export interface FleetSettings {
+  default_remind_days: number
+  default_remind_miles: number
+  odometer_reminder_days: number | null // null = no reminders to enter miles
+  configured: boolean // false until the admin has set them (asked with the first van)
+}
+export type MaintenanceState = 'off' | 'not_set' | 'no_reading' | 'ok' | 'due_soon' | 'overdue'
+export interface MaintenanceItem {
+  id: string
+  name: string
+  builtin_key: string | null // null = custom
+  schedule_type: 'date' | 'mileage'
+  interval_days: number | null
+  interval_miles: number | null
+  due_date: string | null // "YYYY-MM-DD"
+  due_miles: number | null
+  is_active: boolean
+  state: MaintenanceState
+  days_left?: number
+  miles_left?: number
+}
+export interface VanMaintenance {
+  van: { id: string; label: string; remind_days_before: number | null; remind_miles_before: number | null }
+  reminders: { days_before: number; miles_before: number; custom: boolean }
+  current_miles: number | null
+  current_miles_date: string | null
+  items: MaintenanceItem[]
+}
+export interface DueItem extends MaintenanceItem {
+  van_id: string
+  van_label: string
+  current_miles: number | null
+}
+export interface MaintenanceRecord {
+  id: string
+  item_id: string
+  item_name: string
+  done_date: string
+  odometer: number | null
+  was_due_date: string | null
+  was_due_miles: number | null
+  next_due_date: string | null
+  next_due_miles: number | null
+  notes: string | null
+  done_by: string | null
+  created_at: string
+}
+export interface FuelEntry {
+  id: string
+  van_id: string
+  entry_date: string
+  miles: number
+  gallons: number | null
+  cost: number | null
+  entered_by: string | null
+  edited_at: string | null
+  created_at: string
+}

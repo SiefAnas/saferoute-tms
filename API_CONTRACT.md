@@ -688,6 +688,34 @@ notification is stored; each person only ever sees their own.
 - Server side, features call `sendPush(userId, title, body, data, { sendAt?, category? })`
   (`server/src/services/push.js`); `cancelScheduled({ id } | { userId, category })`.
 
+## 5c. Van maintenance and fuel (branch `van-maintenance`)
+Driver: `POST /fleet/fuel`, `GET /fleet/fuel/mine` only. Everything else: company admin (`403` otherwise).
+- `POST /fleet/fuel { van_id?, miles, gallons?, cost?, entry_date? }` → `201` entry. Driver: own van
+  (van_id optional when they drive one), today's date, `409` if miles are below the van's newest
+  reading. Admin: any company van and date. `PATCH /fleet/fuel/:id` (admin) fixes miles / gallons /
+  cost / date (stamped `edited_at`). `GET /fleet/vans/:vanId/fuel` (admin) the full log.
+  `GET /fleet/fuel/mine` → `{ vans: [{ id, label, current_miles }], entries: [...] }`.
+- The van's current mileage = its newest entry (latest `entry_date`, then latest created).
+- `GET/PUT /fleet/settings { default_remind_days, default_remind_miles, odometer_reminder_days|null }`
+  (+ `configured`, false until first saved: the website asks after the first van).
+- `GET /fleet/vans/:vanId/maintenance` → `{ van, reminders: { days_before, miles_before, custom },
+  current_miles, current_miles_date, items: [{ id, name, builtin_key, schedule_type: date|mileage,
+  interval_days, interval_miles, due_date, due_miles, is_active, state, days_left?, miles_left? }] }`.
+  `state`: off | not_set | no_reading | ok | due_soon | overdue. New vans get fleet inspection,
+  7D inspection (date, 365 days), oil change (5,000 mi), brake change (30,000 mi), nothing due yet.
+- `POST /fleet/vans/:vanId/maintenance { name, schedule_type, due_date|due_miles, interval_days|interval_miles }`,
+  `PATCH …/:itemId { name?, is_active?, due_*?, interval_*? }`, `DELETE …/:itemId` (removed from the
+  van; its records stay).
+- `POST …/:itemId/done { done_date?, odometer?, next_due_date?, next_due_miles?, notes? }` → `{ record, item }`.
+  Next due = done date + interval_days, or odometer (given, else current) + interval_miles.
+- `GET /fleet/vans/:vanId/history?item_id=` every Done, newest first (never deleted).
+- `PATCH /fleet/vans/:vanId/reminders { remind_days_before|null, remind_miles_before|null }` per-van
+  override (null = company default). `GET /fleet/due` → `{ overdue: [...], due_soon: [...] }`.
+- Pushes (sendPush, in the bell list): "due soon" and "overdue", once each per cycle, to the company
+  admins and the van's drivers (`data.kind: "maintenance"`); odometer reminders to drivers every N
+  days without a reading (`data.kind: "odometer_reminder"`). The sweep sends 07:00–20:00 company time;
+  a new reading is checked at once.
+
 ## 6. CORS and networking notes for mobile
 - CORS only applies to browsers. Native iOS/Android HTTP clients don't send an `Origin`
   header, so `ALLOWED_ORIGINS` on the server doesn't affect them. No change needed for the app.
