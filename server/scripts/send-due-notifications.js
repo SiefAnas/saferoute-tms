@@ -1,21 +1,28 @@
-// Sends every push notification that has come due, then checks Expo receipts, and exits.
-// The API already does this every NOTIFICATION_SWEEP_MS while it runs (src/index.js). This script
-// is for a cron job (e.g. a Render Cron Job every minute) so scheduled sends still go out on time
-// when the API is asleep (Render free tier) or not running. Safe to run alongside the API: rows
-// are claimed with FOR UPDATE SKIP LOCKED.
+// The Render Cron Job (docs/render-cron-job.md): one pass of everything time-based, then exit.
+//   1. driver sign-in reminders that are due now (services/signinReminders.js)
+//   2. scheduled notifications that have come due, and retries (services/push.js)
+//   3. Expo receipts (removes devices that uninstalled the app)
+//   4. van maintenance and odometer reminders (services/fleet.js; 07:00-20:00 company time)
+// The API does all of this itself while it is awake (src/index.js). This script is what still
+// makes it happen when the API is asleep (Render free tier) or down, e.g. a 6:30 am sign-in
+// reminder. Safe to run alongside the API and to overlap itself: every send is claimed in the
+// database first (FOR UPDATE SKIP LOCKED / ON CONFLICT DO NOTHING / conditional UPDATE).
 //
-//   node scripts/send-due-notifications.js       (npm run notifications:send-due)
+//   npm run notifications:send-due      (checks DATABASE_URL first: needs ALLOW_PRODUCTION_DB=yes)
 require('dotenv').config();
 const pool = require('../src/db/pool');
 const { sendDueNotifications, checkExpoReceipts } = require('../src/services/push');
 const { runFleetReminders } = require('../src/services/fleet');
+const { runSigninReminders } = require('../src/services/signinReminders');
 
 (async () => {
+  const signin = await runSigninReminders();
   const sent = await sendDueNotifications();
   const checked = await checkExpoReceipts();
-  // Van maintenance and odometer reminders (only between 07:00 and 20:00 company time).
   const fleet = await runFleetReminders();
-  console.log(`[push] sent ${sent} due notification(s), checked ${checked} receipt(s), ${fleet} fleet reminder(s)`);
+  console.log(
+    `[cron] ${new Date().toISOString()} sign-in reminders ${signin}, due notifications ${sent}, receipts checked ${checked}, fleet reminders ${fleet}`
+  );
 })()
-  .catch((err) => { console.error('[push] FAILED', err); process.exitCode = 1; })
+  .catch((err) => { console.error('[cron] FAILED', err); process.exitCode = 1; })
   .finally(() => pool.end());

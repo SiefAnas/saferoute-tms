@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { View } from 'react-native'
 import { useAuth } from '@/auth/auth'
 import { Button } from '@/components/Button'
@@ -17,7 +18,8 @@ const ROLE_LABEL: Record<string, string> = {
 
 // The admin apps' last tab: who is signed in, the website pages for everything the app doesn't
 // do (editing, assignments, payroll, settings), appearance, and log out.
-export function MoreScreen({ links }: { links: { label: string; path: string; icon: IconName }[] }) {
+// `settings`: settings the app does handle for this role (e.g. the company's sign-in reminder).
+export function MoreScreen({ links, settings }: { links: { label: string; path: string; icon: IconName }[]; settings?: ReactNode }) {
   const colors = useColors()
   const { user, signOut } = useAuth()
   return (
@@ -28,6 +30,13 @@ export function MoreScreen({ links }: { links: { label: string; path: string; ic
         <KeyValueRow label="Email" value={user?.email ?? '—'} first={false} />
         <KeyValueRow label="Account" value={ROLE_LABEL[user?.role ?? ''] ?? user?.role ?? '—'} first={false} />
       </Card>
+
+      {settings ? (
+        <>
+          <SectionHeader title="Settings" />
+          {settings}
+        </>
+      ) : null}
 
       <SectionHeader title="On the website" />
       <View style={{ marginHorizontal: 16, gap: 8 }}>

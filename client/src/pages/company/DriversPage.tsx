@@ -16,6 +16,7 @@ import { EmptyState } from '../../components/EmptyState'
 import { NameCell, NoMatches, PageIntro, SearchField, StatCard, StatRow, TableCard, TableRow, matches } from '../../components/Records'
 import { useToast } from '../../components/Toast'
 import { PageTopBar } from '../../layouts/TopBar'
+import { DriverSigninReminder, SigninReminderCard } from './SigninReminderControls'
 import type { CsvColumn } from '../../lib/csv'
 import type { Assignment, CreatedUser, DriverSession, PayRule, PublicUser, Van } from '../../types/api'
 
@@ -182,6 +183,8 @@ export function DriversPage() {
         <StatCard label="Deactivated" value={deactivated.length} sub={deactivated.length ? names(deactivated) : 'None'} />
       </StatRow>
 
+      <SigninReminderCard />
+
       <TableCard
         template={TEMPLATE}
         columns={[{ label: 'Driver' }, { label: 'Phone' }, { label: 'Van' }, { label: 'Pay rate' }, { label: 'Status' }]}
@@ -255,6 +258,7 @@ export function DriversPage() {
               { k: 'Hours today', v: formatDuration(detail.minutesToday) },
             ]}
           />
+          {detail.driver.is_active && <DriverSigninReminder driverId={detail.driver.id} />}
         </Drawer>
       )}
 

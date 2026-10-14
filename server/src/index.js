@@ -4,10 +4,11 @@
 require('./db/productionGuard').assertTargetAllowed({ purpose: 'start the API' });
 
 const createApp = require('./app');
-const { port, sweepIntervalMs, notificationSweepMs, fleetSweepMs } = require('./config');
+const { port, sweepIntervalMs, notificationSweepMs, fleetSweepMs, signinSweepMs } = require('./config');
 const { autoCompleteStaleTrips } = require('./services/trips');
 const { sendDueNotifications, checkExpoReceipts } = require('./services/push');
 const { runFleetReminders } = require('./services/fleet');
+const { runSigninReminders } = require('./services/signinReminders');
 const { loadLegalDocuments, LEGAL_DIR } = require('./services/legal');
 
 // The Terms / Privacy files ship with this code (src/legal). Without them signup can't check
@@ -54,3 +55,11 @@ const fleetSweep = setInterval(() => {
   runFleetReminders().catch((err) => console.error('[fleet-sweep]', err));
 }, fleetSweepMs);
 fleetSweep.unref();
+
+// Driver sign-in reminders (services/signinReminders.js): every minute while the API is awake. The
+// Render cron job (docs/render-cron-job.md) runs the same check when it is asleep; each reminder is
+// claimed in the database, so the two never double up.
+const signinSweep = setInterval(() => {
+  runSigninReminders().catch((err) => console.error('[signin-sweep]', err));
+}, signinSweepMs);
+signinSweep.unref();

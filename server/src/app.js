@@ -26,6 +26,7 @@ const importRoutes = require('./routes/imports');
 const legalRoutes = require('./routes/legal');
 const notificationRoutes = require('./routes/notifications');
 const fleetRoutes = require('./routes/fleet');
+const signinReminderRoutes = require('./routes/signinReminders');
 
 function createApp() {
   const app = express();
@@ -81,6 +82,7 @@ function createApp() {
   app.use('/legal', legalRoutes);
   app.use('/notifications', notificationRoutes);
   app.use('/fleet', fleetRoutes);
+  app.use('/signin-reminders', signinReminderRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
 

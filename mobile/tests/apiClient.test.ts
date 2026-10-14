@@ -88,6 +88,13 @@ describe('request building', () => {
     expect(JSON.parse(String(calls[0]!.init.body))).toEqual(body)
   })
 
+  it('sends a PUT with a JSON body (settings)', async () => {
+    const { api, calls } = setup(jsonResponse(200, {}), { token: 't' })
+    await api.put('/signin-reminders', { default_minutes: 30 })
+    expect(calls[0]!.init.method).toBe('PUT')
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ default_minutes: 30 })
+  })
+
   it('sends no body and no Content-Type on a bodyless POST', async () => {
     const { api, calls } = setup(jsonResponse(200, { skipped: true }), { token: 't' })
     await api.post('/parent/students/1/skip-pickup')
