@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { ThemeToggle } from '../components/ThemeToggle'
+import { NotificationBell } from '../components/NotificationBell'
 import { LegalLinks } from '../components/LegalLinks'
 import { TopBarContext, type TopBarSlots } from './TopBar'
 import type { Company, DriverSession, Role, School } from '../types/api'
@@ -168,6 +169,7 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
           </div>
         </>
       )}
+      <NotificationBell variant="sidebar" />
       <ThemeToggle variant="sidebar" />
       <NavLink
         to="/account"
@@ -209,7 +211,10 @@ export function AdminLayout({ hubName, nav }: { hubName: string; nav: NavGroup[]
           <span className="material-symbols-outlined">menu</span>
         </button>
         <span className="font-display text-[15px] font-bold text-sidebar-strong">{hubName}</span>
-        <ThemeToggle variant="sidebar" />
+        <span className="flex items-center gap-1">
+          <NotificationBell variant="sidebar" />
+          <ThemeToggle variant="sidebar" />
+        </span>
       </header>
 
       {mobileNavOpen && (

@@ -384,3 +384,20 @@ export interface SkipPickupResponse {
   skipped: boolean
   notified: string[]
 }
+
+// Push notifications (branch push-notifications). GET /notifications: the signed-in person's sent
+// notifications, newest first, plus the bell's unread count. data.route is the app screen to open
+// when it is tapped (e.g. "/(driver)/today"); data.web_route is the website's.
+export interface AppNotification {
+  id: string
+  title: string
+  body: string
+  data: { route?: string; web_route?: string; notification_id?: string; [key: string]: unknown }
+  category: string | null
+  sent_at: string
+  read_at: string | null
+}
+export interface NotificationList {
+  items: AppNotification[]
+  unread_count: number
+}

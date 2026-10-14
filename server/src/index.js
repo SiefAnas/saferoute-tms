@@ -4,8 +4,9 @@
 require('./db/productionGuard').assertTargetAllowed({ purpose: 'start the API' });
 
 const createApp = require('./app');
-const { port, sweepIntervalMs } = require('./config');
+const { port, sweepIntervalMs, notificationSweepMs } = require('./config');
 const { autoCompleteStaleTrips } = require('./services/trips');
+const { sendDueNotifications, checkExpoReceipts } = require('./services/push');
 const { loadLegalDocuments, LEGAL_DIR } = require('./services/legal');
 
 // The Terms / Privacy files ship with this code (src/legal). Without them signup can't check
@@ -31,3 +32,17 @@ const sweep = setInterval(() => {
   autoCompleteStaleTrips().catch((err) => console.error('[trip-sweep]', err));
 }, sweepIntervalMs);
 sweep.unref(); // don't keep the process alive just for the sweep
+
+// Push notifications (services/push.js): send what has come due (scheduled sends and retries),
+// then check Expo receipts so dead device tokens are removed. Claims rows with SKIP LOCKED, so
+// it is safe with several instances, and with scripts/send-due-notifications.js run by a cron.
+let pushSweepRunning = false;
+const pushSweep = setInterval(() => {
+  if (pushSweepRunning) return;
+  pushSweepRunning = true;
+  sendDueNotifications()
+    .then(() => checkExpoReceipts())
+    .catch((err) => console.error('[push-sweep]', err))
+    .finally(() => { pushSweepRunning = false; });
+}, notificationSweepMs);
+pushSweep.unref();

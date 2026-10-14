@@ -24,6 +24,7 @@ const monitorRoutes = require('./routes/monitors');
 const webhookRoutes = require('./routes/webhooks');
 const importRoutes = require('./routes/imports');
 const legalRoutes = require('./routes/legal');
+const notificationRoutes = require('./routes/notifications');
 
 function createApp() {
   const app = express();
@@ -77,6 +78,7 @@ function createApp() {
   app.use('/monitor', monitorRoutes.self);
   app.use('/imports', importRoutes);
   app.use('/legal', legalRoutes);
+  app.use('/notifications', notificationRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
 

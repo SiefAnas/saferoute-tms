@@ -33,4 +33,17 @@ module.exports = {
   // SafeTurns support inbox: data deletion requests are emailed here (services/deletionRequests.js).
   // Unset = not emailed, and every such request logs that loudly.
   supportEmail: (process.env.SUPPORT_EMAIL || '').trim() || null,
+  // Push notifications (services/push.js). Mobile goes through the Expo push service; the URLs
+  // are only overridden by tests. EXPO_ACCESS_TOKEN is needed only if "enhanced push security"
+  // is turned on for the Expo project.
+  expoPushUrl: process.env.EXPO_PUSH_URL || 'https://exp.host/--/api/v2/push/send',
+  expoReceiptsUrl: process.env.EXPO_RECEIPTS_URL || 'https://exp.host/--/api/v2/push/getReceipts',
+  expoAccessToken: (process.env.EXPO_ACCESS_TOKEN || '').trim() || null,
+  // Browser Web Push (VAPID). Both keys unset = web push off (the website still shows the bell
+  // and the list). Make a pair once with: npx web-push generate-vapid-keys
+  vapidPublicKey: (process.env.VAPID_PUBLIC_KEY || '').trim() || null,
+  vapidPrivateKey: (process.env.VAPID_PRIVATE_KEY || '').trim() || null,
+  vapidSubject: (process.env.VAPID_SUBJECT || '').trim() || `mailto:${(process.env.SUPPORT_EMAIL || 'support@safeturns.com').trim()}`,
+  // How often the in-process sweep sends notifications that have come due (scheduled sends).
+  notificationSweepMs: Number(process.env.NOTIFICATION_SWEEP_MS) || 30000,
 };

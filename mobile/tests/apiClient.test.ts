@@ -67,6 +67,14 @@ describe('request building', () => {
     })
   })
 
+  it('sends a DELETE with a JSON body (removing this device at log out)', async () => {
+    const { api, calls } = setup(jsonResponse(204, null), { token: null })
+    await api.delete('/notifications/devices', { token: 'ExponentPushToken[x]' })
+    expect(calls[0]!.url).toBe('https://api.test/notifications/devices')
+    expect(calls[0]!.init.method).toBe('DELETE')
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ token: 'ExponentPushToken[x]' })
+  })
+
   it('sends no body and no Content-Type on a bodyless POST', async () => {
     const { api, calls } = setup(jsonResponse(200, { skipped: true }), { token: 't' })
     await api.post('/parent/students/1/skip-pickup')

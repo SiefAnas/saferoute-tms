@@ -15,7 +15,8 @@
     "migrate:redo": "node scripts/check-db-target.js && node-pg-migrate redo --envPath .env",
     "migrate:create": "node-pg-migrate create --envPath .env",
     "test": "node test/run-all.cjs",
-    "test:neon": "node test/smoke-neon.cjs"
+    "test:neon": "node test/smoke-neon.cjs",
+    "notifications:send-due": "node scripts/check-db-target.js && node scripts/send-due-notifications.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -26,7 +27,8 @@
     "jsonwebtoken": "^9.0.2",
     "node-pg-migrate": "^7.9.1",
     "nodemailer": "^9.0.5",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "embedded-postgres": "^18.4.0-beta.17"

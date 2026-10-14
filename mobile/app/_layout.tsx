@@ -14,6 +14,7 @@ import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold'
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold'
 import { AuthProvider, useAuth } from '@/auth/auth'
 import { ComingSoonProvider } from '@/components/Dialogs'
+import { usePushSetup } from '@/features/notifications/data'
 import { createQueryClient } from '@/lib/queryClient'
 import { ThemeProvider, useTheme } from '@/theme/theme'
 
@@ -57,6 +58,8 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
   const segments = useSegments()
 
   const ready = fontsReady && status !== 'loading'
+  // Push registration and tap handling, once someone is fully signed in.
+  usePushSetup(ready && status === 'signedIn' && !user?.must_change_password)
 
   const onLayout = useCallback(() => {
     if (ready) void SplashScreen.hideAsync()
@@ -67,7 +70,7 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
   useEffect(() => {
     if (status !== 'signedOut') return
     const group = segments[0]
-    if (group === '(driver)' || group === '(parent)' || group === '(monitor)' || group === '(company)' || group === '(school)' || group === 'unsupported' || group === 'set-password') {
+    if (group === '(driver)' || group === '(parent)' || group === '(monitor)' || group === '(company)' || group === '(school)' || group === 'unsupported' || group === 'set-password' || group === 'notifications') {
       router.replace('/login')
     }
   }, [status, segments, router])
@@ -90,6 +93,7 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="reset-password" />
           <Stack.Screen name="set-password" />
           <Stack.Screen name="unsupported" />
+          <Stack.Screen name="notifications" />
           <Stack.Screen name="(driver)" />
           <Stack.Screen name="(parent)" />
           <Stack.Screen name="(monitor)" />

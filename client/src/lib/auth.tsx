@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import { api } from './api'
+import { disableWebPush } from './webPush'
 import type { AuthUser, LoginResponse } from '../types/api'
 
 const TOKEN_KEY = 'saferoute_token'
@@ -32,6 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => readStoredUser())
 
   const logout = useCallback(() => {
+    // Stop browser pushes for the person leaving (best effort, not awaited).
+    void disableWebPush()
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
     setToken(null)

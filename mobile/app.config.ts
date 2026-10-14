@@ -15,6 +15,9 @@ const VERSION = '1.0.0'
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://saferoute-tms-api.onrender.com'
 // The website, for the admin screens' links to it ("Open on the website").
 const WEB_URL = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://saferoute-tms-client.onrender.com'
+// The EAS project id (from `eas init`). Push tokens can't be made without it, so until it is set
+// the app runs normally but never registers for push notifications.
+const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID ?? ''
 // ─────────────────────────────────────────────────────────────────────────────
 
 const config: ExpoConfig = {
@@ -59,6 +62,9 @@ const config: ExpoConfig = {
   web: { favicon: './assets/favicon.png', bundler: 'metro' },
   plugins: [
     'expo-router',
+    // Push notifications (src/features/notifications). Adds the iOS push entitlement and the
+    // Android 13+ notification permission at build time: needs a new EAS build, not an update.
+    ['expo-notifications', { color: '#f59e0b' }],
     'expo-secure-store',
     'expo-font',
     [
@@ -78,6 +84,7 @@ const config: ExpoConfig = {
     apiBaseUrl: API_BASE_URL,
     webUrl: WEB_URL,
     appName: APP_NAME,
+    ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
   },
 }
 
