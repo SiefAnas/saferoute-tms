@@ -30,6 +30,14 @@ async function api(method, p, token, body) {
   try { data = await r.json(); } catch { /* empty body */ }
   return { status: r.status, body: data };
 }
+// Clear the captured emails only after every background send has finished. Without the wait, an
+// email still in flight from the step before (e.g. the three-at-once race, whose winner emails in
+// the background and is never awaited) lands after the clear and shows up in the next step's check.
+// That happened only in the full run, where the machine is busy and the sends are slower.
+async function resetMail() {
+  await mailer._drained();
+  mailer._reset();
+}
 const login = (email) => api('POST', '/auth/login', null, { email, password: PW }).then((r) => r.body.token);
 
 async function main() {
@@ -72,7 +80,7 @@ async function main() {
 
       console.log('--- happy path ---');
       eq('GET before asking -> { request: null }', JSON.stringify((await api('GET', '/users/me/deletion-request', tP)).body), JSON.stringify({ request: null }));
-      mailer._reset();
+      await resetMail();
       const created = await api('POST', '/users/me/deletion-request', tP, { reason: '  We moved away.  ' });
       eq('POST -> 201', created.status, 201);
       const r = created.body?.request;
@@ -88,7 +96,7 @@ async function main() {
       eq('GET now shows the open request', (await api('GET', '/users/me/deletion-request', tP)).body?.request?.id, r.id);
 
       console.log('\n--- duplicate ---');
-      mailer._reset();
+      await resetMail();
       const dup = await api('POST', '/users/me/deletion-request', tP, { reason: 'again' });
       eq('second request while one is open -> 409', `${dup.status} ${dup.body?.error}`, '409 you already have an open deletion request');
       eq('still exactly one request for the parent', (await q('SELECT count(*)::int AS n FROM deletion_requests WHERE user_id = $1', [parent.id])).n, 1);
@@ -111,7 +119,7 @@ async function main() {
       const tA = await login('admin1@a.com');
       const admin1 = await q("SELECT id FROM users WHERE email = 'admin1@a.com'");
       eq('company admin: GET before asking -> { request: null }', JSON.stringify((await api('GET', '/users/me/deletion-request', tA)).body), JSON.stringify({ request: null }));
-      mailer._reset();
+      await resetMail();
       const aReq = await api('POST', '/users/me/deletion-request', tA, { reason: 'Handing over to admin2.' });
       eq('company admin: POST -> 201', aReq.status, 201);
       const aRow = await q('SELECT user_id, company_id, school_id, reason, status FROM deletion_requests WHERE id = $1', [aReq.body?.request?.id]);
@@ -121,7 +129,7 @@ async function main() {
       /company admin, admin1@a\.com/.test(aSent[0]?.text) && aSent[0].text.includes(aReq.body.request.id)
         ? ok('company admin email names the role and request id') : bad(`mail: ${aSent[0]?.text}`);
       eq('company admin: GET shows the open request', (await api('GET', '/users/me/deletion-request', tA)).body?.request?.id, aReq.body.request.id);
-      mailer._reset();
+      await resetMail();
       const aDup = await api('POST', '/users/me/deletion-request', tA, { reason: 'again' });
       eq('company admin: second request while one is open -> 409', `${aDup.status} ${aDup.body?.error}`, '409 you already have an open deletion request');
       eq('company admin: still exactly one request', (await q('SELECT count(*)::int AS n FROM deletion_requests WHERE user_id = $1', [admin1.id])).n, 1);
@@ -134,7 +142,7 @@ async function main() {
       console.log('\n--- school staff ---');
       const tS = await login('staff@s.com');
       eq('staff: GET before asking -> { request: null }', JSON.stringify((await api('GET', '/users/me/deletion-request', tS)).body), JSON.stringify({ request: null }));
-      mailer._reset();
+      await resetMail();
       const sReq = await api('POST', '/users/me/deletion-request', tS, { reason: 'Leaving the district.' });
       eq('staff: POST -> 201', sReq.status, 201);
       const sRow = await q('SELECT user_id, company_id, school_id, reason, status FROM deletion_requests WHERE id = $1', [sReq.body?.request?.id]);
@@ -145,7 +153,7 @@ async function main() {
       (/Sam Staff/.test(sm.subject) && /School S/.test(sm.subject) && /school staff, staff@s\.com/.test(sm.text) && sm.text.includes(sReq.body.request.id) && /the school's admins/.test(sm.text))
         ? ok('staff email names the person, role, school and request id') : bad(`mail: ${sm.subject} / ${sm.text}`);
       eq('staff: GET shows the open request', (await api('GET', '/users/me/deletion-request', tS)).body?.request?.id, sReq.body.request.id);
-      mailer._reset();
+      await resetMail();
       const sDup = await api('POST', '/users/me/deletion-request', tS, { reason: 'again' });
       eq('staff: second request while one is open -> 409', `${sDup.status} ${sDup.body?.error}`, '409 you already have an open deletion request');
       eq('staff: still exactly one request', (await q('SELECT count(*)::int AS n FROM deletion_requests WHERE user_id = $1', [staff.id])).n, 1);
@@ -155,7 +163,7 @@ async function main() {
 
       console.log('\n--- school admin ---');
       const tSA = await login('sadmin@s.com');
-      mailer._reset();
+      await resetMail();
       const saRace = await Promise.all([1, 2, 3].map(() => api('POST', '/users/me/deletion-request', tSA, {})));
       eq('school admin, three at once: one 201, two 409', saRace.map((x) => x.status).sort().join(','), '201,409,409');
       const saRow = await q("SELECT company_id, school_id FROM deletion_requests WHERE user_id = $1 AND status = 'open'", [sadmin.id]);
@@ -177,7 +185,7 @@ async function main() {
       console.log('\n--- without SUPPORT_EMAIL ---');
       config.supportEmail = null;
       await pool.query("UPDATE deletion_requests SET status = 'closed' WHERE status = 'open'");
-      mailer._reset();
+      await resetMail();
       const errors = [];
       const realError = console.error;
       console.error = (...a) => errors.push(a.join(' '));
