@@ -27,6 +27,12 @@ const f = (key, label, required = false) => ({ key, label, required });
 
 // `required` marks what a NEW record needs; an update only checks the fields that are present.
 const TYPES = {
+  // Schools come first (spec section 6): students need a school to import against. The schools
+  // table has no city column, so street and city both go in Address.
+  schools: {
+    label: 'Schools', side: 'company', key: 'name',
+    fields: [f('name', 'School name', true), f('address', 'Address', true), f('state', 'State (2 letters)'), f('zip_code', 'Zip code'), f('phone', 'Phone'), f('hours', 'Hours'), f('website', 'Website')],
+  },
   drivers: { label: 'Drivers', side: 'company', role: 'driver', key: 'email', fields: [f('full_name', 'Full name', true), f('email', 'Email', true), f('phone', 'Phone'), f('address', 'Address'), f('license_number', 'License number')] },
   monitors: { label: 'Monitors', side: 'company', role: 'monitor', key: 'email', fields: [f('full_name', 'Full name', true), f('email', 'Email', true), f('phone', 'Phone'), f('address', 'Address')] },
   parents: { label: 'Parents', side: 'company', role: 'parent', key: 'email', fields: [f('full_name', 'Full name', true), f('email', 'Email', true), f('phone', 'Phone', true), f('address', 'Address', true)] },
@@ -39,7 +45,7 @@ const TYPES = {
 };
 
 const TYPES_BY_ROLE = {
-  company_admin: ['drivers', 'monitors', 'parents', 'vans', 'students'],
+  company_admin: ['schools', 'drivers', 'monitors', 'parents', 'vans', 'students'],
   school_admin: ['staff'],
 };
 
@@ -49,7 +55,7 @@ function typesFor(role) {
 
 function assertCanImport(req, type) {
   const def = TYPES[type];
-  if (!def) throw new HttpError(400, 'choose what you are importing: drivers, monitors, parents, vans, students or staff');
+  if (!def) throw new HttpError(400, 'choose what you are importing: schools, drivers, monitors, parents, vans, students or staff');
   if (!(TYPES_BY_ROLE[req.auth.role] ?? []).includes(type)) {
     throw new HttpError(403, `your role cannot import ${def.label.toLowerCase()}`);
   }
@@ -243,6 +249,81 @@ async function execVan(req, plan) {
   await createBuiltins(pool, req.auth.tenantId, van.id);
 }
 
+// ---- schools ------------------------------------------------------------------------------------
+//
+// A school is a separate tenant: the company creates it as an unclaimed placeholder (same as
+// POST /placeholders/school) and may change it only while it is still unclaimed and was added by
+// one of this company's users. Once the school has its own SafeTurns account, its details are theirs.
+
+const OWN_ACCOUNT = (name) => `${name} has its own SafeTurns account, so only they can change its details.`;
+
+async function planSchools(req, def, rows) {
+  const plans = rows.map((row) => ({ row, action: 'create' }));
+  plans.forEach((p) => {
+    const r = p.row;
+    const long = tooLong(r);
+    if (long) return err(p, `${long} is too long`);
+    const missing = missingRequired(def, r);
+    if (missing.length) return err(p, `Missing: ${missing.join(', ')}`);
+    if (r.state) {
+      try { r.state = assertValidState(r.state); } catch { return err(p, 'State must be a 2-letter US state code, like IL'); }
+    }
+    if (r.zip_code) {
+      try { assertValidZip(r.zip_code); } catch { return err(p, 'Zip code must be a valid US zip, like 60601'); }
+    }
+  });
+  flagDuplicates(plans, (p) => (p.action === 'error' && !/Duplicate/.test(p.reason ?? '') ? null : (p.row.name ? lc(p.row.name) : null)), 'school name');
+
+  const schoolsByName = new Map();
+  for (const s of await listCompanySchools(req.auth.tenantId)) {
+    const k = lc(s.name.trim());
+    schoolsByName.set(k, [...(schoolsByName.get(k) ?? []), s]);
+  }
+  for (const p of plans) {
+    if (p.action === 'error') continue;
+    const matches = schoolsByName.get(lc(p.row.name));
+    if (!matches) continue; // create
+    if (matches.length > 1) { err(p, `More than one school is named "${p.row.name}".`); continue; }
+    const s = matches[0];
+    if (s.claim_status !== 'unclaimed') { err(p, OWN_ACCOUNT(s.name)); continue; }
+    if (!s.added_by_company) { err(p, `${s.name} was added by another company, so only they can change its details.`); continue; }
+    p.action = 'update';
+    p.existingId = s.id;
+  }
+  return plans;
+}
+
+function schoolUpdatePatch(plan) {
+  const { row } = plan;
+  return { name: row.name, address: row.address, state: row.state, zip_code: row.zip_code, phone: row.phone, hours: row.hours, website: row.website };
+}
+
+// Raw pool, not req.db: schools has no company tenant column, so the scoped accessor has no entry
+// for it (same as services/placeholders.js). A deliberate cross-tenant write, so the guard is in
+// the SQL itself. An update re-checks it in the WHERE clause rather than trusting the plan: the
+// school can be claimed between preview and commit.
+async function execSchool(req, plan) {
+  const { row } = plan;
+  if (plan.action === 'update') {
+    const patch = schoolUpdatePatch(plan);
+    const keys = writtenKeys(patch);
+    const sets = keys.map((k, i) => `"${k}" = $${i + 3}`);
+    const { rowCount } = await pool.query(
+      `UPDATE schools SET ${sets.join(', ')} WHERE id = $1
+          AND claim_status = 'unclaimed'
+          AND created_by_user_id IN (SELECT id FROM users WHERE company_id = $2)`,
+      [plan.existingId, req.auth.tenantId, ...keys.map((k) => patch[k])]
+    );
+    return rowCount === 1 ? null : OWN_ACCOUNT(row.name);
+  }
+  await pool.query(
+    `INSERT INTO schools (name, address, state, zip_code, phone, hours, website, claim_status, created_by_user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'unclaimed',$8)`,
+    [row.name, row.address, row.state || null, row.zip_code || null, row.phone || null, row.hours || null, row.website || null, req.auth.userId]
+  );
+  return null;
+}
+
 // ---- students -----------------------------------------------------------------------------------
 
 async function planStudents(req, def, rows) {
@@ -268,7 +349,7 @@ async function planStudents(req, def, rows) {
     }
     if (r.student_id.length > 50) return err(p, 'Student ID must be 50 characters or fewer');
     const matches = schoolsByName.get(lc(r.school));
-    if (!matches) return err(p, `School "${r.school}" was not found. Add the school first, then import the students.`);
+    if (!matches) return err(p, `School "${r.school}" was not found. Import your schools first (Import, then Schools), then import the students.`);
     if (matches.length > 1) return err(p, `More than one school is named "${r.school}".`);
     p.schoolId = matches[0].id;
   });
@@ -391,6 +472,7 @@ async function plan(req, type, rawRows) {
   const def = assertCanImport(req, type);
   const rows = normalizeRows(def, rawRows);
   if (type === 'vans') return { def, plans: await planVans(req, def, rows) };
+  if (type === 'schools') return { def, plans: await planSchools(req, def, rows) };
   if (type === 'students') return { def, plans: await planStudents(req, def, rows) };
   return { def, plans: await planPeople(req, def, rows) };
 }
@@ -406,6 +488,8 @@ const countOf = (plans, action) => plans.filter((p) => p.action === action).leng
 
 const UPDATE_TARGET = {
   vans: { table: 'vans', tenantCol: () => 'company_id', patch: (def, p) => vanUpdatePatch(p) },
+  // No tenant column: the guard is "added by one of this company's users" (what the plan checked).
+  schools: { table: 'schools', tenantClause: 'created_by_user_id IN (SELECT id FROM users WHERE company_id = $2)', patch: (def, p) => schoolUpdatePatch(p) },
   students: { table: 'students', tenantCol: () => 'company_id', patch: (def, p) => studentUpdatePatch(p) },
   people: { table: 'users', tenantCol: (def) => (def.side === 'company' ? 'company_id' : 'school_id'), patch: personUpdatePatch },
 };
@@ -417,7 +501,7 @@ async function describeChanges(req, type, def, plans) {
   const updates = plans.filter((p) => p.action === 'update');
   if (!updates.length) return new Map();
   const { rows: current } = await pool.query(
-    `SELECT * FROM ${target.table} WHERE id = ANY($1::uuid[]) AND ${target.tenantCol(def)} = $2`,
+    `SELECT * FROM ${target.table} WHERE id = ANY($1::uuid[]) AND ${target.tenantClause ?? `${target.tenantCol(def)} = $2`}`,
     [updates.map((p) => p.existingId), req.auth.tenantId]
   );
   const byId = new Map(current.map((r) => [r.id, r]));
@@ -469,7 +553,11 @@ async function commit(req, type, rawRows) {
     if (p.action === 'error') { results.push({ index: i, status: 'error', reason: p.reason }); continue; }
     try {
       if (type === 'vans') await execVan(req, p);
-      else if (type === 'students') studentIds.set(i, await execStudent(req, def, p, credentials));
+      else if (type === 'schools') {
+        // Schools create no accounts, so nothing goes into credentials.
+        const refused = await execSchool(req, p);
+        if (refused) { results.push({ index: i, status: 'error', reason: refused }); continue; }
+      } else if (type === 'students') studentIds.set(i, await execStudent(req, def, p, credentials));
       else await execPerson(req, def, p, credentials);
       results.push({ index: i, status: p.action === 'create' ? 'created' : 'updated', reason: null });
     } catch (e) {
@@ -531,4 +619,5 @@ async function saveMapping(req, type, mapping) {
   return { mapping: clean };
 }
 
-module.exports = { MAX_ROWS, typesFor, preview, commit, getMapping, saveMapping };
+// execSchool is exported for the test that claims a school between plan and write (the WHERE guard).
+module.exports = { MAX_ROWS, typesFor, preview, commit, getMapping, saveMapping, execSchool };

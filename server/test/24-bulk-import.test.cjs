@@ -71,7 +71,7 @@ async function main() {
 
       console.log('--- who can import what ---');
       eq('driver cannot open imports -> 403', (await api('GET', '/imports/types', tDriver)).status, 403);
-      eq('company admin types', (await api('GET', '/imports/types', tA)).body.types.map((t) => t.id).join(), 'drivers,monitors,parents,vans,students');
+      eq('company admin types', (await api('GET', '/imports/types', tA)).body.types.map((t) => t.id).join(), 'schools,drivers,monitors,parents,vans,students');
       eq('school admin types', (await api('GET', '/imports/types', tS)).body.types.map((t) => t.id).join(), 'staff');
       eq('school admin importing drivers -> 403', (await api('POST', '/imports/preview', tS, { type: 'drivers', rows: [{ full_name: 'X', email: 'x@s.test' }] })).status, 403);
       eq('school admin importing vans -> 403', (await api('POST', '/imports/preview', tS, { type: 'vans', rows: [{ license_plate: 'X' }] })).status, 403);

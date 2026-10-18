@@ -29,6 +29,7 @@ const ParentsPage = lazy(() => import('./pages/company/ParentsPage').then((m) =>
 const VansPage = lazy(() => import('./pages/company/VansPage').then((m) => ({ default: m.VansPage })))
 const AssignmentsPage = lazy(() => import('./pages/company/AssignmentsPage').then((m) => ({ default: m.AssignmentsPage })))
 const PayrollPage = lazy(() => import('./pages/company/PayrollPage').then((m) => ({ default: m.PayrollPage })))
+const CompanySchoolsPage = lazy(() => import('./pages/company/SchoolsPage').then((m) => ({ default: m.CompanySchoolsPage })))
 const CompanyStudentsPage = lazy(() => import('./pages/company/StudentsPage').then((m) => ({ default: m.CompanyStudentsPage })))
 const CompanyProfilePage = lazy(() => import('./pages/company/CompanyProfilePage').then((m) => ({ default: m.CompanyProfilePage })))
 const BillingPage = lazy(() => import('./pages/company/BillingPage').then((m) => ({ default: m.BillingPage })))
@@ -59,6 +60,7 @@ const COMPANY_NAV: NavGroup[] = [
   {
     label: 'People',
     items: [
+      { to: '/company/schools', label: 'Schools', icon: 'school' },
       { to: '/company/students', label: 'Students', icon: 'groups' },
       { to: '/company/parents', label: 'Parents', icon: 'family_restroom' },
     ],
@@ -168,6 +170,7 @@ function App() {
             <Route path="/company/vans" element={<VansPage />} />
             <Route path="/company/assignments" element={<AssignmentsPage />} />
             <Route path="/company/payroll" element={<PayrollPage />} />
+            <Route path="/company/schools" element={<CompanySchoolsPage />} />
             <Route path="/company/students" element={<CompanyStudentsPage />} />
             <Route path="/company/parents" element={<ParentsPage />} />
             <Route path="/company/profile" element={<CompanyProfilePage />} />

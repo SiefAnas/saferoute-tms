@@ -160,8 +160,10 @@ async function main() {
       // Maple Elementary: the placeholder admin A created at the top of this file, no students there.
       schoolsA.body.some((s) => s.id === ph.body.id && s.name === 'Maple Elementary')
         ? ok('company_admin also sees a school placeholder its own company created (no students yet)') : bad(`own placeholder missing: ${JSON.stringify(schoolsA.body)}`);
-      (schoolsA.body.length === 2 && schoolsA.body.every((s) => Object.keys(s).sort().join() === 'id,name'))
-        ? ok('GET /schools returns exactly id+name, only related schools') : bad(`schools A shape: ${JSON.stringify(schoolsA.body)}`);
+      // Widened 2026-10-18 (branch import-schools-type) for the company Schools page: address, claim
+      // status and who added it. Still only schools the company is linked to.
+      (schoolsA.body.length === 2 && schoolsA.body.every((s) => Object.keys(s).sort().join() === 'added_by_company,added_by_you,address,claim_status,id,name'))
+        ? ok('GET /schools returns exactly the Schools page fields, only related schools') : bad(`schools A shape: ${JSON.stringify(schoolsA.body)}`);
       (await api('GET', '/schools', adminB)).body.length === 0 ? ok('admin B (no students anywhere) sees no schools') : bad('school leaked to Company B with no relationship');
 
       // A school where ONLY Company B has a student, plus a placeholder Company B created:

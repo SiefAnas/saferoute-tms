@@ -1638,6 +1638,16 @@ before a future session can act on it.
   one of the company's own users are included too (visible before any student is added), and
   tests that company A does not see a school where only company B has students, nor B's
   placeholder. The company Students page picker already uses this endpoint (since July 19).
+- **Placeholder edit rights: creating USER vs creating COMPANY (2026-10-18, branch
+  `import-schools-type`).** `editPlaceholder` in `server/src/services/placeholders.js` (PATCH
+  `/placeholders/:kind/:id`) lets only the user who created an unclaimed stub edit it. The new
+  Schools import lets any company_admin of the creating COMPANY update an unclaimed school
+  (guard: `created_by_user_id IN (SELECT id FROM users WHERE company_id = $2)`). Company level
+  is the right rule, because the admin who created a school can leave the company and nobody
+  else could then fix it. Not changed in that branch on purpose: settle it in one place (move
+  `editPlaceholder` to the company rule, for schools and the school side's company stubs),
+  then let the company Schools page show Edit for every school the company added, not only the
+  viewer's own.
 - **Postgres RLS** — optional defense-in-depth on top of the app-layer scoped accessor.
   Large, invasive change (every table + per-request session-variable/role handling in the
   connection pool). Not started pending a go/no-go given its size relative to MVP.
