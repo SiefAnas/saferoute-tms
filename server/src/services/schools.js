@@ -19,13 +19,19 @@ const { assignmentNotEndedSql } = require('../db/scoped');
 const LINKED_TO_COMPANY_SQL = `(EXISTS (SELECT 1 FROM students st WHERE st.school_id = s.id AND st.company_id = $1)
          OR EXISTS (SELECT 1 FROM users u WHERE u.id = s.created_by_user_id AND u.company_id = $1))`;
 
-async function listCompanySchools(companyId) {
+// added_by_company: one of this company's users created the school (a placeholder). Only those,
+// while still 'unclaimed', can be changed by the company (the schools import). added_by_you: the
+// caller created it, which is what PATCH /placeholders/school/:id checks today (see BACKLOG,
+// "Placeholder edit rights"). Pass userId to get it; without one it is false.
+async function listCompanySchools(companyId, userId = null) {
   const { rows } = await pool.query(
-    `SELECT s.id, s.name
+    `SELECT s.id, s.name, s.address, s.claim_status,
+            EXISTS (SELECT 1 FROM users u WHERE u.id = s.created_by_user_id AND u.company_id = $1) AS added_by_company,
+            COALESCE(s.created_by_user_id = $2::uuid, false) AS added_by_you
        FROM schools s
       WHERE ${LINKED_TO_COMPANY_SQL}
       ORDER BY s.name`,
-    [companyId],
+    [companyId, userId],
   );
   return rows;
 }

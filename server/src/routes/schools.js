@@ -16,7 +16,7 @@ router.use(authenticate, requireOperable, attachScopedDb);
 
 router.get('/', requireRole('company_admin'), async (req, res, next) => {
   try {
-    res.json(await listCompanySchools(req.auth.tenantId));
+    res.json(await listCompanySchools(req.auth.tenantId, req.auth.userId));
   } catch (e) {
     next(e);
   }

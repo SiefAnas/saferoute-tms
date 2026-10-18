@@ -582,11 +582,17 @@ export interface SchoolDetail {
   website: string | null
 }
 
-// GET /schools (BACKLOG #7) — company_admin-only, id+name only, scoped to schools the
-// caller's company already has a student at. Not the full School shape above.
+// GET /schools (BACKLOG #7) — company_admin-only, scoped to schools the caller's company is
+// linked to (has a student there, or one of its users added it). Not the full School shape above.
+// added_by_company / added_by_you: who created the placeholder. Only an 'unclaimed' school the
+// caller added can be edited via PATCH /placeholders/school/:id.
 export interface SchoolSummary {
   id: string
   name: string
+  address: string | null
+  claim_status: 'unclaimed' | 'pending_claim' | 'claimed'
+  added_by_company: boolean
+  added_by_you: boolean
 }
 
 // GET /dashboard/absent-today — today's real skip/no-show signals (2026-08-28 Dashboard

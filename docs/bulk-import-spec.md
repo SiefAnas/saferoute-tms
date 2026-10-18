@@ -7,9 +7,10 @@ A company with 100 drivers will not type them in one by one. They upload a file.
 
 * No self sign up. This is a B2B app.
 * Only admins create accounts.
-* Company admin: can import drivers, monitors, parents, vans, students for their own company.
+* Company admin: can import schools, drivers, monitors, parents, vans, students for their own company.
+* Schools are imported as unclaimed placeholders the company added. The company can update them only while they are unclaimed and were added by one of its own users. Once a school has its own SafeTurns account, its row is an error. School admins never import schools.
 * School admin: can import students and school staff for their own school only.
-* School admin cannot import drivers or vans. Those belong to the company.
+* School admin cannot import schools, drivers or vans. Those belong to the company.
 * All imports are scoped to the importer's own company or school. Never cross company.
 
 3. Accounts and passwords
@@ -67,7 +68,7 @@ Email health
 One import screen, four steps. Web only.
 The import feature is not shown anywhere in the mobile app. No menu item, no button, no hidden screen behind a role check. Admins import from the website.
 Step 1: pick type
-Dropdown: Drivers, Monitors, Parents, Vans, Students. The app does not guess what the file is. The admin says.
+Dropdown: Schools, Drivers, Monitors, Parents, Vans, Students. The app does not guess what the file is. The admin says.
 Step 2: upload and map
 
 * Accepts .csv, .xlsx, .xls.
@@ -89,7 +90,7 @@ Step 4: confirm
 6. Import rules
 Create and update
 
-* Matching keys: drivers, monitors and parents by email. Vans by license plate.
+* Matching keys: drivers, monitors and parents by email. Vans by license plate. Schools by name (ignoring case), among the schools the company is linked to.
 * Existing records are updated, not duplicated.
 * Create and update counts are shown separately in the preview so the admin knows what they are agreeing to.
 
