@@ -6,9 +6,9 @@ const authenticate = require('../middleware/authenticate');
 const attachScopedDb = require('../middleware/tenant');
 const { requireOperable, requireRole, ownerScope, denyRoles, driverScope } = require('../middleware/authorize');
 const { HttpError, mapMissingRefError } = require('../errors');
-const { assertValidTime, normalizeWeekdays } = require('../validate');
+const { assertValidTime } = require('../validate');
 const { upsertOverride, listOverrides, deleteOverride } = require('../services/schedule');
-const { assertNoConflicts } = require('../services/assignmentConflicts');
+const { normalizeSchedule, assertAssignable } = require('../services/assignmentRules');
 
 const router = express.Router();
 router.use(authenticate, requireOperable, attachScopedDb, denyRoles('parent', 'monitor'));
@@ -17,41 +17,16 @@ const companyAdmin = requireRole('company_admin');
 
 const mapFkError = (err) => mapMissingRefError(err, 'student, driver, or van not found in your company');
 
-// Default days for a new assignment (same as the DB default): Monday to Friday.
-const MON_TO_FRI = [1, 2, 3, 4, 5];
-
 router.post('/', companyAdmin, async (req, res, next) => {
   try {
-    const { student_id, driver_user_id, van_id, start_date, end_date, pickup_time, dropoff_time, shift_period } = req.body || {};
+    const { student_id, driver_user_id, van_id, start_date, end_date } = req.body || {};
     if (!student_id || !driver_user_id || !van_id || !start_date) {
       throw new HttpError(400, 'student_id, driver_user_id, van_id and start_date are required');
     }
-    if (shift_period !== undefined && !['morning', 'afternoon', 'both'].includes(shift_period)) {
-      throw new HttpError(400, "shift_period must be 'morning', 'afternoon' or 'both'");
-    }
-    if (pickup_time !== undefined && pickup_time !== null) assertValidTime(pickup_time, 'pickup_time');
-    if (dropoff_time !== undefined && dropoff_time !== null) assertValidTime(dropoff_time, 'dropoff_time');
-    const days_of_week = normalizeWeekdays((req.body || {}).days_of_week) ?? MON_TO_FRI;
-    // Conflict-checking only makes sense against ids that actually belong to this company —
-    // otherwise a foreign van/student/driver id could spuriously "conflict" with a real one
-    // that happens to share another leg, masking what should be the FK 400 below.
-    const belongsToTenant = await Promise.all([
-      req.db.findById('vans', van_id),
-      req.db.findById('students', student_id),
-      req.db.findById('users', driver_user_id),
-    ]);
-    if (belongsToTenant.every(Boolean)) {
-      const others = await req.db.findMany('assignments', {});
-      assertNoConflicts(others, {
-        student_id, driver_user_id, van_id, start_date, end_date: end_date ?? null,
-        shift_period: shift_period ?? 'both', days_of_week,
-      });
-    }
-    const row = await req.db.insert('assignments', {
-      student_id, driver_user_id, van_id, start_date, end_date: end_date ?? null,
-      pickup_time: pickup_time ?? null, dropoff_time: dropoff_time ?? null,
-      shift_period: shift_period ?? 'both', days_of_week,
-    });
+    // Same rules as the assignments import (services/assignmentRules.js).
+    const candidate = { student_id, driver_user_id, van_id, start_date, end_date: end_date ?? null, ...normalizeSchedule(req.body) };
+    await assertAssignable(req.db, candidate);
+    const row = await req.db.insert('assignments', candidate);
     res.status(201).json(row);
   } catch (e) { next(mapFkError(e)); }
 });
@@ -77,12 +52,7 @@ router.patch('/:id', companyAdmin, async (req, res, next) => {
       if (req.body?.[k] !== undefined) patch[k] = req.body[k];
     }
     if (Object.keys(patch).length === 0) throw new HttpError(400, 'nothing to update');
-    if (patch.shift_period !== undefined && !['morning', 'afternoon', 'both'].includes(patch.shift_period)) {
-      throw new HttpError(400, "shift_period must be 'morning', 'afternoon' or 'both'");
-    }
-    if (patch.pickup_time !== null && patch.pickup_time !== undefined) assertValidTime(patch.pickup_time, 'pickup_time');
-    if (patch.dropoff_time !== null && patch.dropoff_time !== undefined) assertValidTime(patch.dropoff_time, 'dropoff_time');
-    if (patch.days_of_week !== undefined) patch.days_of_week = normalizeWeekdays(patch.days_of_week);
+    Object.assign(patch, normalizeSchedule(patch, { partial: true }));
     const existing = await req.db.findById('assignments', req.params.id, { owner: ownerScope(req, 'assignments') });
     if (!existing) throw new HttpError(404, 'assignment not found');
     if (
@@ -90,22 +60,15 @@ router.patch('/:id', companyAdmin, async (req, res, next) => {
       patch.start_date !== undefined || patch.end_date !== undefined || patch.shift_period !== undefined ||
       patch.days_of_week !== undefined
     ) {
-      const belongsToTenant = await Promise.all([
-        patch.van_id !== undefined ? req.db.findById('vans', patch.van_id) : true,
-        patch.driver_user_id !== undefined ? req.db.findById('users', patch.driver_user_id) : true,
-      ]);
-      if (belongsToTenant.every(Boolean)) {
-        const others = (await req.db.findMany('assignments', {})).filter((a) => a.id !== req.params.id);
-        assertNoConflicts(others, {
-          student_id: existing.student_id,
-          driver_user_id: patch.driver_user_id ?? existing.driver_user_id,
-          van_id: patch.van_id ?? existing.van_id,
-          start_date: patch.start_date ?? existing.start_date,
-          end_date: patch.end_date !== undefined ? patch.end_date : existing.end_date,
-          shift_period: patch.shift_period ?? existing.shift_period,
-          days_of_week: patch.days_of_week ?? existing.days_of_week,
-        });
-      }
+      await assertAssignable(req.db, {
+        student_id: existing.student_id,
+        driver_user_id: patch.driver_user_id ?? existing.driver_user_id,
+        van_id: patch.van_id ?? existing.van_id,
+        start_date: patch.start_date ?? existing.start_date,
+        end_date: patch.end_date !== undefined ? patch.end_date : existing.end_date,
+        shift_period: patch.shift_period ?? existing.shift_period,
+        days_of_week: patch.days_of_week ?? existing.days_of_week,
+      }, { checkDriver: patch.driver_user_id !== undefined, excludeId: req.params.id });
     }
     const row = await req.db.update('assignments', req.params.id, patch);
     if (!row) throw new HttpError(404, 'assignment not found');

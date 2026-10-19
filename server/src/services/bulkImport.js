@@ -16,6 +16,10 @@ const { assertValidEmail, assertValidZip, assertValidState } = require('../valid
 const { TEMP_PASSWORD_DAYS, generateTempPassword } = require('./passwords');
 const { listCompanySchools } = require('./schools');
 const { createBuiltins } = require('./fleet');
+const { createScopedDb } = require('../db/scoped');
+const { rangesOverlap, shiftsOverlap, daysOverlap, assertNoConflicts } = require('./assignmentConflicts');
+const { normalizeSchedule, assertActiveDriver, assertAssignable } = require('./assignmentRules');
+const { businessDateFor } = require('../time/businessDate');
 
 const MAX_ROWS = 100;
 const MAX_CELL = 500;
@@ -41,11 +45,21 @@ const TYPES = {
     label: 'Students', side: 'company', key: 'Student ID + school (else name + school)',
     fields: [f('full_name', 'Student name', true), f('school', 'School (exact name)', true), f('student_id', 'Student ID'), f('grade', 'Grade', true), f('age', 'Age', true), f('parent_name', 'Parent name', true), f('parent_phone', 'Parent phone', true), f('parent_email', 'Parent email'), f('street_address', 'Street address', true), f('city', 'City', true), f('state', 'State (2 letters)', true), f('zip_code', 'Zip code', true), f('notes', 'Notes')],
   },
+  // Last (spec section 6): ties students to a driver and a van, so those must exist first.
+  assignments: {
+    label: 'Assignments', side: 'company', key: 'student + school',
+    fields: [
+      f('student_name', 'Student name', true), f('school', 'School (exact name)', true), f('student_id', 'Student ID'),
+      f('driver_email', 'Driver email', true), f('van_plate', 'Van license plate', true),
+      f('start_date', 'Start date', true), f('end_date', 'End date'), f('pickup_time', 'Pickup time'), f('dropoff_time', 'Dropoff time'),
+      f('shift_period', 'Shift (morning/afternoon/both)'), f('days_of_week', 'Days'),
+    ],
+  },
   staff: { label: 'School staff', side: 'school', role: 'school_staff', key: 'email', fields: [f('full_name', 'Full name', true), f('email', 'Email', true), f('phone', 'Phone')] },
 };
 
 const TYPES_BY_ROLE = {
-  company_admin: ['schools', 'drivers', 'monitors', 'parents', 'vans', 'students'],
+  company_admin: ['schools', 'drivers', 'monitors', 'parents', 'vans', 'students', 'assignments'],
   school_admin: ['staff'],
 };
 
@@ -55,7 +69,7 @@ function typesFor(role) {
 
 function assertCanImport(req, type) {
   const def = TYPES[type];
-  if (!def) throw new HttpError(400, 'choose what you are importing: schools, drivers, monitors, parents, vans, students or staff');
+  if (!def) throw new HttpError(400, 'choose what you are importing: schools, drivers, monitors, parents, vans, students, assignments or staff');
   if (!(TYPES_BY_ROLE[req.auth.role] ?? []).includes(type)) {
     throw new HttpError(403, `your role cannot import ${def.label.toLowerCase()}`);
   }
@@ -324,6 +338,272 @@ async function execSchool(req, plan) {
   return null;
 }
 
+// ---- assignments --------------------------------------------------------------------------------
+//
+// No natural key on an assignment, so a row is matched to what the student has today: their
+// current (not ended) assignment for an overlapping shift. None -> create. Same driver and van ->
+// update its times, days, shift and end date. A different driver or van -> a reassignment: the
+// current one ends the day before the new start date and the new one is created, in one
+// transaction, and the preview shows it as an overwrite (driver: old -> new).
+// The field rules (shift, times, days, active driver, conflicts) are services/assignmentRules.js,
+// the same ones POST/PATCH /assignments use.
+
+// 'YYYY-MM-DD' or US 'M/D/YYYY' -> 'YYYY-MM-DD', or null when it isn't a real calendar date.
+function parseDate(text) {
+  let y, m, d;
+  let hit = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+  if (hit) [, y, m, d] = hit.map(Number);
+  else if ((hit = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text))) [, m, d, y] = hit.map(Number);
+  else return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return dt.toISOString().slice(0, 10);
+}
+// A bare number is what Excel writes for a date cell it wasn't told to format: say so.
+const dateError = (label, text) => (/^\d+(\.\d+)?$/.test(text)
+  ? `${label} "${text}" looks like a spreadsheet date number. Format the column as a date, like 2026-09-01, and export again.`
+  : `${label} "${text}" must be a real date, like 2026-09-01 or 9/1/2026`);
+
+// '7:30', '07:30', '07:30:00', '7:30 AM', '3:05 pm' -> 'HH:MM' (24-hour), or null.
+function parseTime(text) {
+  const hit = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])\.?m\.?$|^(\d{1,2}):(\d{2})(?::(\d{2}))?$/i.exec(text);
+  if (!hit) return null;
+  const ampm = hit[4]?.toLowerCase();
+  let h = Number(hit[1] ?? hit[5]);
+  const min = Number(hit[2] ?? hit[6]);
+  const sec = hit[3] ?? hit[7];
+  if (ampm) {
+    if (h < 1 || h > 12) return null;
+    h = (h % 12) + (ampm === 'p' ? 12 : 0);
+  }
+  if (h > 23 || min > 59 || (sec && Number(sec) > 59)) return null;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+const timeError = (label, text) => (/^\d*\.\d+$/.test(text)
+  ? `${label} "${text}" looks like a spreadsheet time number. Format the column as a time, like 07:30, and export again.`
+  : `${label} "${text}" must be a time, like 07:30, 15:05 or 3:05 PM`);
+
+const DAY_NAMES = {
+  mon: 1, monday: 1, tue: 2, tues: 2, tuesday: 2, wed: 3, weds: 3, wednesday: 3, thu: 4, thur: 4, thurs: 4, thursday: 4,
+  fri: 5, friday: 5, sat: 6, saturday: 6, sun: 7, sunday: 7,
+};
+// 'Mon,Wed,Fri', 'monday; friday', '1,3,5' -> [1,3,5] (ISO weekdays, what normalizeWeekdays takes).
+function parseDays(text) {
+  return text.split(/[\s,;/]+/).filter(Boolean).map((part) => {
+    const k = part.toLowerCase().replace(/\.$/, '');
+    if (/^[1-7]$/.test(k)) return Number(k);
+    if (DAY_NAMES[k]) return DAY_NAMES[k];
+    throw new Error(`Days: "${part}" is not a weekday. Use names like Mon,Wed,Fri or numbers 1 (Monday) to 7 (Sunday).`);
+  });
+}
+
+// Stored values as text, for comparing with the file and showing in the preview.
+const dayText = (v) => (v instanceof Date
+  ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`
+  : v == null ? null : String(v).slice(0, 10));
+const timeText = (v) => (v == null ? null : String(v).slice(0, 5));
+const DAY_SHORT = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const daysText = (v) => (v == null ? null : v.map((d) => DAY_SHORT[d]).join(','));
+const dayBefore = (ymd) => new Date(Date.parse(`${ymd}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+
+const SCHEDULE_KEYS = ['shift_period', 'pickup_time', 'dropoff_time', 'days_of_week'];
+const givenSchedule = (v) => Object.fromEntries(SCHEDULE_KEYS.filter((k) => v[k] !== '').map((k) => [k, v[k]]));
+
+// The row's values, validated. Blank optional cells stay '' (an update leaves those alone); the
+// defaults for a new assignment are added by newAssignment, through the shared normalizeSchedule.
+function parseAssignmentRow(r) {
+  const v = { start_date: parseDate(r.start_date), end_date: '', pickup_time: '', dropoff_time: '' };
+  if (!v.start_date) throw new Error(dateError('Start date', r.start_date));
+  if (r.end_date) {
+    v.end_date = parseDate(r.end_date);
+    if (!v.end_date) throw new Error(dateError('End date', r.end_date));
+    if (v.end_date < v.start_date) throw new Error('End date is before the start date');
+  }
+  for (const [k, label] of [['pickup_time', 'Pickup time'], ['dropoff_time', 'Dropoff time']]) {
+    if (!r[k]) continue;
+    v[k] = parseTime(r[k]);
+    if (!v[k]) throw new Error(timeError(label, r[k]));
+  }
+  v.shift_period = r.shift_period ? r.shift_period.toLowerCase() : '';
+  v.days_of_week = r.days_of_week ? parseDays(r.days_of_week) : '';
+  // The same rules as POST/PATCH /assignments, on what the row gives.
+  try {
+    Object.assign(v, normalizeSchedule(givenSchedule(v), { partial: true }));
+  } catch (e) {
+    if (/shift_period/.test(e.message)) throw new Error(`Shift "${r.shift_period}" must be morning, afternoon or both`);
+    if (/days_of_week/.test(e.message)) throw new Error(`Days "${r.days_of_week}" must name at least one weekday`);
+    throw new Error(e.message);
+  }
+  return v;
+}
+
+// The assignment a row would create: blank cells get the new-assignment defaults (both shifts,
+// Monday to Friday), from the shared rules.
+function newAssignment(p) {
+  const v = p.values;
+  return {
+    student_id: p.studentId, driver_user_id: p.driver.id, van_id: p.van.id,
+    start_date: v.start_date, end_date: v.end_date || null, ...normalizeSchedule(givenSchedule(v)),
+  };
+}
+
+// What an update of the student's current assignment (same driver and van) writes. Blank cells
+// are skipped by updateFields, so they leave the stored value alone.
+function assignmentUpdatePatch(plan) {
+  const v = plan.values;
+  return { end_date: v.end_date, pickup_time: v.pickup_time, dropoff_time: v.dropoff_time, shift_period: v.shift_period, days_of_week: v.days_of_week };
+}
+
+async function planAssignments(req, def, rows) {
+  const tenantId = req.auth.tenantId;
+  const plans = rows.map((row) => ({ row, action: 'create' }));
+
+  const schoolsByName = new Map();
+  for (const s of await listCompanySchools(tenantId)) {
+    const k = lc(s.name.trim());
+    schoolsByName.set(k, [...(schoolsByName.get(k) ?? []), s]);
+  }
+  const emails = [...new Set(rows.map((r) => lc(r.driver_email)).filter(Boolean))];
+  const [{ rows: students }, { rows: drivers }, { rows: vans }, { rows: current }] = await Promise.all([
+    pool.query('SELECT id, school_id, full_name, student_id FROM students WHERE company_id = $1', [tenantId]),
+    // Only this company's users: an email from another company is "not found", never theirs.
+    pool.query('SELECT id, email, full_name, role, is_active FROM users WHERE company_id = $1 AND lower(email) = ANY($2::text[])', [tenantId, emails]),
+    pool.query('SELECT id, license_plate FROM vans WHERE company_id = $1', [tenantId]),
+    pool.query('SELECT * FROM assignments WHERE company_id = $1', [tenantId]),
+  ]);
+  const driversByEmail = new Map(drivers.map((u) => [lc(u.email), u]));
+  const vansByPlate = new Map(vans.map((v) => [lc(v.license_plate.trim()), v]));
+  const vansById = new Map(vans.map((v) => [v.id, v]));
+
+  plans.forEach((p) => {
+    const r = p.row;
+    const long = tooLong(r);
+    if (long) return err(p, `${long} is too long`);
+    const missing = missingRequired(def, r);
+    if (missing.length) return err(p, `Missing: ${missing.join(', ')}`);
+    try { p.values = parseAssignmentRow(r); } catch (e) { return err(p, e.message); }
+
+    const schools = schoolsByName.get(lc(r.school));
+    if (!schools) return err(p, `School "${r.school}" was not found. Import your schools first (Import, then Schools).`);
+    if (schools.length > 1) return err(p, `More than one school is named "${r.school}".`);
+    const school = schools[0];
+    const here = students.filter((s) => s.school_id === school.id);
+    const sameName = here.filter((s) => lc(s.full_name.trim()) === lc(r.student_name));
+    // A Student ID is the better key (two children can share a name). A student imported before
+    // they had an ID is still found by name, when exactly one at the school has that name and no ID.
+    let student = r.student_id ? here.find((s) => s.student_id && lc(s.student_id) === lc(r.student_id)) : null;
+    if (!student && r.student_id) {
+      const noId = sameName.filter((s) => !s.student_id);
+      if (noId.length !== 1) return err(p, `No student with Student ID ${r.student_id} at ${school.name}. Import the students first.`);
+      student = noId[0];
+    }
+    if (!student) {
+      if (sameName.length > 1) return err(p, `More than one student named "${r.student_name}" at ${school.name}. Add a Student ID column to tell them apart.`);
+      if (!sameName.length) return err(p, `No student named "${r.student_name}" at ${school.name}. Import the students first.`);
+      student = sameName[0];
+    }
+    p.studentId = student.id;
+
+    const driver = driversByEmail.get(lc(r.driver_email));
+    if (!driver) return err(p, `No driver in your company has the email ${r.driver_email}.`);
+    try { assertActiveDriver(driver); } catch (e) { return err(p, e.message); }
+    p.driver = driver;
+    const van = vansByPlate.get(lc(r.van_plate));
+    if (!van) return err(p, `No van in your company has the license plate ${r.van_plate}.`);
+    p.van = van;
+  });
+
+  // Two rows for one student whose dates, days and shifts overlap: both are errors.
+  const open = plans.filter((p) => p.action !== 'error');
+  for (const a of open) {
+    const ca = newAssignment(a);
+    const clash = open.some((b) => {
+      if (b === a || b.studentId !== a.studentId) return false;
+      const cb = newAssignment(b);
+      return rangesOverlap(ca.start_date, ca.end_date, cb.start_date, cb.end_date)
+        && daysOverlap(ca.days_of_week, cb.days_of_week) && shiftsOverlap(ca.shift_period, cb.shift_period);
+    });
+    if (clash) err(a, 'Duplicate student: another row in this file assigns this student for overlapping dates. Each student needs one row per shift.');
+  }
+
+  // Match each row to the student's current assignment, then check the result for conflicts
+  // against everything the company has plus the rows above it in the file, as they would be saved.
+  const today = await businessDateFor(tenantId);
+  const running = current.filter((a) => a.end_date == null || dayText(a.end_date) >= today);
+  let planned = current.map((a) => ({ ...a }));
+  const nameOf = async (userId) => (await pool.query('SELECT full_name FROM users WHERE id = $1 AND company_id = $2', [userId, tenantId])).rows[0]?.full_name ?? 'another driver';
+  for (const [i, p] of plans.entries()) {
+    if (p.action === 'error') continue;
+    const fresh = newAssignment(p);
+    const mine = running.filter((a) => a.student_id === p.studentId && shiftsOverlap(a.shift_period, fresh.shift_period)
+      && rangesOverlap(a.start_date, a.end_date, fresh.start_date, fresh.end_date));
+    if (mine.length > 1) { err(p, 'This student has more than one current assignment for this shift. Change it on the Assignments page.'); continue; }
+    const cur = mine[0];
+    let candidate;
+    let others;
+    if (!cur) {
+      candidate = fresh;
+      others = planned;
+    } else if (cur.driver_user_id === p.driver.id && cur.van_id === p.van.id) {
+      p.existingId = cur.id;
+      const patch = assignmentUpdatePatch(p);
+      candidate = { ...cur, ...Object.fromEntries(writtenKeys(patch).map((k) => [k, patch[k]])) };
+      others = planned.filter((a) => a.id !== cur.id);
+      p.changes = [
+        ['end_date', 'End date', dayText(cur.end_date), patch.end_date],
+        ['pickup_time', 'Pickup time', timeText(cur.pickup_time), patch.pickup_time],
+        ['dropoff_time', 'Dropoff time', timeText(cur.dropoff_time), patch.dropoff_time],
+        ['shift_period', 'Shift', cur.shift_period, patch.shift_period],
+        ['days_of_week', 'Days', daysText(cur.days_of_week), patch.days_of_week === '' ? '' : daysText(patch.days_of_week)],
+      ].filter(([, , old, nw]) => nw !== '' && old !== nw).map(([field, label, old, nw]) => ({ field, label, old, new: nw }));
+    } else {
+      // Reassignment: the current one ends the day before the new one starts.
+      if (fresh.start_date <= dayText(cur.start_date)) {
+        err(p, `This student's current assignment started ${dayText(cur.start_date)}. A new driver or van has to start after that. To replace it from its first day, change it on the Assignments page.`);
+        continue;
+      }
+      p.reassign = { id: cur.id, endDate: dayBefore(fresh.start_date) };
+      candidate = fresh;
+      others = planned.map((a) => (a.id === cur.id ? { ...a, end_date: p.reassign.endDate } : a));
+      p.changes = [
+        { field: 'driver', label: 'Driver', old: cur.driver_user_id === p.driver.id ? p.driver.full_name : await nameOf(cur.driver_user_id), new: p.driver.full_name },
+        { field: 'van', label: 'Van', old: vansById.get(cur.van_id)?.license_plate ?? 'another van', new: p.van.license_plate },
+      ].filter((c) => c.old !== c.new);
+      p.note = `Ends the current assignment on ${p.reassign.endDate} and starts the new one on ${fresh.start_date}`;
+    }
+    try { assertNoConflicts(others, candidate); } catch (e) { err(p, e.message); delete p.changes; delete p.reassign; delete p.existingId; delete p.note; continue; }
+    p.action = cur ? 'update' : 'create';
+    p.candidate = candidate;
+    // Later rows are checked against this one as it will be saved.
+    planned = p.existingId ? [...others, candidate] : [...others, { ...candidate, id: `row-${i}` }];
+  }
+  return plans;
+}
+
+// One transaction, with a scoped accessor over that transaction's client, so the shared check
+// (assertAssignable) runs again at write time and sees a reassignment's ended row before the new
+// one goes in. Anything it refuses rolls the whole row back.
+async function execAssignment(req, plan) {
+  const tenantId = req.auth.tenantId;
+  await withTx(async (c) => {
+    const db = createScopedDb(c, { type: 'company', id: tenantId }, { userId: req.auth.userId, role: req.auth.role });
+    if (plan.existingId) {
+      await assertAssignable(db, plan.candidate, { excludeId: plan.existingId });
+      await updateFields(c, 'assignments', plan.existingId, 'company_id', tenantId, assignmentUpdatePatch(plan));
+      return;
+    }
+    if (plan.reassign) {
+      const { rowCount } = await c.query(
+        'UPDATE assignments SET end_date = $3 WHERE id = $1 AND company_id = $2 AND (end_date IS NULL OR end_date > $3)',
+        [plan.reassign.id, tenantId, plan.reassign.endDate]
+      );
+      if (rowCount !== 1) throw new HttpError(409, "The student's current assignment changed after the preview. Preview the file again.");
+    }
+    await assertAssignable(db, plan.candidate);
+    await db.insert('assignments', plan.candidate);
+  });
+}
+
 // ---- students -----------------------------------------------------------------------------------
 
 async function planStudents(req, def, rows) {
@@ -473,6 +753,7 @@ async function plan(req, type, rawRows) {
   const rows = normalizeRows(def, rawRows);
   if (type === 'vans') return { def, plans: await planVans(req, def, rows) };
   if (type === 'schools') return { def, plans: await planSchools(req, def, rows) };
+  if (type === 'assignments') return { def, plans: await planAssignments(req, def, rows) };
   if (type === 'students') return { def, plans: await planStudents(req, def, rows) };
   return { def, plans: await planPeople(req, def, rows) };
 }
@@ -491,6 +772,8 @@ const UPDATE_TARGET = {
   // No tenant column: the guard is "added by one of this company's users" (what the plan checked).
   schools: { table: 'schools', tenantClause: 'created_by_user_id IN (SELECT id FROM users WHERE company_id = $2)', patch: (def, p) => schoolUpdatePatch(p) },
   students: { table: 'students', tenantCol: () => 'company_id', patch: (def, p) => studentUpdatePatch(p) },
+  // Worked out by the planner, which already has the current assignment and the driver/van names.
+  assignments: { precomputed: true },
   people: { table: 'users', tenantCol: (def) => (def.side === 'company' ? 'company_id' : 'school_id'), patch: personUpdatePatch },
 };
 
@@ -500,6 +783,11 @@ async function describeChanges(req, type, def, plans) {
   const target = UPDATE_TARGET[type] ?? UPDATE_TARGET.people;
   const updates = plans.filter((p) => p.action === 'update');
   if (!updates.length) return new Map();
+  if (target.precomputed) {
+    // A reassignment always overwrites (it ends the current assignment); otherwise the rule below:
+    // the file replaces a value that is there today.
+    return new Map(updates.map((p) => [p, { changes: p.changes ?? [], overwrite: Boolean(p.reassign) || (p.changes ?? []).some((c) => c.old !== null && c.old !== '') }]));
+  }
   const { rows: current } = await pool.query(
     `SELECT * FROM ${target.table} WHERE id = ANY($1::uuid[]) AND ${target.tenantClause ?? `${target.tenantCol(def)} = $2`}`,
     [updates.map((p) => p.existingId), req.auth.tenantId]
@@ -534,6 +822,7 @@ async function preview(req, type, rawRows) {
 }
 
 function friendlyDbError(e) {
+  if (e instanceof HttpError) return e.message; // a shared rule refused it at write time (e.g. a new conflict)
   if (e.code === '23505') {
     if (String(e.constraint).includes('vans_company_number_unique')) return 'Another van already has this number.';
     if (String(e.constraint).includes('student_id_unique')) return 'Another of your students at this school already has this Student ID.';
@@ -553,6 +842,7 @@ async function commit(req, type, rawRows) {
     if (p.action === 'error') { results.push({ index: i, status: 'error', reason: p.reason }); continue; }
     try {
       if (type === 'vans') await execVan(req, p);
+      else if (type === 'assignments') await execAssignment(req, p);
       else if (type === 'schools') {
         // Schools create no accounts, so nothing goes into credentials.
         const refused = await execSchool(req, p);
@@ -561,7 +851,7 @@ async function commit(req, type, rawRows) {
       else await execPerson(req, def, p, credentials);
       results.push({ index: i, status: p.action === 'create' ? 'created' : 'updated', reason: null });
     } catch (e) {
-      if (!e.code) console.error('[import] row failed', e.message);
+      if (!e.code && !(e instanceof HttpError)) console.error('[import] row failed', e.message);
       results.push({ index: i, status: 'error', reason: friendlyDbError(e) });
     }
   }
