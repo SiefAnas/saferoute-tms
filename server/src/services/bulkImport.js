@@ -619,16 +619,25 @@ async function planStudents(req, def, rows) {
     const r = p.row;
     const long = tooLong(r);
     if (long) return err(p, `${long} is too long`);
-    const missing = missingRequired(def, r);
-    if (missing.length) return err(p, `Missing: ${missing.join(', ')}`);
-    if (!/^\d{1,2}$/.test(r.age) || +r.age > 25) return err(p, 'Age must be a whole number from 0 to 25');
-    try { assertValidZip(r.zip_code); } catch { return err(p, 'Zip code must be a valid US zip, like 60601'); }
-    try { r.state = assertValidState(r.state); } catch { return err(p, 'State must be a 2-letter US state code, like IL'); }
+    // `required` is what a NEW student needs (checked below, once the row is known to be a
+    // create). An update only needs what identifies the student, and checks only the values the
+    // file gives: a blank cell leaves the stored value alone (studentUpdatePatch).
+    p.missing = missingRequired(def, r);
+    if (!r.full_name || !r.school) return err(p, `Missing: ${p.missing.join(', ')}`);
+    if (r.age && (!/^\d{1,2}$/.test(r.age) || +r.age > 25)) return err(p, 'Age must be a whole number from 0 to 25');
+    if (r.zip_code) {
+      try { assertValidZip(r.zip_code); } catch { return err(p, 'Zip code must be a valid US zip, like 60601'); }
+    }
+    if (r.state) {
+      try { r.state = assertValidState(r.state); } catch { return err(p, 'State must be a 2-letter US state code, like IL'); }
+    }
     if (r.parent_email) {
       try { assertValidEmail(r.parent_email); } catch { return err(p, `"${r.parent_email}" is not a valid parent email address`); }
     }
     if (r.student_id.length > 50) return err(p, 'Student ID must be 50 characters or fewer');
     const matches = schoolsByName.get(lc(r.school));
+    // No such school means no existing student there either: it can only be a new one.
+    if (!matches && p.missing.length) return err(p, `Missing: ${p.missing.join(', ')}`);
     if (!matches) return err(p, `School "${r.school}" was not found. Import your schools first (Import, then Schools), then import the students.`);
     if (matches.length > 1) return err(p, `More than one school is named "${r.school}".`);
     p.schoolId = matches[0].id;
@@ -682,6 +691,7 @@ async function planStudents(req, def, rows) {
       if (sameName.length > 1) { err(p, 'More than one existing student has this name at this school, so it is not clear which to update.'); continue; }
       if (sameName.length === 1) { p.action = 'update'; p.existingId = sameName[0].id; }
     }
+    if (p.action === 'create' && p.missing.length) { err(p, `Missing: ${p.missing.join(', ')}`); continue; }
     if (p.row.parent_email) {
       const k = lc(p.row.parent_email);
       const u = parents.get(k);
@@ -690,6 +700,8 @@ async function planStudents(req, def, rows) {
         if (u.role !== 'parent') { err(p, `The parent email belongs to a ${u.role.replace('_', ' ')} account, not a parent.`); continue; }
         if (!u.is_active) { err(p, 'The parent account is deactivated.'); continue; }
       } else if (!willCreate.has(k)) {
+        // An update row may leave the parent's name or phone blank; a new account needs both.
+        if (!p.row.parent_name || !p.row.parent_phone) { err(p, 'Creating the parent account needs a Parent name and a Parent phone in this row.'); continue; }
         willCreate.add(k);
         p.note = 'Also creates a parent account';
       }
@@ -705,7 +717,8 @@ async function planStudents(req, def, rows) {
 function studentUpdatePatch(plan) {
   const { row } = plan;
   return {
-    full_name: row.full_name, grade: row.grade, age: Number(row.age), parent_name: row.parent_name, parent_phone: row.parent_phone,
+    // '' (a blank cell) is skipped by updateFields; Number('') would have written age 0.
+    full_name: row.full_name, grade: row.grade, age: row.age === '' ? '' : Number(row.age), parent_name: row.parent_name, parent_phone: row.parent_phone,
     street_address: row.street_address, city: row.city, state: row.state, zip_code: row.zip_code, notes: row.notes,
     // Only when the preview said so (an existing student getting their first ID); an ID match
     // never rewrites the stored ID.
