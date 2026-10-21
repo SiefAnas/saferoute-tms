@@ -7,13 +7,51 @@ import { parseSpreadsheet, SPREADSHEET_ACCEPT } from '../lib/sheet'
 import { Button } from '../components/Button'
 import { Card, CardHeader, CardTitle } from '../components/Card'
 import { Field, Select } from '../components/Input'
-import { PageIntro } from '../components/Records'
+import { PageIntro, Segmented } from '../components/Records'
 import { PageTopBar } from '../layouts/TopBar'
 import type { ImportChange, ImportCommitResult, ImportCredential, ImportPreview, ImportTypesResponse } from '../types/api'
+import { Counts, CredentialsTable } from './import/importParts'
+import { AutoImport } from './import/AutoImport'
 
-// Bulk import (docs/bulk-import-spec.md), web only. One screen, four steps: pick what you are
-// importing, upload and match columns, preview every row (nothing saved), then import. The file is
-// read here; the server checks every row again on import, so preview and import can't disagree.
+// Bulk import (docs/bulk-import-spec.md), web only. Two ways in:
+//   - Several files (AutoImport, the default): any number of files and sheets, each sheet's kind
+//     and columns worked out from its content (lib/sheetParse.ts), imported in dependency order.
+//   - One file, one type (SingleTypeImport below): pick what you are importing, upload and match
+//     columns, preview every row (nothing saved), then import.
+// Files are read here; the server checks every row again on import, so preview and import can't disagree.
+
+type Mode = 'auto' | 'single'
+
+export function ImportPage() {
+  const typesQuery = useQuery({ queryKey: ['import-types'], queryFn: () => api.get<ImportTypesResponse>('/imports/types') })
+  const maxRows = typesQuery.data?.max_rows ?? 100
+  const [mode, setMode] = useState<Mode>('auto')
+  return (
+    <div className="flex flex-col gap-5">
+      <PageTopBar title="Import">
+        <Segmented<Mode>
+          label="How to import"
+          value={mode}
+          onChange={setMode}
+          options={[{ value: 'auto', label: 'Several files' }, { value: 'single', label: 'One file, choose the type' }]}
+        />
+      </PageTopBar>
+      {mode === 'auto' ? (
+        <PageIntro>
+          Upload your spreadsheets as they are, as many files as you like (.csv, .xlsx or .xls). Every sheet is read: we find the
+          header row, work out what each sheet holds and which column is which, and show you before anything is saved. What is clear
+          goes in; what is not is listed for you. Up to {maxRows} rows of each kind per upload.
+        </PageIntro>
+      ) : (
+        <PageIntro>
+          Add or update many records at once from a spreadsheet (.csv, .xlsx or .xls, up to {maxRows} rows). Rows are matched by email
+          (by license plate for vans), so importing the same file twice updates instead of duplicating. Importing never deactivates anyone.
+        </PageIntro>
+      )}
+      {typesQuery.data && (mode === 'auto' ? <AutoImport types={typesQuery.data.types} maxRows={maxRows} /> : <SingleTypeImport />)}
+    </div>
+  )
+}
 
 interface Sheet {
   fileName: string
@@ -35,7 +73,7 @@ async function readSheet(file: File): Promise<Sheet> {
 const ACTION_TEXT = { create: 'Will create', update: 'Will update', error: 'Error' } as const
 const ACTION_CLASS = { create: 'text-success-fg', update: 'text-ink', error: 'text-danger-ink' } as const
 
-export function ImportPage() {
+function SingleTypeImport() {
   const queryClient = useQueryClient()
   const typesQuery = useQuery({ queryKey: ['import-types'], queryFn: () => api.get<ImportTypesResponse>('/imports/types') })
   const types = typesQuery.data?.types ?? []
@@ -165,24 +203,20 @@ export function ImportPage() {
     resetAfter('type')
   }
 
-  const step = result ? 4 : preview ? 3 : sheet && type ? 2 : 1
-
   return (
     <div className="flex flex-col gap-5">
-      <PageTopBar title="Import" subtitle={`Step ${step} of 4`} />
-      <PageIntro>
-        Add or update many records at once from a spreadsheet (.csv, .xlsx or .xls, up to {maxRows} rows). Rows are matched by email
-        (by license plate for vans), so importing the same file twice updates instead of duplicating. Importing never deactivates anyone.
-      </PageIntro>
-
       <Card>
         <CardHeader>
           <CardTitle>1. What are you importing?</CardTitle>
         </CardHeader>
         <div className="flex flex-wrap items-end gap-3 px-5 py-4">
           <Field label="Import type" className="min-w-[240px]">
+            {/* Nothing is chosen until the admin chooses. autoComplete off stops the browser restoring
+                an earlier choice on reload, which made a students file read as Schools ("Missing:
+                School name, Address"). */}
             <Select
               value={typeId}
+              autoComplete="off"
               disabled={Boolean(result)}
               onChange={(e) => {
                 setTypeId(e.target.value)
@@ -347,19 +381,6 @@ export function ImportPage() {
   )
 }
 
-function Counts({ items }: { items: [string, number][] }) {
-  return (
-    <div className="flex flex-wrap gap-3">
-      {items.map(([label, n]) => (
-        <div key={label} className="min-w-[130px] rounded-btn border border-line px-4 py-2.5">
-          <div className="text-[22px] font-semibold text-ink">{n}</div>
-          <div className="text-[12px] text-muted">{label}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function RowTable({
   type,
   rows,
@@ -429,40 +450,3 @@ function ChangeList({ changes }: { changes: ImportChange[] }) {
   )
 }
 
-function CredentialsTable({ creds, onDownload }: { creds: ImportCredential[]; onDownload: () => void }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-btn border border-line p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[14px] font-semibold text-ink">New accounts and their temporary passwords</div>
-        <Button type="button" onClick={onDownload}>
-          <span className="material-symbols-outlined !text-[18px]">download</span>
-          Download
-        </Button>
-      </div>
-      <p className="rounded-row bg-caution-bg px-3 py-2 text-[13px] text-caution-fg">
-        Shown only now. Download or copy this list before leaving the page. Each person signs in with their email and this password,
-        then chooses their own. Passwords expire after 7 days. If the list is lost, use Reset password on the person's account.
-      </p>
-      <div className="max-h-[320px] overflow-auto">
-        <table className="w-full text-left text-[13px]">
-          <thead className="text-[12px] text-muted">
-            <tr>
-              <th className="py-1.5 pr-3 font-semibold">Name</th>
-              <th className="py-1.5 pr-3 font-semibold">Email</th>
-              <th className="py-1.5 font-semibold">Temporary password</th>
-            </tr>
-          </thead>
-          <tbody>
-            {creds.map((c) => (
-              <tr key={c.email} className="border-t border-divider">
-                <td className="py-1.5 pr-3 text-ink">{c.full_name}</td>
-                <td className="py-1.5 pr-3 text-ink">{c.email}</td>
-                <td className="py-1.5 font-mono font-semibold text-ink select-all">{c.temporary_password}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}

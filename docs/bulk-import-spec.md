@@ -130,7 +130,18 @@ These apply to both the parser and the import:
 
 9. Not in scope for the pilot
 
-* Automatic detection of what kind of file was uploaded. The admin picks the type.
-* Multi file upload in one go.
+* ~~Automatic detection of what kind of file was uploaded.~~ Built later (branch import-auto-detect, see the end of this file); picking the type by hand still works.
+* ~~Multi file upload in one go.~~ Built later (branch import-auto-detect).
 * Rollback of a completed import.
 * Self service password reset for drivers is available, but admin reset stays the main path until we see whether drivers read their inbox.
+
+Several files at once (branch import-auto-detect)
+
+* The Import page's default is "Several files": any number of .csv/.xlsx/.xls files, every sheet in each. "One file, choose the type" is the original flow and still works. Nothing is selected by default there.
+* Still read in the browser; the server still gets plain rows on /imports/preview and /imports/commit, one type at a time. No AI: plain rules in client/src/lib/sheetParse.ts and importPlan.ts. Every guess keeps { value, confidence, reason }.
+* Per sheet: the header row is the best-scoring of the first 10 rows (none good enough: the sheet is listed as unreadable and skipped). The sheet is classified (route sheet, or one import type), with a reason, and the admin can change it. Columns map by name and synonyms, then by content (Van N, phones, times, grades, addresses, driver names).
+* A route sheet line makes a student row and an assignment row. A student is unique by name + school across all files. A blank Driver cell means the driver the sheet is named after, only if that name matches one of the company's drivers. A Driver cell can also hold a shift, an accommodation (to Notes; "Monitor" also flags it) or both. A time cell holding "Afternoon" is a shift. A one-cell row is a note on the student above it (a day list like M/W/Th also sets that student's days).
+* Route sheets have no driver emails, so they never create drivers: drivers must already exist. "Van 3" is looked up by van number; a sheet with no van uses the van the driver drives today. New assignments start on the date picked on the page. Schools named on route sheets that the company doesn't have become a Schools import (one address per school, else the admin is asked).
+* Imported in order: schools, vans, drivers, monitors, parents, students, assignments. A row that needs a record from the same upload (a school, a student) is shown as "goes in after" rather than an error. A student that can't be imported takes its assignments with it: "skipped because the student row above it could not be imported".
+* The row limit is per type (100 students, 100 assignments, ...). A type over the limit is named, with by how much, and only that type is held back.
+* Student updates only need name and school: the fields required to create a student are checked for new students only, and a blank cell never changes a stored value. A new parent account still needs a parent name and phone.
