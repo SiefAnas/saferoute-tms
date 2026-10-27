@@ -215,13 +215,18 @@ Day 1 = the company-local date of `overdue_since`.
 | `ok` | free, paid, or ACH processing | full | full |
 | `overdue` | days 1-4 | full + banner, email | full, no banner |
 | `admin_read_only` | days 5-8 | **read-only except Billing** + banner | full |
-| `lock_pending` | lock time reached, a run still open | as above | runs in progress continue; **no new check-in** |
+| `lock_pending` | lock time reached, a run still in progress (open < 14 h) | as above | runs in progress continue; **no new check-in** |
 | `locked` | lock time reached, no run open (or `locked_at` already set) | **sign-in → Billing page only** | paused |
 | `needs_payment_info` | post-cutoff company, no payment info yet | Billing page only (start free month) | paused |
 | `canceled` | after the paid month of a canceled subscription | Billing page only (restart) | paused |
 
-- **Lock time:** 22:00 company time on day 8 (Q1). From then the company locks at the first moment
-  no `sessions` row of the company is open. **Never while a run is in progress.**
+- **Lock time:** 22:00 company time on day 8. From then the company locks at the first moment no
+  run of the company is in progress. **Never while a run is in progress.**
+- **A run "in progress"** = a `sessions` row with `check_out_at IS NULL` whose `check_in_at` is
+  **less than 14 hours ago**. A run open longer than that (a forgotten check-out) is ignored for
+  the lock, so it can't hold the lock off forever.
+- **From lock time, new check-ins are refused** (same paused message). Runs already in progress
+  finish normally, and the lock takes effect when the last one ends.
 - **Paused**, for everyone else on web and for everyone on mobile (company admins too): "This account
   is paused. Contact your transportation company." **Never the word "unpaid"**, no price, no
   payment link. The API returns `403 { error: 'account_paused' }` with nothing else.
@@ -249,22 +254,29 @@ Day 1 = the company-local date of `overdue_since`.
 `subscriptions.free_until` (company-local date, the last free day, inclusive). Per company, in the
 database.
 
-- **Joined before the cutoff** (company created before `BILLING_FREE_CUTOFF`): `free_until` = the day
-  before the cutoff, written at migration (existing companies) and at signup. **No trial.** Billing
-  starts on the cutoff date: an up-front charge for the active vans for the days left until the 1st
-  (same per-day formula), then full months on the 1st.
+- **`BILLING_FREE_CUTOFF` is the first billed day.** "Joined before the cutoff" = the company's
+  `created_at`, in its own timezone, is before that date.
+- **Joined before the cutoff:** `free_until` = the day before the cutoff, written at migration
+  (existing companies) and at signup. **No trial.** Billing starts on the cutoff date (the first
+  paid day).
 - **Pilot extensions:** `node scripts/set-free-until.js <company-id> <YYYY-MM-DD> [--dry-run]`.
   It takes only an id and a date, prints old → new for that id, and contains no names. The same
   script with the cutoff date moves an existing company if the cutoff changes.
 - **Joined after the cutoff:** state `needs_payment_info` until a company_admin completes Checkout.
-  That day starts **one free month** (`free_until` = same date next month − 1 day; Q4). After it:
-  prorated days until the 1st up front, then full months.
+  That day starts **one free month**: `free_until` = the same date next month minus one day
+  (payment info added Mar 13 → free through Apr 12, first paid day Apr 13).
+- **First paid day, both cases:** an **up-front charge on that day** for the active vans, for the
+  days from the first paid day to the end of the month (same per-day formula, one rounding per van
+  line). Then full months from the next 1st. At the $31 test price: first paid day Apr 13 in a
+  30-day month → 18 days → $18.60 per van, charged Apr 13; then $31 per van on May 1. If the first
+  paid day is a 1st, there is no stub, just the full month.
 - **Reminders:** if no payment info is on file, company admins get emails 14, 7 and 1 days before
   `free_until` ends (Q5). If it passes with no payment info, `overdue_since` = the start of the day
   after `free_until`, and section 5 applies from day 1.
 - In Stripe the free time is the subscription's trial (`trial_end` = the first 1st after
-  `free_until`), and the stub until that 1st is a one-off invoice created by the billing job on the
-  first paid day.
+  `free_until`), and the stub until that 1st is a one-off invoice that the billing job creates and
+  finalizes (charges) on the first paid day. If that invoice fails, section 5 applies to it like
+  any other bill.
 
 ## 7. Mobile
 
@@ -280,24 +292,22 @@ sees the paused message above and nothing else. No price, no link to safeturns.c
 5. Web Billing page, banners, paused screen; mobile paused screen.
 6. `set-free-until.js`.
 
-## 9. Open questions
+## 9. Decided (owner's answers, round 3)
 
-1. **Lock time:** 22:00 on **day 8** (end of the read-only window, plan assumes this) or day 9?
-2. **Forgotten check-outs:** a session nobody checks out stays open forever and would block the lock
-   forever. Ignore open sessions older than N hours (say 14) for the lock decision?
-3. **`lock_pending`:** plan refuses new check-ins after lock time while existing runs finish. OK, or
-   should new runs still be allowed until 22:00 the next day?
-4. **"One free month":** Mar 13 → free through Apr 12 (plan), or through the end of the next
-   calendar month?
-5. **Reminder emails before `free_until`:** 14, 7 and 1 days before?
-6. **Stub charge timing:** the days from the end of the free period to the 1st are charged **up
-   front on the first paid day** (plan). Or put them on the 1st's bill?
-7. **Rounding:** one rounding per van event line (plan). With the real price, the lines of a month
-   can differ by a cent from rounding the month's total once. OK?
-8. **Cutoff meaning:** `BILLING_FREE_CUTOFF` = the **first billed day** (plan). And "joined" = the
-   company's `created_at` in its timezone?
-9. **Canceled, then restarted:** no new free month (plan)?
-10. **Customer Portal:** may admins cancel from Stripe's portal too, or only from our Billing page?
-    (Plan: only ours, so the cancel rules stay in one place.)
-11. **Sales tax:** Stripe Tax now, or later?
-12. **Stripe receipts and invoices:** to every company_admin, or one billing email per company?
+1. Lock at **22:00 company time on day 8**.
+2. Runs open **more than 14 hours** are ignored for the lock.
+3. From lock time, **new check-ins are refused**; runs already in progress finish.
+4. Free month = **the same date next month minus one day**.
+5. The days from the first paid day to the 1st are **charged up front on the first paid day**,
+   then full months from the 1st.
+6. **One rounding per van line** is fine.
+7. `BILLING_FREE_CUTOFF` is **the first billed day**.
+
+## 10. Still open
+
+1. **Reminder emails before `free_until`:** 14, 7 and 1 days before?
+2. **Canceled, then restarted:** no new free month (plan)?
+3. **Customer Portal:** may admins cancel from Stripe's portal too, or only from our Billing page?
+   (Plan: only ours, so the cancel rules stay in one place.)
+4. **Sales tax:** Stripe Tax now, or later?
+5. **Stripe receipts and invoices:** to every company_admin, or one billing email per company?
