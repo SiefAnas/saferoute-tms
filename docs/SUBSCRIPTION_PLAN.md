@@ -1,6 +1,6 @@
 # Subscription plan (branch `subscription-plan`)
 
-Plan only. No code, no migration, nothing merged. Revision 2: these decisions replace revision 1
+Plan only. No code, no migration, nothing merged. Revision 3: revision 2 plus the owner's answers (section 9)
 where the two disagree. The questions still open are at the end.
 
 ## 0. Ground rules
@@ -43,7 +43,7 @@ where the two disagree. The questions still open are at the end.
 - **Vans have no active flag** and are hard-deleted.
 - **Closure** writes `billing_status = 'closing'`, and undo writes back `'free'`.
 - **Runs** are `sessions` rows: `check_out_at IS NULL` = in progress. A forgotten check-out stays
-  open forever (see Q2).
+  open forever (section 5 ignores runs open more than 14 hours).
 - **Sweeps**: the API runs `setInterval` sweeps for pushes, sign-in reminders and fleet reminders,
   and `scripts/send-due-notifications.js` runs the same work from a Render cron job while the API
   sleeps. Billing uses the same pattern.
@@ -271,7 +271,7 @@ database.
   30-day month → 18 days → $18.60 per van, charged Apr 13; then $31 per van on May 1. If the first
   paid day is a 1st, there is no stub, just the full month.
 - **Reminders:** if no payment info is on file, company admins get emails 14, 7 and 1 days before
-  `free_until` ends (Q5). If it passes with no payment info, `overdue_since` = the start of the day
+  `free_until` ends (still open, section 10). If it passes with no payment info, `overdue_since` = the start of the day
   after `free_until`, and section 5 applies from day 1.
 - In Stripe the free time is the subscription's trial (`trial_end` = the first 1st after
   `free_until`), and the stub until that 1st is a one-off invoice that the billing job creates and
