@@ -1,7 +1,7 @@
 # Subscription plan (branch `subscription-plan`)
 
-Plan only. No code, no migration, nothing merged. Revision 3: revision 2 plus the owner's answers
-(section 9). The questions still open are in section 10.
+Plan only. No code, no migration, nothing merged. Revision 4: revision 2 plus the owner's answers
+(section 9). Every question is answered; sales tax is **waiting on the accountant** (section 4a).
 
 ## 0. Ground rules
 
@@ -29,6 +29,7 @@ Plan only. No code, no migration, nothing merged. Revision 3: revision 2 plus th
 | `STRIPE_SECRET_KEY` | test key while building |
 | `STRIPE_WEBHOOK_SECRET` | signing secret of the webhook endpoint |
 | `STRIPE_PRICE_ID` | the per-van monthly Price |
+| `STRIPE_TAX_RATE_MA_ID` | the fixed Massachusetts Tax Rate set up in Stripe (section 4a) |
 | `BILLING_FREE_CUTOFF` | date (`YYYY-MM-DD`); the owner sets it (section 6) |
 | `BILLING_LIVE_MODE` | must be `on` before a `sk_live_` key is accepted |
 
@@ -62,6 +63,8 @@ Plan only. No code, no migration, nothing merged. Revision 3: revision 2 plus th
 | `stripe_status` | last status Stripe reported (`trialing`, `active`, `past_due`, `canceled`...). For display and debugging only; access is computed (section 5) |
 | `free_until` | date, company-local, **last free day, inclusive** (section 6) |
 | `payment_method_added_at` | timestamptz; null = no payment info on file |
+| `billing_email` | where Stripe sends receipts and invoices; one per company (section 4) |
+| `had_paid_subscription` | boolean; true once the company has been billed, so a restart after cancel gets no free month |
 | `overdue_since` | timestamptz; when Stripe reported the failure (the Stripe event's `created` time, not when we received it), or the day after `free_until` with no payment info. Null = not overdue |
 | `overdue_invoice_id` | the bill that must be paid to unlock |
 | `ach_processing_since` | an ACH payment for the overdue bill is processing (counts as paid until it fails) |
@@ -168,14 +171,39 @@ available here, so the test-clock tests are part of the build.
 - **Stripe Checkout** (hosted) to add payment info and start the subscription. **ACH
   (`us_bank_account`) listed first, card allowed.** In hosted Checkout, Apple Pay and Google Pay
   come with card at no extra code, so they are on. Nothing more is built for them.
-- **Stripe Customer Portal** to change the payment method and see invoices.
+- **Stripe Customer Portal only for updating the card or bank account.** The portal configuration
+  turns off cancel, plan changes and invoice history. Invoices are listed on our Billing page with
+  Stripe's hosted invoice links.
+- **Billing email:** one per company, `subscriptions.billing_email`. Default: the email of the
+  company_admin who completed Checkout. Any company_admin can change it on the Billing page
+  (`PATCH /companies/me/billing`). It is copied to the Stripe customer's `email`, so Stripe's
+  receipts and invoices go there. Our own billing emails (payment failed, read-only, lock, unlock,
+  free period ending) go to every company_admin, as in section 5.
 - Routes, all behind `requireRole('company_admin')`:
   `GET /companies/me/billing`, `POST /companies/me/billing/checkout`, `POST /companies/me/billing/portal`,
   `POST /companies/me/billing/cancel`, `POST /companies/me/billing/resume`. Return URLs are fixed to
   `https://safeturns.com/company/billing` (config, never from the request).
-- **Cancel (decision 4):** sets `cancel_at_period_end`. The company keeps access to the end of the
-  paid month, then it is locked (section 5, "canceled"). No data deleted; deletion only through the
-  existing closing flow. A canceled company's admin can restart from the Billing page.
+- **Cancel only on our Billing page** (`POST /companies/me/billing/cancel`): sets
+  `cancel_at_period_end`. The company keeps access to the end of the paid month, then it is locked
+  (section 5, "canceled"). No data deleted; deletion only through the existing closing flow.
+- **Restart after cancel:** a canceled company's admin can restart from the Billing page. **No new
+  free month**: billing starts on the restart day with the up-front stub to the 1st (section 6),
+  then full months.
+
+### 4a. Sales tax (**waiting on accountant**)
+
+- Massachusetts taxes SaaS at 6.25%. **Bills include a tax line from the start.**
+- A fixed Tax Rate (exclusive, Massachusetts) is set up in Stripe. **The rate lives only in Stripe**;
+  code reads its ID from `STRIPE_TAX_RATE_MA_ID` and never contains the percentage.
+- Who is taxed: a customer whose **billing address** state is MA. Checkout collects the billing
+  address (`billing_address_collection: 'required'`), and the portal lets them update it. The rate
+  is applied to the subscription (`default_tax_rates`), to the first-paid-day stub invoice, and to
+  every proration line, credits included, so a credit returns its tax too.
+- **Prices are shown plus tax**: the Billing page says "{price} per van per month, plus tax", with
+  the price and rate read from Stripe at runtime. Checkout and Stripe's invoices show the tax line.
+- Customers outside MA: no tax line until **Stripe Tax** is turned on, when SaaS is sold outside MA.
+- Waiting on the accountant to confirm the rate, the taxability, and when to switch to Stripe Tax.
+  Nothing in the build depends on the answer except the Tax Rate object in Stripe.
 
 ### Webhook `POST /billing/webhook`
 
@@ -270,9 +298,9 @@ database.
   line). Then full months from the next 1st. At the $31 test price: first paid day Apr 13 in a
   30-day month → 18 days → $18.60 per van, charged Apr 13; then $31 per van on May 1. If the first
   paid day is a 1st, there is no stub, just the full month.
-- **Reminders:** if no payment info is on file, company admins get emails 14, 7 and 1 days before
-  `free_until` ends (still open, section 10). If it passes with no payment info, `overdue_since` = the start of the day
-  after `free_until`, and section 5 applies from day 1.
+- **Reminder:** if no payment info is on file, company admins get one email **7 days before**
+  `free_until` ends. If it passes with no payment info, `overdue_since` = the start of the day after
+  `free_until`, and section 5 applies from day 1.
 - In Stripe the free time is the subscription's trial (`trial_end` = the first 1st after
   `free_until`), and the stub until that 1st is a one-off invoice that the billing job creates and
   finalizes (charges) on the first paid day. If that invoice fails, section 5 applies to it like
@@ -287,13 +315,15 @@ sees the paused message above and nothing else. No price, no link to safeturns.c
 
 1. Migration + `billingAccess()` pure function + its unit tests (no Stripe yet).
 2. Proration function + tests (both examples, January and March).
-3. Stripe test-mode client, Checkout/Portal routes, webhook, test-clock integration tests.
+3. Stripe test-mode client, Checkout/Portal routes, billing email, MA tax rate, webhook,
+   test-clock integration tests.
 4. Sweep jobs (emails, pause_collection, lock writes) + Render cron.
 5. Web Billing page, banners, paused screen; mobile paused screen.
 6. `set-free-until.js`.
 
-## 9. Decided (owner's answers, round 3)
+## 9. Decided (owner's answers)
 
+Round 3:
 1. Lock at **22:00 company time on day 8**.
 2. Runs open **more than 14 hours** are ignored for the lock.
 3. From lock time, **new check-ins are refused**; runs already in progress finish.
@@ -303,11 +333,15 @@ sees the paused message above and nothing else. No price, no link to safeturns.c
 6. **One rounding per van line** is fine.
 7. `BILLING_FREE_CUTOFF` is **the first billed day**.
 
+Round 4:
+8. Reminder before `free_until` ends: **one email, 7 days before**.
+9. Restart after cancel: **no new free month**.
+10. **Cancel only on our Billing page**; Stripe's portal only updates the card or bank account.
+11. **Sales tax:** fixed MA Tax Rate in Stripe from the start, prices shown plus tax, Stripe Tax
+    later. **Waiting on accountant** (section 4a).
+12. **One billing email per company**, editable on the Billing page, default = the admin who added
+    payment info.
+
 ## 10. Still open
 
-1. **Reminder emails before `free_until`:** 14, 7 and 1 days before?
-2. **Canceled, then restarted:** no new free month (plan)?
-3. **Customer Portal:** may admins cancel from Stripe's portal too, or only from our Billing page?
-   (Plan: only ours, so the cancel rules stay in one place.)
-4. **Sales tax:** Stripe Tax now, or later?
-5. **Stripe receipts and invoices:** to every company_admin, or one billing email per company?
+Nothing, apart from the accountant's confirmation in section 4a.
