@@ -357,7 +357,7 @@ changed in scope/vision, not implementation detail, that stays in `BACKLOG.md`/
   routes and a real (if minimal) `/parent` page plus the separate design mockup.
 - **2026-08-25**: file created, reconstructed from migrations/routes/existing docs since
   the original spec file was never actually in the repo.
-- **2026-08-25**: safety pass ahead of real company data (3 Bees Transportation) going
+- **2026-08-25**: safety pass ahead of real company data (the pilot company) going
   live. Section 8's "Real email transport" item moves from "not built" to "code done,
   pending Anas's own SMTP credential entry on Render" — `mailer.js` now sends via
   `nodemailer` over SMTP (Resend), gated on `SMTP_HOST`, dev transport still used whenever

@@ -28,7 +28,7 @@ const CREATABLE = {
 // temporary one, returns it ONCE in this response (`temporary_password`) for the admin to hand
 // over, and flags the account must_change_password: the user sets their own at first login.
 // A `password` in the body is ignored. Drivers now need only name + email (phone, address and
-// license are optional), per the 3 Bees onboarding request.
+// license are optional), per the pilot company's onboarding request.
 async function createUser(req, body = {}) {
   const { email, fullName, role, phone, address, licenseNumber } = body;
   const allowed = CREATABLE[req.auth.role];

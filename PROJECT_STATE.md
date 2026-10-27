@@ -147,7 +147,7 @@ since they were never promised for this pass):
   per suite automatically.
 
 ### Test accounts
-The seed logins that used to be listed here (`admin@3bees.test`, `driver1@3bees.test`, …) **no
+The seed logins that used to be listed here (`admin@acme.test`, `driver1@acme.test`, …) **no
 longer work**: the Neon database now holds different demo data, and there is no seed script
 for it. To get a test account today:
 
@@ -249,7 +249,7 @@ caught it.
 
 Item #7 (`GET /schools`): added, company_admin-only, scoped to schools the caller's company
 already has a student at (not a general directory). Wired into the Students page's
-"existing school" dropdown. Verified live: `admin@3bees.test` now sees "Willow Creek
+"existing school" dropdown. Verified live: `admin@acme.test` now sees "Willow Creek
 Elementary" in that dropdown, not a raw id. 145/145 backend tests.
 
 Item #8 (mirror repo retirement): `saferoute-tms` went public since the mirror was created,
@@ -274,7 +274,7 @@ needed nothing new (`POST /users` already existed, already scoped, already teste
 one previously-uncovered test) and no new invite mechanism was needed (admin-created
 accounts are already stamped verified at creation, same as school_admin's existing
 Staff & Access page). New "Add Driver" card on `CompanyAdminDashboard.tsx`. Verified live,
-full loop: created a real driver as `admin@3bees.test`, logged in *as that driver*
+full loop: created a real driver as `admin@acme.test`, logged in *as that driver*
 immediately after, landed on a working Driver dashboard; confirmed tenant isolation
 directly against the live API from a different company. Toward the end of this session, a
 distinct part of `BACKLOG.md` item #8 also got its final confirmation (auto-deploy from a
@@ -359,7 +359,7 @@ before doing it) and pushed, so `main` is fully current before any Render change
   6525b5b... in branch main` (the real, current `main` tip at the time) — not assumed
   from the config field, read directly from the build log.
 - Live sanity pass: backend `/health` → `{"status":"ok"}`, frontend root → 200, a real
-  login (`admin@3bees.test`) succeeded.
+  login (`admin@acme.test`) succeeded.
 
 **Step 4 — did NOT survive the branch switch, confirmed with real evidence, not
 assumed.** Pushed a trivial docs commit directly to `main` (`65f05f0`) and waited ~5

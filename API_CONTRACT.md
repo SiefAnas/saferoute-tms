@@ -571,7 +571,7 @@ The parent's linked children (same fields as the student record in §3, without 
 {
   "student": { "id": "7e43…", "full_name": "Ava Martinez", "grade": "2" },
   "school": { "name": "Lincoln Elementary" },
-  "company": { "name": "3 Bees Transportation", "phone": "555-100-2000" },
+  "company": { "name": "Acme Transportation", "phone": "555-100-2000" },
   "transport": [
     { "shift_period": "both",
       "van": { "number": "04", "license_plate": "KX-4471", "brand": "Ford", "model": "Transit", "year": 2021, "color": "White" },

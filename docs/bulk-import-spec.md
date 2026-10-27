@@ -1,5 +1,5 @@
 SafeTurns: Bulk Import and Account Lifecycle Spec
-Status: agreed design, not built yet Date: 2026-09-29 Target: build after the 3 Bees pilot is stable, October 2026 Suggested repo path: `docs/bulk-import-spec.md`
+Status: agreed design, not built yet Date: 2026-09-29 Target: build after the pilot is stable, October 2026 Suggested repo path: `docs/bulk-import-spec.md`
 Lines marked DEFAULT are recommendations, not decisions. Change them freely.
 1. Why this exists
 A company with 100 drivers will not type them in one by one. They upload a file. The company must see exactly what will happen before anything is created.
