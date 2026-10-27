@@ -1,4 +1,4 @@
-// Safety pass ahead of real company data going live (3 Bees Transportation): config.js
+// Safety pass ahead of real company data going live (the pilot company): config.js
 // must refuse to boot in production with insecure defaults, and must stay unchanged in
 // dev/test; mailer.js must never attempt a real SMTP send under NODE_ENV=test even when
 // SMTP_HOST is configured. No DB needed — these are process-boundary checks.

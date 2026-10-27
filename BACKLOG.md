@@ -540,12 +540,12 @@ Anas asked for a complete clean-slate reset of all dummy/test accounts and a fre
 richer synthetic dataset. Two things flagged and confirmed before touching anything,
 since this is destructive/irreversible on the shared live dev DB:
 
-1. **What actually counts as "dummy data."** He named `admin@3bees.test` specifically to
+1. **What actually counts as "dummy data."** He named `admin@acme.test` specifically to
    double-check. Investigation turned up something he *didn't* ask about that mattered
    more: `anassief1@gmail.com` (his own real email), `company_admin` of an otherwise-empty
    company called "DMO1," created 2026-07-19 — doesn't match the `.test`/seed-name
    convention at all. Flagged it explicitly rather than assuming either way. Confirmed:
-   delete everything, no exceptions — DMO1, all of `3bees`/Willow Creek (`.test` convention,
+   delete everything, no exceptions — DMO1, all of `acme`/Willow Creek (`.test` convention,
    built up entirely through prior test/demo sessions per this file's own history, not a
    real customer), `Zehan@willowcreek.edu`, and `parent1@dummy.edu` ("SamaCrazy," his own
    earlier manual test of the Parents page) all confirmed for deletion.
@@ -803,8 +803,8 @@ immediately on its own given the exposure:
    by the endpoint's own test assertion failing, fixed to check both signals (`skip_today` =
    parent-skipped OR admin schedule-override skip).
 3. **Dummy parent account created**, same pattern as the existing dummy driver/admin
-   accounts (`admin@3bees.test`, `driver1@3bees.test`, etc.):
-   - `parent1@3bees.test` / `Secret123!`, full name "Taylor Johnson", linked to **Emma
+   accounts (`admin@acme.test`, `driver1@acme.test`, etc.):
+   - `parent1@acme.test` / `Secret123!`, full name "Taylor Johnson", linked to **Emma
      Johnson** (the student with the most complete dummy data already — a real assignment,
      driver, van, and trip history; Liam Carter by contrast has no assignment at all, so
      wasn't a good demo case). Filled in a few previously-null fields on that existing dummy
@@ -815,7 +815,7 @@ immediately on its own given the exposure:
      populated for this student.
    **Anomaly found and flagged, not silently fixed**: while setting this up, found a SECOND
    parent account already in the DB — `parent1@dummy.edu` / "SamaCrazy" — also linked to
-   Emma Johnson, created via the same admin account (`admin@3bees.test`) a few minutes before
+   Emma Johnson, created via the same admin account (`admin@acme.test`) a few minutes before
    this session created its own dummy account. Naming pattern (`dummy.edu`, "SamaCrazy") reads
    like manual human testing, not anything this session generated — almost certainly Anas
    testing the new Parents page himself on the live/shared dev DB after reading the earlier
@@ -825,7 +825,7 @@ immediately on its own given the exposure:
 **Verification**: `npx tsc -b` clean. Full backend suite: **250/250 passing** (248 from the
 last entry + 2 more assertions extending `09-parent-and-permissions.test.cjs` for the new
 detail endpoint, including the skip_today bug fix). Live-verified end-to-end: logged in as
-the real `parent1@3bees.test` account in the browser, confirmed the real dashboard renders
+the real `parent1@acme.test` account in the browser, confirmed the real dashboard renders
 Emma's real vehicle info (VAN-084, Ford, Transit SE, 2025, White), real driver (Sarah
 Jenkins, `tel:555-0199` link works), a real trip timeline reflecting that no pickup has
 actually been logged yet today (not fabricated as "done"), and Liam Carter correctly showing
@@ -1019,10 +1019,10 @@ count bumped 11 → 12.
 against the real dev Neon DB, not just the isolated suite: created a real test parent via the
 new Parents page, linked/unlinked Emma Johnson through the real checklist UI, edited a real
 driver's account (Marcus Rodriguez, a grandfathered NULL-creator row — confirmed any
-same-tenant admin can still edit it) via the new modal, then logged in as `driver2@3bees.test`
+same-tenant admin can still edit it) via the new modal, then logged in as `driver2@acme.test`
 (Sarah Jenkins, Emma's real assigned driver), checked in for real, clicked the real "Mark
 Absent" button, and confirmed via the API server's own console that two real `[mail]` lines
-went out — to `admin@3bees.test` and `principal@willowcreek.test` — with the expected
+went out — to `admin@acme.test` and `principal@willowcreek.test` — with the expected
 subject/body. Cleaned up every test artifact afterward (test parent account, the no-show row,
 and the test check-in/out session).
 
@@ -1104,7 +1104,7 @@ it needs a genuine notification send. Built accordingly:
   created a real parent account linked to the real Emma Johnson, temporarily set her real
   assignment's `pickup_time` to make the window eligible, called the real endpoint, and
   confirmed via the API server's own console that three real `[mail]` log lines went out —
-  to `admin@3bees.test`, `principal@willowcreek.test`, and `driver2@3bees.test` (the real
+  to `admin@acme.test`, `principal@willowcreek.test`, and `driver2@acme.test` (the real
   assigned driver) — with the expected subject/body. Reverted the assignment's `pickup_time`
   and deleted the test parent account + link + skip record afterward.
 - **Real, minimal**: `client/src/pages/parent/ParentHomePage.tsx`, wired as the real `parent`
@@ -1161,7 +1161,7 @@ checks its own query's `isLoading` first (`'…'` while pending) and falls back 
 still isn't in the map. `npx tsc -b` clean.
 
 Verified live, not just read: ran `npm run dev` (api+client), logged in as
-`admin@3bees.test`. The DB's own composite FKs (`assignments_student_company_fk` etc., no
+`admin@acme.test`. The DB's own composite FKs (`assignments_student_company_fk` etc., no
 `ON DELETE` override, so default `RESTRICT`) mean a referenced student/driver/van can't
 actually be deleted while an assignment points at it — so both scenarios were reproduced
 by temporarily patching `api.ts` (delay real fetches to `/students`/`/users`/`/vans`
@@ -1185,9 +1185,9 @@ React Query cache could otherwise keep serving data fetched under the old accoun
 the auth context itself updated.
 
 Verified live across two real tabs, both directions: logged into tab A as
-`admin@3bees.test` (Company Admin dashboard), then logged into tab B as
-`driver1@3bees.test` — tab A automatically flipped to the Driver dashboard (confirmed via
-its own sidebar: "Driver Portal", `driver1@3bees.test`, "Marcus Rodriguez") with no manual
+`admin@acme.test` (Company Admin dashboard), then logged into tab B as
+`driver1@acme.test` — tab A automatically flipped to the Driver dashboard (confirmed via
+its own sidebar: "Driver Portal", `driver1@acme.test`, "Marcus Rodriguez") with no manual
 action on tab A at all. Then logged out from tab B — tab A automatically redirected to
 `/login`. Re-ran the whole sequence a second time from fully fresh tabs with zero
 interleaved file edits (an earlier pass showed transient `useAuth must be used within
@@ -1209,7 +1209,7 @@ table, which already listed these correctly as built management pages.
 
 Rather than build duplicate pages (which would have created dead/confusing code against an
 already-working feature), verified each one live against the real dev Neon DB through the
-actual running app, not just a code read: logged in as `admin@3bees.test` against `npm run
+actual running app, not just a code read: logged in as `admin@acme.test` against `npm run
 dev` (api + client), and for each page did a real create round-trip through the UI —
 add a van, add a student (new "Test Verify Student" under Willow Creek Elementary), add an
 assignment (Liam Carter → Marcus Rodriguez → VAN-1109), set Marcus Rodriguez's pay rate
@@ -1239,7 +1239,7 @@ since it has no Render env-var access — recorded as reported, not confirmed).
 See `NEXT_STEPS.md` (new, repo root) for the Render env-var checklist this session was
 explicitly told not to act on itself (SMTP credentials, `sslmode=verify-full`).
 
-## 2026-08-25 — Safety pass ahead of real company data (3 Bees Transportation) going live
+## 2026-08-25 — Safety pass ahead of real company data (the pilot company) going live
 
 Three items from a prep session Anas ran with Claude (chat), implemented and verified in
 this session, not just written:
@@ -1441,7 +1441,7 @@ the field, and a confirm-password field with a client-side match check.
    Invalidates the `['users', 'driver']` query on success so the existing "Live Driver
    Status" table and the Payroll Summary driver dropdown both pick up the new driver
    immediately, with no other page changes needed.
-   **Verified live, full loop**: logged in as `admin@3bees.test`, submitted the Add Driver
+   **Verified live, full loop**: logged in as `admin@acme.test`, submitted the Add Driver
    form with a real test account — it appeared instantly in Live Driver Status and the
    Payroll dropdown, with a confirmation message ("... can now sign in with the password
    you set"). Logged out, logged back in *as the new driver* with that exact password —
@@ -1455,7 +1455,7 @@ the field, and a confirm-password field with a client-side match check.
    confirmation etc)." `client/src/pages/school-staff/SchoolStaffDashboard.tsx` has a full
    "Pending Custody Confirmations" section (driver name/phone, Confirm button) and a
    "Granted Students" table — not a stub. The prior session (commit range through `2e9f915`)
-   verified this live end-to-end: logged trip as `driver1@3bees.test`, confirmed it as
+   verified this live end-to-end: logged trip as `driver1@acme.test`, confirmed it as
    `jordan@willowcreek.test`, watched status flip from "Awaiting your confirmation" to
    "Complete". If something is actually broken here now, it needs its own fresh live
    reproduction — this entry as originally worded isn't accurate against current code.
@@ -1482,7 +1482,7 @@ the field, and a confirm-password field with a client-side match check.
    company_admin sees the real name of a school it has a student at; a company with no
    students anywhere sees none — isolation; school_admin/driver/unauthenticated all
    rejected), 145/145 passing.
-   **Verified live**: logged in as `admin@3bees.test` (company_admin of 3 Bees
+   **Verified live**: logged in as `admin@acme.test` (company_admin of Acme
    Transportation, which has students at Willow Creek Elementary per the seed data) on the
    live deployed site, opened the Students page's "Add a Student" form, and the "existing
    school" dropdown showed **"Willow Creek Elementary"** — a real name, not a raw id. Zero
@@ -1500,7 +1500,7 @@ the field, and a confirm-password field with a client-side match check.
    `onrender.com` URLs. Manually triggered a deploy on both immediately after repointing;
    Render's own logs show `Cloning from https://github.com/SiefAnas/saferoute-tms` (the
    real repo). Live sanity pass afterward: backend `/health` → `{"status":"ok"}`, frontend
-   root → 200, a real login (`admin@3bees.test`) succeeded.
+   root → 200, a real login (`admin@acme.test`) succeeded.
    **What did NOT work, caught before claiming success**: the task explicitly asked to
    verify that "a normal push... triggers auto-deploy correctly," as its own separate check
    from the manual API-triggered deploy above — and it doesn't. Pushed a real commit with a

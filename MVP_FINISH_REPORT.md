@@ -187,9 +187,9 @@ Final checks are all green (table above). `PENDING.md` is updated. `mvp-finish` 
   (`GET /students`, `/students/:id`). The driver app only asks for assigned students, but the
   API allows more. Small change once you decide (restrict to students on the driver's active
   assignments).
-- **`PROJECT_STATE.md` seed accounts are stale.** Neon has no "3 Bees" company now. It holds
+- **`PROJECT_STATE.md` seed accounts are stale.** Neon has no "Acme" company now. It holds
   Blue Ridge Transportation, Metro School Rides and Sunrise Transit Co., with schools Maple
-  Grove, Oakwood High and Riverside Middle, and the documented `@3bees.test` logins don't work.
+  Grove, Oakwood High and Riverside Middle, and the documented `@acme.test` logins don't work.
   Because of this I didn't use or touch any existing account: every check ran on data I created
   through the normal signup and admin flows.
 - **Payroll month range vs timezone:** `/payroll/summary` compares `check_in_at >= 'YYYY-MM-DD'`,
@@ -217,7 +217,7 @@ Everything uses `mvp…@example.test` emails or "MVP Test …" names (run id `mu
   or deleted.
 
 ## Things I wasn't sure about
-- "Do not delete the 3 Bees company": there is no 3 Bees company in Neon now (see above), so
+- "Do not delete the Acme company": there is no Acme company in Neon now (see above), so
   that rule had nothing to act on. Nothing existing was deleted.
 - "Unique per company if easy": done as a real DB constraint, with a readable 409 message.
 - "Late / On time is coming soon": I added "On time" / "Late" chips that open Coming Soon, next

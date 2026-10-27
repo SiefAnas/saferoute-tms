@@ -15,7 +15,7 @@ Details: `MVP_FINISH_REPORT.md`, `V2_ROADMAP.md` (everything that's deliberately
 
 ## Open decisions
 - **Seed accounts in `PROJECT_STATE.md` are stale**: Neon now holds different demo companies
-  (Blue Ridge, Metro, Sunrise) and no "3 Bees"; the documented logins don't work.
+  (Blue Ridge, Metro, Sunrise) and no "Acme"; the documented logins don't work.
 
 ## V2 (not MVP)
 See `V2_ROADMAP.md`. The app shows **Coming soon** for: driver week schedule, live map, parent
