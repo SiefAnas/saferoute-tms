@@ -1,7 +1,7 @@
 # Subscription plan (branch `subscription-plan`)
 
-Plan only. No code, no migration, nothing merged. Revision 3: revision 2 plus the owner's answers (section 9)
-where the two disagree. The questions still open are at the end.
+Plan only. No code, no migration, nothing merged. Revision 3: revision 2 plus the owner's answers
+(section 9). The questions still open are in section 10.
 
 ## 0. Ground rules
 
