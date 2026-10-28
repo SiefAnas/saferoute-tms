@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { DemoRequest } from './DemoRequest'
-import { CardIcon, Scene, type IconName } from './Illustrations'
+import { CardIcon, type IconName } from './Illustrations'
+import { Photo } from './Photo'
 
-// The public website's pages (look: public.css, pictures: Illustrations.tsx). Wording from the
+// The public website's pages (look: public.css, photos: public/site-photos, card icons: Illustrations.tsx). Wording from the
 // "SafeTurns Website" Claude Design project, minus anything the app doesn't do yet (live map, ETA:
 // see V2_ROADMAP.md) and minus self sign-up.
 
@@ -29,7 +30,7 @@ function Cards({ items, numbered }: { items: Item[]; numbered?: boolean }) {
 }
 
 // Centred headline block that opens most pages.
-function Hero({ eyebrow, title, lead, children }: { eyebrow?: string; title: string; lead?: string; children?: ReactNode }) {
+function Hero({ eyebrow, title, lead, children }: { eyebrow?: string; title: ReactNode; lead?: string; children?: ReactNode }) {
   return (
     <section className="site-hero">
       {eyebrow && <p className="site-eyebrow site-rise">{eyebrow}</p>}
@@ -85,7 +86,12 @@ export function HomePage() {
     <>
       <Hero
         eyebrow="Safer rides for special needs transportation"
-        title="Every ride. Every child. Safely tracked."
+        title={
+          <>
+            <span className="site-line">Every ride.</span> <span className="site-line">Every child.</span>{' '}
+            <span className="site-line">Safely tracked.</span>
+          </>
+        }
         lead="SafeTurns helps special needs transportation teams run their routes, drivers, and students in one place."
       >
         <div className="site-btn-row">
@@ -94,26 +100,26 @@ export function HomePage() {
         </div>
       </Hero>
       <section className="site-wide">
-        <Scene size="hero" name="boarding" label="A child boarding an accessible van with a caring driver" />
+        <Photo size="hero" file="home-wheelchair-van-door" alt="A wheelchair at the open side door of an accessible van" />
       </section>
 
       <section className="site-section">
         <h2>One calm app for everyone who cares about the ride.</h2>
         <ul className="site-cards">
           <li className="site-card site-audience">
-            <Scene size="card" name="driverVan" label="A driver beside a van" />
+            <Photo size="card" file="home-white-van" alt="A white passenger van parked outside a building" />
             <h3>Companies</h3>
             <p>Run your fleet with less stress.</p>
             <AudienceButtons to="/companies" />
           </li>
           <li className="site-card site-audience">
-            <Scene size="card" name="schoolArrival" label="Students arriving at a school entrance" />
+            <Photo size="card" file="home-students-into-school" alt="Students with backpacks walking into school, seen from behind" />
             <h3>Schools</h3>
             <p>Know when every student is on board and where they are.</p>
             <AudienceButtons to="/schools" />
           </li>
           <li className="site-card site-audience">
-            <Scene size="card" name="parentChildHome" label="A parent and child at home" />
+            <Photo size="card" file="home-parent-child-walk" alt="A parent and child walking hand in hand" />
             <h3>Parents</h3>
             <p>Know your child is safe on the way to school.</p>
             <ParentButtons small />
@@ -143,7 +149,7 @@ export function AboutPage() {
         title="Built by someone who has been in the van"
       />
       <section className="site-wide">
-        <Scene size="hero" name="team" label="The SafeTurns team with drivers and a van" />
+        <Photo size="hero" file="about-van" alt="A white passenger van parked outside a building" />
       </section>
       <section className="site-section">
         <p>
@@ -175,11 +181,11 @@ export function MissionPage() {
   return (
     <>
       <section className="site-wide">
-        <Scene size="hero" name="hug" label="A parent hugging their special needs child" />
+        <Photo size="hero" file="mission-hands" alt="A parent holding a child’s hands" />
       </section>
       <Hero title="Our mission" />
       <section className="site-split">
-        <Scene size="split" name="parentChildHome" label="A parent and child at home" />
+        <Photo size="split" file="mission-child-holding-hand" alt="A child holding a parent’s hand" />
         <div className="site-split-text">
           <h2>For parents</h2>
           <p>
@@ -190,7 +196,7 @@ export function MissionPage() {
         </div>
       </section>
       <section className="site-split">
-        <Scene size="split" name="wheelchair" label="A driver helping a child in a wheelchair up the van ramp" />
+        <Photo size="split" file="mission-van-lift" alt="An accessible van with its wheelchair lift lowered" />
         <div className="site-split-text">
           <h2>For companies</h2>
           <p>
@@ -201,7 +207,7 @@ export function MissionPage() {
         </div>
       </section>
       <section className="site-split">
-        <Scene size="split" name="teacherWelcome" label="A teacher welcoming a student at the school door" />
+        <Photo size="split" file="mission-child-backpack" alt="A child with a backpack walking to school, seen from behind" />
         <div className="site-split-text">
           <h2>For schools</h2>
           <p>
@@ -226,7 +232,7 @@ export function PublicCompaniesPage() {
         <DemoRequest audience="company" />
       </Hero>
       <section className="site-wide">
-        <Scene size="hero" name="fleet" label="A fleet of accessible vans and a driver" />
+        <Photo size="hero" file="companies-van-row" alt="A row of white vans parked side by side" />
       </section>
       <section className="site-section" id="benefits">
         <h2>Less stress for your team.</h2>
@@ -253,7 +259,7 @@ export function PublicSchoolsPage() {
         <DemoRequest audience="school" />
       </Hero>
       <section className="site-wide">
-        <Scene size="hero" name="staffGreeting" label="School staff greeting students at drop-off" />
+        <Photo size="hero" file="schools-children-crossing" alt="Two children with backpacks crossing the street to school" />
       </section>
       <section className="site-section" id="benefits">
         <h2>Clear, from the front office.</h2>
@@ -278,7 +284,7 @@ export function PublicParentsPage() {
         <ParentButtons />
       </Hero>
       <section className="site-wide">
-        <Scene size="hero" name="parentPhone" label="A parent checking a phone as their child waves from the van" />
+        <Photo size="hero" file="parents-phone-hands" alt="Hands holding a phone" />
       </section>
       <section className="site-section">
         <h2>Peace of mind, in your pocket.</h2>

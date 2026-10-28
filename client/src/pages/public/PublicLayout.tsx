@@ -45,34 +45,15 @@ function Logo() {
   )
 }
 
-function MenuButton({ open, onClick }: { open: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="site-round site-burger"
-      aria-label={open ? 'Close menu' : 'Open menu'}
-      aria-expanded={open}
-      aria-controls="site-drawer"
-      onClick={onClick}
-    >
-      <span />
-      <span />
-      <span />
-    </button>
-  )
-}
-
 // Shell for the public website at the site root (public.css). Log in goes to the existing /login page.
 export function PublicLayout() {
   const { pathname, hash } = useLocation()
-  const [menuOpen, setMenuOpen] = useState(false)
   const [headerHidden, setHeaderHidden] = useState(false)
   const [theme, setTheme] = useState<SiteTheme>(readSiteTheme)
   const lastY = useRef(0)
 
-  // A new page starts at the top with the menu closed (#demo links scroll themselves).
+  // A new page starts at the top with the top menu showing (#demo links scroll themselves).
   useEffect(() => {
-    setMenuOpen(false)
     setHeaderHidden(false)
     if (!hash) window.scrollTo(0, 0)
   }, [pathname, hash])
@@ -89,13 +70,6 @@ export function PublicLayout() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  useEffect(() => {
-    if (!menuOpen) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [menuOpen])
-
   function toggleTheme() {
     const next = theme === 'dark' ? 'light' : 'dark'
     setTheme(next)
@@ -108,12 +82,10 @@ export function PublicLayout() {
 
   return (
     <div className="site" data-site-theme={theme}>
-      <header className="site-header" data-hidden={headerHidden && !menuOpen}>
+      <header className="site-header" data-hidden={headerHidden}>
         <div className="site-header-inner">
-          <div className="site-header-start">
-            <MenuButton open={menuOpen} onClick={() => setMenuOpen((o) => !o)} />
-            <Logo />
-          </div>
+          <Logo />
+          {/* One row of links: centred on a computer, a sideways-scrolling row under the logo on a phone. */}
           <nav className="site-nav" aria-label="Main">
             {NAV.map((n) => (
               <NavLink key={n.to} to={n.to} end>
@@ -136,28 +108,6 @@ export function PublicLayout() {
           </div>
         </div>
       </header>
-
-      {menuOpen && (
-        <>
-          <div className="site-drawer-backdrop" onClick={() => setMenuOpen(false)} />
-          <aside id="site-drawer" className="site-drawer" aria-label="Menu">
-            <div className="site-drawer-top">
-              <MenuButton open onClick={() => setMenuOpen(false)} />
-              <Logo />
-            </div>
-            <nav aria-label="Pages">
-              {NAV.map((n) => (
-                <NavLink key={n.to} to={n.to} end>
-                  {n.label}
-                </NavLink>
-              ))}
-            </nav>
-            <Link to="/login" className="site-btn">
-              Log in
-            </Link>
-          </aside>
-        </>
-      )}
 
       <main>
         <Outlet />
