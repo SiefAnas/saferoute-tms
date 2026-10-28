@@ -4,17 +4,17 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, NetworkError, setAuthToken, setPasswordChangeRequiredHandler, setUnauthorizedHandler } from '@/api'
 import type { AuthUser, LoginResponse, MeResponse } from '@/api/types'
 import { unregisterThisDevice } from '@/features/notifications/push'
-import { biometricVault } from './biometric'
+import { biometricToken } from './biometric'
 import {
   biometricLabel,
   biometricTitle,
-  endsBiometric,
   sameEmail,
+  TOKEN_EXPIRED_MESSAGE,
   unlockFailureMessage,
   unlockPlan,
 } from './biometricLogic'
 import { sessionEndedMessage } from './sessionMessages'
-import { clearSession, loadSession, saveSession } from './storage'
+import { clearSession, deleteLegacySecrets, loadUser, saveUser } from './storage'
 
 type Status = 'loading' | 'signedOut' | 'signedIn'
 
@@ -28,7 +28,7 @@ export interface BiometricState {
   title: string
   // The account that has biometric unlock on this phone, if any.
   email: string | null
-  // On, available and the password is not due: the login screen offers the scan.
+  // On, a token is saved, and the password is not due: the login screen offers the scan.
   canUnlock: boolean
 }
 
@@ -36,16 +36,16 @@ interface AuthValue {
   status: Status
   user: AuthUser | null
   // Sign in with a typed password. Afterwards the user is asked whether to turn on biometric
-  // unlock (or, if it is already on for this account, the saved password is refreshed).
+  // unlock (or, if it is already on for this account, the new token is locked behind it).
   signIn: (email: string, password: string) => Promise<AuthUser>
-  // Scan, then sign in with the saved password. null when the scan or the sign-in didn't work
+  // Scan, then use the saved token. null when the scan didn't work or the token has expired
   // (the reason is in expiredMessage); throws for errors the login screen shows itself.
   unlockWithBiometric: () => Promise<AuthUser | null>
   biometric: BiometricState
   // True once, right after the app opens with biometric on: the login screen starts the scan.
   consumeAutoUnlock: () => boolean
   // Set a new password (the first-login change from a temporary password). The server signs
-  // out older tokens and returns a fresh one, which replaces the stored session.
+  // out older tokens and returns a fresh one, which replaces the session.
   changePassword: (currentPassword: string, newPassword: string) => Promise<AuthUser>
   signOut: () => Promise<void>
   // Set when the session ended on its own (expired token, deactivated account) rather than
@@ -61,7 +61,7 @@ function askToTurnOnBiometric(): Promise<boolean> {
   return new Promise((resolve) => {
     Alert.alert(
       `Turn on ${BIO_TITLE}?`,
-      `Next time you open the app, unlock it with ${BIO_LABEL} instead of typing your password. We'll still ask for your password once every 3 months.`,
+      `Next time you open the app, unlock it with ${BIO_LABEL} instead of typing your password. We'll still ask for your password when your sign-in expires, and once every 90 days.`,
       [
         { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
         { text: 'Turn on', onPress: () => resolve(true) },
@@ -78,8 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [expiredMessage, setExpiredMessage] = useState<string | null>(null)
   // Guards against several in-flight requests all 401-ing and each tearing down the session.
   const tearingDown = useRef(false)
-  // The live token, for re-saving the session when only the user record changes.
-  const tokenRef = useRef<string | null>(null)
+  // True while a scanned token is being checked, so a plain 401 says "expired, enter your password".
+  const unlocking = useRef(false)
   const [biometric, setBiometric] = useState<BiometricState>({
     label: BIO_LABEL,
     title: BIO_TITLE,
@@ -88,12 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
   const autoUnlock = useRef(false)
 
-  // Re-read the vault and say what the login screen can offer. Returns the plan for callers.
+  // Re-read the biometric record and say what the login screen can offer. Returns the plan.
   const refreshBiometric = useCallback(async () => {
-    const meta = await biometricVault.readMeta()
+    const meta = await biometricToken.readMeta()
     const plan = unlockPlan({
       biometricEnabled: meta !== null,
-      biometricAvailable: biometricVault.isAvailable(),
+      tokenSaved: meta?.hasToken ?? false,
+      biometricAvailable: biometricToken.isAvailable(),
       lastPasswordLoginAt: meta?.lastPasswordLoginAt ?? null,
       now: Date.now(),
       label: BIO_TITLE,
@@ -102,31 +103,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return plan
   }, [])
 
-  // After a sign-in with a typed password. Same account already on: save the password again
-  // (it may have changed) and restart the 3-month clock. Another account's: forget it, this is
-  // a different person on the phone. Not on: ask.
+  // After a sign-in with a typed password, with the token it returned. Same account already
+  // on: lock the new token behind the scan and restart the 90-day clock. Another account's:
+  // forget it, this is a different person on the phone. Not on: ask.
   const offerBiometric = useCallback(
-    async (email: string, password: string) => {
-      if (!biometricVault.isAvailable()) return
-      const meta = await biometricVault.readMeta()
+    async (email: string, token: string) => {
+      if (!biometricToken.isAvailable()) return
+      const meta = await biometricToken.readMeta()
       const now = Date.now()
       try {
         if (meta && sameEmail(meta.email, email)) {
-          await biometricVault.enable(email, password, now, UNLOCK_PROMPT)
+          await biometricToken.enable(email, token, now, UNLOCK_PROMPT)
           return
         }
-        if (meta) await biometricVault.disable()
+        if (meta) await biometricToken.disable()
         if (!(await askToTurnOnBiometric())) return
-        await biometricVault.enable(email, password, now, UNLOCK_PROMPT)
+        await biometricToken.enable(email, token, now, UNLOCK_PROMPT)
         // iOS doesn't scan when saving, so scan once now: it proves Face ID works and shows the
         // permission question at the moment the user asked for it, not on the next app open.
         if (Platform.OS === 'ios') {
-          const check = await biometricVault.unlock(UNLOCK_PROMPT)
-          if (!check.ok) await biometricVault.disable()
+          const check = await biometricToken.unlock(UNLOCK_PROMPT)
+          if (!check.ok) await biometricToken.disable()
         }
       } catch {
         // Scan cancelled while saving, or the keystore refused: leave it off, offer it next time.
-        await biometricVault.disable()
+        await biometricToken.disable()
       } finally {
         await refreshBiometric()
       }
@@ -134,34 +135,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refreshBiometric],
   )
 
-  // Drop everything that belonged to the signed-out user: the token, the cached user record
-  // and every cached query result. Without the cache clear the next person to sign in on this
-  // phone would see the previous driver's students for a moment (API_CONTRACT.md §7).
+  // Drop everything that belonged to the signed-out user: the token (in memory and behind the
+  // scan), the cached user record and every cached query result. Without the cache clear the
+  // next person to sign in on this phone would see the previous driver's students for a moment
+  // (API_CONTRACT.md §7). Biometric stays on for the account, ready for its next password sign-in.
   const teardown = useCallback(
     async (message: string | null) => {
       // Stop pushes to this phone for the person leaving (works without a session; not awaited,
       // so signing out never waits on the network).
       void unregisterThisDevice()
       setAuthToken(null)
-      tokenRef.current = null
       setUser(null)
       setStatus('signedOut')
       setExpiredMessage(message)
       queryClient.cancelQueries()
       queryClient.clear()
-      await clearSession()
+      await Promise.all([clearSession(), biometricToken.forgetToken()])
+      await refreshBiometric()
     },
-    [queryClient],
+    [queryClient, refreshBiometric],
   )
 
   useEffect(() => {
     setUnauthorizedHandler((info) => {
       if (tearingDown.current) return
       tearingDown.current = true
-      // The saved password can't work any more: forget it so the scan doesn't keep failing.
-      if (endsBiometric(info?.code)) void biometricVault.disable().then(refreshBiometric)
       // Deactivated, password reset, temporary password expired or plain expiry: say which.
-      void teardown(sessionEndedMessage(info)).finally(() => {
+      // A plain expiry of a token the scan just unlocked: ask for the password.
+      const message = unlocking.current && !info?.code ? TOKEN_EXPIRED_MESSAGE : sessionEndedMessage(info)
+      void teardown(message).finally(() => {
         tearingDown.current = false
       })
     })
@@ -171,11 +173,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser((u) => {
         if (!u || u.must_change_password) return u
         const next = { ...u, must_change_password: true }
-        if (tokenRef.current) void saveSession({ token: tokenRef.current, user: next })
+        void saveUser(next)
         return next
       })
     })
-  }, [teardown, refreshBiometric])
+  }, [teardown])
 
   // Back to the foreground: prove the session again, so a deactivated or reset account is signed
   // out when the phone is picked up, not only on its next action. No signal: keep the session.
@@ -191,12 +193,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [status])
 
   // App start. There is no "remember me": the session lasts until the app is closed. With
-  // biometric on, the login screen opens straight into the scan (see unlockWithBiometric);
-  // without it, or once the password is 3 months old, the user types the password. The stored
-  // token is only kept as the offline fallback for a successful scan.
+  // biometric on and a token saved, the login screen opens straight into the scan (see
+  // unlockWithBiometric); otherwise, or once the password is 90 days old, the user types it.
   useEffect(() => {
     let cancelled = false
     void (async () => {
+      await deleteLegacySecrets()
       const plan = await refreshBiometric()
       if (cancelled) return
       if (plan.kind === 'biometric') {
@@ -213,14 +215,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshBiometric])
 
-  // A fresh token from POST /auth/login (typed or saved password).
+  // A fresh token from POST /auth/login or change-password: in memory, plus the user record.
   const startSession = useCallback(
     async (res: LoginResponse) => {
       // Start from an empty cache: this may be a different person on a shared phone.
       queryClient.clear()
       setAuthToken(res.token)
-      tokenRef.current = res.token
-      await saveSession({ token: res.token, user: res.user })
+      await saveUser(res.user)
       setExpiredMessage(null)
     },
     [queryClient],
@@ -232,50 +233,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setExpiredMessage(plan.notice)
       return null
     }
-    const unlocked = await biometricVault.unlock(UNLOCK_PROMPT)
+    const unlocked = await biometricToken.unlock(UNLOCK_PROMPT)
     if (!unlocked.ok) {
       if (unlocked.reason === 'missing') await refreshBiometric()
       setExpiredMessage(unlockFailureMessage(unlocked.reason, BIO_TITLE))
       return null
     }
+    const stored = await loadUser()
+    if (!stored || !sameEmail(stored.email, unlocked.email)) {
+      // The token without its user record: start over with the password.
+      await teardown(TOKEN_EXPIRED_MESSAGE)
+      return null
+    }
+    setAuthToken(unlocked.token)
+    unlocking.current = true
     try {
-      const res = await api.login(unlocked.email, unlocked.password)
-      await startSession(res)
-      setUser(res.user)
-      setStatus('signedIn')
-      return res.user
+      // Prove the token. Expired (12 hours) or revoked: the 401 handler signs out and the user
+      // types the password; nothing else is tried.
+      await api.get<MeResponse>('/auth/me')
     } catch (err) {
-      if (err instanceof NetworkError) {
-        // No signal: the scan proved it's the owner, so carry on with the stored session if it
-        // is theirs, as the app did before biometric. The screens show their own retry.
-        const stored = await loadSession()
-        if (stored && sameEmail(stored.user.email, unlocked.email)) {
-          setAuthToken(stored.token)
-          tokenRef.current = stored.token
-          setUser(stored.user)
-          setStatus('signedIn')
-          return stored.user
-        }
+      if (err instanceof ApiError && err.status === 401) return null
+      if (!(err instanceof NetworkError)) {
+        setAuthToken(null)
         throw err
       }
-      if (err instanceof ApiError && err.status === 401) {
-        // The saved password no longer works (changed, reset, or the account was closed).
-        await biometricVault.disable()
-        await refreshBiometric()
-        setExpiredMessage(`Sign in with your password. You can turn ${BIO_LABEL} on again after.`)
-        return null
-      }
-      throw err
+      // No signal: the scan proved it's the owner, so carry on with the token. The screens show
+      // their own retry, and the first 401 once back online sends them to the password.
+    } finally {
+      unlocking.current = false
     }
-  }, [refreshBiometric, startSession])
+    queryClient.clear()
+    setExpiredMessage(null)
+    setUser(stored)
+    setStatus('signedIn')
+    return stored
+  }, [refreshBiometric, teardown, queryClient])
 
   const signIn = useCallback(
     async (email: string, password: string) => {
       const res = await api.login(email.trim(), password)
       await startSession(res)
-      await biometricVault.recordPasswordLogin(res.user.email, Date.now())
+      await biometricToken.recordPasswordLogin(res.user.email, Date.now())
       // Not on a temporary password: that one is about to be replaced (see changePassword).
-      if (!res.user.must_change_password) await offerBiometric(res.user.email, password)
+      if (!res.user.must_change_password) await offerBiometric(res.user.email, res.token)
       setUser(res.user)
       setStatus('signedIn')
       return res.user
@@ -286,15 +286,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const changePassword = useCallback(
     async (currentPassword: string, newPassword: string) => {
       const res = await api.post<LoginResponse>('/auth/change-password', { currentPassword, newPassword })
-      setAuthToken(res.token)
-      tokenRef.current = res.token
-      await saveSession({ token: res.token, user: res.user })
-      // The first real password: the moment to offer biometric (or refresh the saved one).
-      await offerBiometric(res.user.email, newPassword)
+      await startSession(res)
+      // The first real password: the moment to offer biometric (or lock the new token).
+      await offerBiometric(res.user.email, res.token)
       setUser(res.user)
       return res.user
     },
-    [offerBiometric],
+    [startSession, offerBiometric],
   )
 
   const signOut = useCallback(() => teardown(null), [teardown])
