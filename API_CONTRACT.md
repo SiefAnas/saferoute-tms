@@ -747,6 +747,15 @@ Public (no login, rate limited, code in the body):
 - `POST /auth/setup-account { token, newPassword }`: the approval email's link. 24 hours, once;
   400 `SETUP_LINK_INVALID` otherwise.
 
+## 5f. Public website forms (no login, branch `public-website`)
+Used by the public pages at the site root (Contact us, Companies, Schools). Both share one rate
+limit: 10 / hour per IP (`RATE_LIMIT_PUBLIC_FORM_MAX`).
+- `POST /public/contact { topic: "business" | "support", full_name, email, phone?, message }`:
+  emailed to admin@safeturns.com (business) or support@safeturns.com (support); nothing stored.
+  502 if the email could not be sent.
+- `POST /public/demo-request { audience: "company" | "school", full_name, email, phone?, organization, message? }`:
+  201 `{ id, created_at }`. Saved in `demo_requests`, then emailed to admin@safeturns.com.
+
 ## 6. CORS and networking notes for mobile
 - CORS only applies to browsers. Native iOS/Android HTTP clients don't send an `Origin`
   header, so `ALLOWED_ORIGINS` on the server doesn't affect them. No change needed for the app.

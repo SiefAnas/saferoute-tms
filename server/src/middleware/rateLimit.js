@@ -85,4 +85,11 @@ const accountSetupLimiter = createLimiter({
   message: 'too many attempts, please try again later',
 });
 
-module.exports = { staffFormLimiter, accountSetupLimiter, passwordResetEmailLimiter, loginLimiter, signupLimiter, searchLimiter, verifyLimiter, passwordResetLimiter };
+// Public website Contact us / Book a demo forms (routes/publicSite.js): each call sends mail.
+const publicFormLimiter = createLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_PUBLIC_FORM_MAX) || 10,
+  message: 'too many messages, please try again later',
+});
+
+module.exports = { publicFormLimiter, staffFormLimiter, accountSetupLimiter, passwordResetEmailLimiter, loginLimiter, signupLimiter, searchLimiter, verifyLimiter, passwordResetLimiter };
