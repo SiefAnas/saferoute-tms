@@ -1,12 +1,12 @@
 // The rules for biometric unlock, kept free of React Native so they can be tested in plain Node.
 //
 // How it works: after a password sign-in the user can turn on Face ID (iPhone) or fingerprint /
-// face (Android). The password is then kept in the phone's secure storage behind the biometric
-// lock, and each time the app opens a successful scan reads it back and signs in again for a
-// fresh token. The token itself lasts 12 hours with no refresh (API_CONTRACT.md §2), which is
-// why the scan unlocks the password and not just the old token.
+// face (Android). The login token from that sign-in is then kept in the phone's secure storage
+// behind the biometric lock, and each time the app opens a successful scan unlocks it. The
+// password is never saved. The token lasts 12 hours with no refresh (API_CONTRACT.md §2), so
+// once it has expired the scan can't help and the user types the password again.
 
-// Every 3 months the password has to be typed again, even when the scan works.
+// Every 90 days the password has to be typed again, even when the scan works.
 export const PASSWORD_MAX_AGE_DAYS = 90
 export const PASSWORD_MAX_AGE_MS = PASSWORD_MAX_AGE_DAYS * 24 * 60 * 60 * 1000
 
@@ -29,12 +29,14 @@ export type UnlockPlan =
 
 export function unlockPlan(input: {
   biometricEnabled: boolean
+  // A token is locked behind the scan (not signed out, not rejected by the server).
+  tokenSaved: boolean
   biometricAvailable: boolean
   lastPasswordLoginAt: number | null
   now: number
   label: string
 }): UnlockPlan {
-  if (!input.biometricEnabled) return { kind: 'password', notice: null }
+  if (!input.biometricEnabled || !input.tokenSaved) return { kind: 'password', notice: null }
   if (!input.biometricAvailable) {
     return { kind: 'password', notice: `${input.label} is not set up on this phone. Sign in with your password.` }
   }
@@ -44,7 +46,9 @@ export function unlockPlan(input: {
   return { kind: 'biometric' }
 }
 
-export const PASSWORD_DUE_MESSAGE = 'For your security, enter your password. We ask for it once every 3 months.'
+export const PASSWORD_DUE_MESSAGE = 'For your security, enter your password. We ask for it once every 90 days.'
+
+export const TOKEN_EXPIRED_MESSAGE = 'Your sign-in has expired. Enter your password to continue.'
 
 // What the platform calls it. iPhone: Face ID. Android: fingerprint or face, whichever the phone has.
 export function biometricLabel(platform: string): string {
@@ -69,9 +73,4 @@ export function unlockFailureMessage(reason: UnlockFailure, label: string): stri
       // New phone, a restored backup, or the phone's fingerprints / face changed.
       return `${label} needs to be turned on again on this phone. Sign in with your password first.`
   }
-}
-
-// Sessions the server ended because the stored password can no longer work: forget it.
-export function endsBiometric(code: string | undefined): boolean {
-  return code === 'PASSWORD_CHANGED' || code === 'ACCOUNT_INACTIVE' || code === 'TEMP_PASSWORD_EXPIRED'
 }
