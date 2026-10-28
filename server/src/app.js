@@ -27,6 +27,8 @@ const legalRoutes = require('./routes/legal');
 const notificationRoutes = require('./routes/notifications');
 const fleetRoutes = require('./routes/fleet');
 const signinReminderRoutes = require('./routes/signinReminders');
+const staffLinkRoutes = require('./routes/staffLinks');
+const staffFormRoutes = require('./routes/staffForm');
 
 function createApp() {
   const app = express();
@@ -83,6 +85,9 @@ function createApp() {
   app.use('/notifications', notificationRoutes);
   app.use('/fleet', fleetRoutes);
   app.use('/signin-reminders', signinReminderRoutes);
+  app.use('/staff-links', staffLinkRoutes.links);
+  app.use('/staff-submissions', staffLinkRoutes.submissions);
+  app.use('/staff-form', staffFormRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
 

@@ -16,6 +16,7 @@ import { Drawer, DetailRows } from '../../components/Drawer'
 import { EmptyState } from '../../components/EmptyState'
 import { WeekdayPicker } from '../../components/WeekdayPicker'
 import { NameCell, NoMatches, PageIntro, SearchField, StatCard, StatRow, TableCard, TableRow, matches } from '../../components/Records'
+import { StaffLinkButton } from '../../components/StaffLinkButton'
 import { PageTopBar } from '../../layouts/TopBar'
 import { clockTime } from '../driver/driverData'
 import type { CreatedUser, Monitor, MonitorAssignment, PayRule, PublicUser } from '../../types/api'
@@ -100,6 +101,7 @@ export function MonitorsPage() {
     <div className="flex flex-col gap-5">
       <PageTopBar title="Monitors">
         <SearchField value={q} onChange={setQ} placeholder="Search monitors" />
+        <StaffLinkButton role="monitor" />
         <Button onClick={() => setShowAdd(true)}>
           <span className="material-symbols-outlined !text-[18px]">person_add</span>
           Add monitor
