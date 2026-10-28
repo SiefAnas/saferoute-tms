@@ -30,42 +30,56 @@ export function ContactPage() {
   }
 
   return (
-    <>
-      <h1>Let's talk.</h1>
-      <p>Tell us a little about you. We will get back to you soon.</p>
-      {done ? (
-        <p role="status">Thank you. We got your message and will reply soon.</p>
-      ) : (
-        <form onSubmit={handleSubmit} aria-label="Contact us">
-          <p>
-            <label htmlFor="contact-topic">What is this about?</label>
-            <select id="contact-topic" value={topic} onChange={(e) => setTopic(e.target.value as Topic)}>
-              <option value="business">Business question</option>
-              <option value="support">Technical support</option>
-            </select>
-          </p>
-          <p>
-            <label htmlFor="contact-name">Your name</label>
-            <input id="contact-name" required maxLength={200} autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-          </p>
-          <p>
-            <label htmlFor="contact-email">Email</label>
-            <input id="contact-email" type="email" required maxLength={254} autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </p>
-          <p>
-            <label htmlFor="contact-phone">Phone (optional)</label>
-            <input id="contact-phone" type="tel" maxLength={40} autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </p>
-          <p>
-            <label htmlFor="contact-message">Message</label>
-            <textarea id="contact-message" required maxLength={5000} value={message} onChange={(e) => setMessage(e.target.value)} />
-          </p>
-          {error && <p role="alert">{error}</p>}
-          <button type="submit" disabled={submitting}>
-            {submitting ? 'Sending...' : 'Send message'}
-          </button>
-        </form>
-      )}
-    </>
+    <section className="site-contact">
+      <div className="site-contact-intro">
+        <p className="site-eyebrow site-rise">Contact us</p>
+        <h1 className="site-rise site-rise-2">Let's talk.</h1>
+        <p className="site-lead site-rise site-rise-3">Tell us a little about you. We will get back to you soon.</p>
+        <div className="site-contact-lines site-rise site-rise-3">
+          <span>Business questions: <a href="mailto:admin@safeturns.com">admin@safeturns.com</a></span>
+          <span>Technical support: <a href="mailto:support@safeturns.com">support@safeturns.com</a></span>
+        </div>
+      </div>
+      <div className="site-form-card site-rise site-rise-2">
+        {done ? (
+          <div className="site-thanks" role="status">
+            <h2>Thank you.</h2>
+            <p>We got your message and will reply soon.</p>
+          </div>
+        ) : (
+          <form className="site-form" onSubmit={handleSubmit} aria-label="Contact us">
+            <label className="site-field">
+              What is this about?
+              <select value={topic} onChange={(e) => setTopic(e.target.value as Topic)}>
+                <option value="business">Business question</option>
+                <option value="support">Technical support</option>
+              </select>
+            </label>
+            <label className="site-field">
+              Your name
+              <input required maxLength={200} autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </label>
+            <label className="site-field">
+              Email
+              <input type="email" required maxLength={254} autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </label>
+            <label className="site-field">
+              Phone (optional)
+              <input type="tel" maxLength={40} autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </label>
+            <label className="site-field">
+              Message
+              <textarea required maxLength={5000} value={message} onChange={(e) => setMessage(e.target.value)} />
+            </label>
+            {error && <p className="site-error" role="alert">{error}</p>}
+            <div className="site-btn-row">
+              <button type="submit" className="site-btn" disabled={submitting}>
+                {submitting ? 'Sending...' : 'Send message'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </section>
   )
 }
