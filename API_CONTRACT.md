@@ -726,6 +726,27 @@ Driver: `POST /fleet/fuel`, `GET /fleet/fuel/mine` only. Everything else: compan
   has not checked in for that run yet, once per run, never after the first stop. No run, no push.
 - Checked every minute by the API and by the Render cron job (`docs/render-cron-job.md`).
 
+## 5e. Staff info by link (branch `staff-info-links`)
+Company admin (web):
+- `POST /staff-links { role: 'driver'|'monitor', expires_in_days: 3|7 }` → `{ link, url }`. The `url`
+  (with its 64-character code) is in this response only; the server keeps a hash of the code.
+  Each link takes at most `STAFF_LINK_MAX_SUBMISSIONS` forms (default 50).
+- `GET /staff-links?role=` → active links `[{ id, role, code_hint, max_submissions, submission_count, expires_at, ... }]`.
+- `POST /staff-links/:id/revoke` → stops the link at once.
+- `GET /staff-submissions?role=&status=` → forms, newest first, with `status` (`new|seen|approved|rejected`),
+  `email_has_account` and `van_match` (driver forms; same plate in this company, ignoring spaces and dashes).
+- `POST /staff-submissions/:id/seen` (new → seen; the sender can no longer edit), `/reject`,
+  `/approve` → `{ submission, user, van, van_matched }` (409 `EMAIL_HAS_ACCOUNT` if the email has an
+  account anywhere), `/resend-setup` (a fresh setup link, until the person has set a password).
+Public (no login, rate limited, code in the body):
+- `POST /staff-form/link { code }` → `{ role, company_name, expires_at }`; 410 `LINK_INACTIVE` for an
+  unknown, revoked or expired link.
+- `POST /staff-form/submit { code, ...fields }` → `{ edit_token, submission }`; 409 `LINK_FULL` at the cap.
+- `POST /staff-form/mine { code, edit_token }` / `PUT /staff-form/mine { code, edit_token, ...fields }`:
+  the sender's own form; editing answers 409 `SUBMISSION_LOCKED` once the admin opened it.
+- `POST /auth/setup-account { token, newPassword }`: the approval email's link. 24 hours, once;
+  400 `SETUP_LINK_INVALID` otherwise.
+
 ## 6. CORS and networking notes for mobile
 - CORS only applies to browsers. Native iOS/Android HTTP clients don't send an `Origin`
   header, so `ALLOWED_ORIGINS` on the server doesn't affect them. No change needed for the app.

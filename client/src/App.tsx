@@ -8,7 +8,8 @@ import { ParentLayout } from './layouts/ParentLayout'
 import { LoginPage } from './pages/login/LoginPage'
 import { RegisterPage } from './pages/register/RegisterPage'
 import { VerifyEmailPage } from './pages/register/VerifyEmailPage'
-import { ForgotPasswordPage, ResetPasswordPage, SetPasswordPage } from './pages/login/PasswordPages'
+import { ForgotPasswordPage, ResetPasswordPage, SetPasswordPage, SetupAccountPage } from './pages/login/PasswordPages'
+import { StaffFormPage } from './pages/staff-form/StaffFormPage'
 import { DriverLayout } from './layouts/DriverLayout'
 import { MonitorLayout } from './layouts/MonitorLayout'
 import { ConfirmEmailChangePage } from './pages/account/ConfirmEmailChangePage'
@@ -22,6 +23,7 @@ const DriverWeekPage = lazy(() => import('./pages/driver/DriverWeekPage').then((
 const DriverFuelPage = lazy(() => import('./pages/driver/DriverFuelPage').then((m) => ({ default: m.DriverFuelPage })))
 const DriverPayPage = lazy(() => import('./pages/driver/DriverPayPage').then((m) => ({ default: m.DriverPayPage })))
 const MonitorTodayPage = lazy(() => import('./pages/monitor/MonitorTodayPage').then((m) => ({ default: m.MonitorTodayPage })))
+const StaffPendingPage = lazy(() => import('./pages/company/StaffPendingPage').then((m) => ({ default: m.StaffPendingPage })))
 const MonitorsPage = lazy(() => import('./pages/company/MonitorsPage').then((m) => ({ default: m.MonitorsPage })))
 const CompanyAdminDashboard = lazy(() => import('./pages/company/CompanyAdminDashboard').then((m) => ({ default: m.CompanyAdminDashboard })))
 const DriversPage = lazy(() => import('./pages/company/DriversPage').then((m) => ({ default: m.DriversPage })))
@@ -53,6 +55,7 @@ const COMPANY_NAV: NavGroup[] = [
     items: [
       { to: '/company/drivers', label: 'Drivers', icon: 'person', badge: 'live-drivers' },
       { to: '/company/monitors', label: 'Monitors', icon: 'badge' },
+      { to: '/company/pending', label: 'Pending', icon: 'pending_actions' },
       { to: '/company/vans', label: 'Fleet', icon: 'local_shipping' },
       { to: '/company/assignments', label: 'Assignments', icon: 'assignment' },
     ],
@@ -132,6 +135,8 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
+        <Route path="/setup-account" element={<SetupAccountPage />} />
+        <Route path="/staff-form" element={<StaffFormPage />} />
         <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />
         <Route path="/privacy" element={<LegalPage doc="privacy" />} />
         <Route path="/terms" element={<LegalPage doc="terms" />} />
@@ -167,6 +172,7 @@ function App() {
             <Route path="/company" element={<CompanyAdminDashboard />} />
             <Route path="/company/drivers" element={<DriversPage />} />
             <Route path="/company/monitors" element={<MonitorsPage />} />
+            <Route path="/company/pending" element={<StaffPendingPage />} />
             <Route path="/company/vans" element={<VansPage />} />
             <Route path="/company/assignments" element={<AssignmentsPage />} />
             <Route path="/company/payroll" element={<PayrollPage />} />

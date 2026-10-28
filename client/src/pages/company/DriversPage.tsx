@@ -15,6 +15,7 @@ import { Drawer, DetailRows } from '../../components/Drawer'
 import { EmptyState } from '../../components/EmptyState'
 import { NameCell, NoMatches, PageIntro, SearchField, StatCard, StatRow, TableCard, TableRow, matches } from '../../components/Records'
 import { useToast } from '../../components/Toast'
+import { StaffLinkButton } from '../../components/StaffLinkButton'
 import { PageTopBar } from '../../layouts/TopBar'
 import { DriverSigninReminder, SigninReminderCard } from './SigninReminderControls'
 import type { CsvColumn } from '../../lib/csv'
@@ -169,6 +170,7 @@ export function DriversPage() {
           onImportRow={handleImportRow}
           onImportComplete={() => queryClient.invalidateQueries({ queryKey: ['users', 'driver'] })}
         />
+        <StaffLinkButton role="driver" />
         <Button onClick={() => setShowAddModal(true)}>
           <span className="material-symbols-outlined !text-[18px]">person_add</span>
           Add driver

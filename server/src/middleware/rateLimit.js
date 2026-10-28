@@ -70,4 +70,19 @@ const passwordResetEmailLimiter = DISABLED
       message: { error: 'too many password reset attempts, please try again later' },
     });
 
-module.exports = { passwordResetEmailLimiter, loginLimiter, signupLimiter, searchLimiter, verifyLimiter, passwordResetLimiter };
+// Public staff info form (routes/staffForm.js): no login, takes guesses at a link code and writes
+// rows, so it gets its own budget.
+const staffFormLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_STAFF_FORM_MAX) || 30,
+  message: 'too many attempts, please try again later',
+});
+
+// "Choose your password" page from the approval email: takes guesses at a setup token.
+const accountSetupLimiter = createLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_SETUP_MAX) || 10,
+  message: 'too many attempts, please try again later',
+});
+
+module.exports = { staffFormLimiter, accountSetupLimiter, passwordResetEmailLimiter, loginLimiter, signupLimiter, searchLimiter, verifyLimiter, passwordResetLimiter };

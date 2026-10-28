@@ -746,3 +746,55 @@ export interface SigninReminderSettings {
   default_minutes: number | null // null = off for the company
   drivers: SigninReminderDriver[]
 }
+
+// Staff info links (server services/staffLinks.js). The full link (with its code) is only in the
+// create response; the list shows code_hint (the code's last 4 characters) to tell links apart.
+export type StaffRole = 'driver' | 'monitor'
+export interface StaffLink {
+  id: string
+  role: StaffRole
+  code_hint: string
+  max_submissions: number
+  submission_count: number
+  expires_at: string
+  revoked_at: string | null
+  created_at: string
+  active: boolean
+}
+export interface CreatedStaffLink {
+  link: StaffLink
+  url: string
+}
+export type StaffSubmissionStatus = 'new' | 'seen' | 'approved' | 'rejected'
+export interface StaffFormValues {
+  full_name: string
+  phone: string
+  email: string
+  // Driver forms only.
+  van_plate?: string
+  van_make?: string
+  van_model?: string
+  van_color?: string
+  van_year?: number
+}
+export interface StaffSubmission extends StaffFormValues {
+  id: string
+  link_id: string
+  link_hint: string
+  role: StaffRole
+  status: StaffSubmissionStatus
+  submitted_at: string
+  updated_at: string
+  seen_at: string | null
+  decided_at: string | null
+  approved_user_id: string | null
+  approved_van_id: string | null
+  email_has_account: boolean
+  van_match: { id: string; license_plate: string; number: string | null } | null
+}
+export interface StaffApproval {
+  submission: StaffSubmission
+  user: { id: string; email: string; full_name: string; role: StaffRole }
+  van: { id: string; license_plate: string; number: string | null } | null
+  van_matched: boolean
+}

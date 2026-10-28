@@ -53,4 +53,7 @@ module.exports = {
   fleetSweepMs: Number(process.env.FLEET_SWEEP_MS) || 15 * 60 * 1000,
   // How often the driver sign-in reminder check runs (services/signinReminders.js).
   signinSweepMs: Number(process.env.SIGNIN_SWEEP_MS) || 60 * 1000,
+  // Staff info links (services/staffLinks.js): how many forms one link accepts. Copied onto each
+  // link when it is made, so changing it affects new links only.
+  staffLinkMaxSubmissions: Number(process.env.STAFF_LINK_MAX_SUBMISSIONS) || 50,
 };

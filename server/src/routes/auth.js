@@ -4,7 +4,8 @@ const pool = require('../db/pool');
 const { verifyPassword, DUMMY_HASH } = require('../auth/password');
 const authenticate = require('../middleware/authenticate');
 const { verifyEmail, resendVerification } = require('../services/signup');
-const { loginLimiter, verifyLimiter, passwordResetLimiter, passwordResetEmailLimiter } = require('../middleware/rateLimit');
+const { loginLimiter, verifyLimiter, passwordResetLimiter, passwordResetEmailLimiter, accountSetupLimiter } = require('../middleware/rateLimit');
+const { completeAccountSetup } = require('../services/staffLinks');
 const { tempPasswordExpired } = require('../services/passwords');
 const { changePassword, requestPasswordReset, resetPassword, loginPayload } = require('../services/passwords');
 const { confirmEmailChange } = require('../services/account');
@@ -71,6 +72,15 @@ router.post('/forgot-password', passwordResetLimiter, passwordResetEmailLimiter,
 router.post('/reset-password', passwordResetLimiter, async (req, res, next) => {
   try {
     res.json(await resetPassword(req.body || {}));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The one-time "choose your password" link from the approval email (services/staffLinks.js).
+router.post('/setup-account', accountSetupLimiter, async (req, res, next) => {
+  try {
+    res.json(await completeAccountSetup(req.body || {}));
   } catch (err) {
     next(err);
   }

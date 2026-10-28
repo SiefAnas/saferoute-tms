@@ -177,3 +177,54 @@ export function ResetPasswordPage() {
     </AuthScreen>
   )
 }
+
+// The page the approval email opens: /setup-account?token=… The person chooses their own
+// password; the link works once, for 24 hours. No temporary password is ever sent.
+export function SetupAccountPage() {
+  const [params] = useSearchParams()
+  const token = params.get('token') ?? ''
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [done, setDone] = useState(false)
+  const [error, setError] = useState<string | null>(token ? null : 'This setup link is missing its code. Ask your company to send a new one.')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (next !== confirm) return setError("The passwords don't match.")
+    setSaving(true)
+    try {
+      await api.post('/auth/setup-account', { token, newPassword: next })
+      setDone(true)
+    } catch (err) {
+      setError(errorText(err, 'Could not save your password. Please try again.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <AuthScreen title="Set up your account" subtitle="Choose the password you'll sign in with.">
+      {done ? (
+        <p role="status" className="w-full text-body-md text-on-surface">
+          Your account is ready. Sign in with your email and the password you just chose.
+        </p>
+      ) : (
+        <form className="flex w-full flex-col gap-5" onSubmit={handleSubmit}>
+          <PasswordField label="Password" required value={next} onChange={setNext} />
+          <Field label="Confirm password">
+            <Input type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          </Field>
+          <ErrorLine error={error} />
+          <Button type="submit" size="lg" disabled={saving || !token} className="w-full">
+            {saving ? 'Saving…' : 'Save password'}
+          </Button>
+        </form>
+      )}
+      <Link to="/login" className="text-label-md text-primary hover:underline">
+        Sign in
+      </Link>
+    </AuthScreen>
+  )
+}
