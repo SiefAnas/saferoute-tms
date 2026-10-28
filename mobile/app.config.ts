@@ -65,7 +65,12 @@ const config: ExpoConfig = {
     // Push notifications (src/features/notifications). Adds the iOS push entitlement and the
     // Android 13+ notification permission at build time: needs a new EAS build, not an update.
     ['expo-notifications', { color: '#f59e0b' }],
-    'expo-secure-store',
+    // Biometric unlock (src/auth/biometric.ts) reads the saved password with Face ID, which
+    // needs this usage text on iOS. Native change: needs a new EAS build, not an update.
+    [
+      'expo-secure-store',
+      { faceIDPermission: `Use Face ID to unlock ${APP_NAME} instead of typing your password.` },
+    ],
     'expo-font',
     [
       'expo-splash-screen',
