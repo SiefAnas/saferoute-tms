@@ -46,9 +46,11 @@ export function DemoRequest({ audience }: { audience: Audience }) {
   if (!open) {
     return (
       <div className="site-btn-row">
-        <button type="button" className="site-btn" onClick={() => setOpen(true)}>
+        <button type="button" className="site-btn site-btn-small" onClick={() => setOpen(true)}>
           Book a demo
         </button>
+        {/* On this page already: Learn more scrolls to the page's benefits. */}
+        <a href="#benefits" className="site-link">Learn more →</a>
       </div>
     )
   }

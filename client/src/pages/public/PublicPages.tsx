@@ -7,7 +7,7 @@ import { CardIcon, Scene, type IconName } from './Illustrations'
 // "SafeTurns Website" Claude Design project, minus anything the app doesn't do yet (live map, ETA:
 // see V2_ROADMAP.md) and minus self sign-up.
 
-type Item = { title: string; text: string; icon: IconName }
+type Item = { title: string; text?: string; icon: IconName }
 
 function Cards({ items, numbered }: { items: Item[]; numbered?: boolean }) {
   const List = numbered ? 'ol' : 'ul'
@@ -21,7 +21,7 @@ function Cards({ items, numbered }: { items: Item[]; numbered?: boolean }) {
             <span className="site-dot" />
             <h3>{i.title}</h3>
           </div>
-          <p>{i.text}</p>
+          {i.text && <p>{i.text}</p>}
         </li>
       ))}
     </List>
@@ -86,7 +86,7 @@ export function HomePage() {
       <Hero
         eyebrow="Safer rides for special needs transportation"
         title="Every ride. Every child. Safely tracked."
-        lead="SafeTurns helps transportation teams, schools, and families know where every child is, from pickup to drop-off."
+        lead="SafeTurns helps special needs transportation teams run their routes, drivers, and students in one place."
       >
         <div className="site-btn-row">
           <Link to="/contact" className="site-btn">Contact us</Link>
@@ -103,19 +103,19 @@ export function HomePage() {
           <li className="site-card site-audience">
             <Scene size="card" name="driverVan" label="A driver beside a van" />
             <h3>Companies</h3>
-            <p>Plan routes and guide drivers with ease.</p>
+            <p>Run your fleet with less stress.</p>
             <AudienceButtons to="/companies" />
           </li>
           <li className="site-card site-audience">
             <Scene size="card" name="schoolArrival" label="Students arriving at a school entrance" />
             <h3>Schools</h3>
-            <p>Know who is coming and when.</p>
+            <p>Know when every student is on board and where they are.</p>
             <AudienceButtons to="/schools" />
           </li>
           <li className="site-card site-audience">
             <Scene size="card" name="parentChildHome" label="A parent and child at home" />
             <h3>Parents</h3>
-            <p>Follow your child's ride.</p>
+            <p>Know your child is safe on the way to school.</p>
             <ParentButtons small />
           </li>
         </ul>
@@ -140,16 +140,27 @@ export function AboutPage() {
     <>
       <Hero
         eyebrow="About us"
-        title="We help move the kids who need the most care."
-        lead="SafeTurns was built with drivers, schools, and parents. We make special needs transportation simple to run and easy to trust."
+        title="Built by someone who has been in the van"
       />
       <section className="site-wide">
         <Scene size="hero" name="team" label="The SafeTurns team with drivers and a van" />
       </section>
       <section className="site-section">
-        <h2>Our story is simple.</h2>
-        <p>Every day, thousands of children ride to school with special care needs. Their families want to know they are safe.</p>
-        <p>Transportation teams work hard to make that happen. We give them one clear tool to plan, run, and share every ride.</p>
+        <p>
+          Anas Sief, the founder, started in special needs transportation as a monitor. Soon after, I also worked as a 7D
+          driver and as an assistant team manager, all at the same time. Every day, I saw how much care these children need,
+          and how much pressure the teams carry to get everyone safely to school.
+        </p>
+        <p>
+          I am a Computer Science and IT graduate from Northeastern University. I took what I learned in the field and in the
+          classroom, and I started building SafeTurns. My goal is simple: make special needs transportation calmer, clearer,
+          and safer for everyone involved.
+        </p>
+        <p>
+          I have spent more hours in a van than most developers spend in an office, so I know exactly where the pain points
+          are. Our code is better for it.
+        </p>
+        <h2 className="site-closing-line">We are small, we are careful, and we are just getting started.</h2>
       </section>
       <section className="site-section">
         <h2>What we value</h2>
@@ -159,33 +170,44 @@ export function AboutPage() {
   )
 }
 
-// Opens with the picture, then the headline, then Companies and Schools beside their pictures.
+// Opens with the picture, then the headline, then Parents, Companies and Schools beside their pictures.
 export function MissionPage() {
   return (
     <>
       <section className="site-wide">
         <Scene size="hero" name="hug" label="A parent hugging their special needs child" />
       </section>
-      <Hero
-        eyebrow="Our mission"
-        title="Every child home safe. Every day."
-        lead="We help the people behind each ride work together, so families can let go of the worry."
-      />
+      <Hero title="Our mission" />
+      <section className="site-split">
+        <Scene size="split" name="parentChildHome" label="A parent and child at home" />
+        <div className="site-split-text">
+          <h2>For parents</h2>
+          <p>
+            You should not have to worry about the ride. We help make sure the driver arrives on time, and your child is
+            picked up and dropped off safely.
+          </p>
+          <ParentButtons small />
+        </div>
+      </section>
       <section className="site-split">
         <Scene size="split" name="wheelchair" label="A driver helping a child in a wheelchair up the van ramp" />
         <div className="site-split-text">
-          <p className="site-kicker">For companies</p>
-          <h2>Every route, under control.</h2>
-          <p>See every van and every rider in one place. Drivers know each child's needs before they arrive.</p>
+          <h2>For companies</h2>
+          <p>
+            Your day should run smoother, with fewer calls and less guesswork. SafeTurns helps you organize your routes, your
+            team, and your payroll, so you can spend more time growing your business.
+          </p>
           <AudienceButtons to="/companies" />
         </div>
       </section>
       <section className="site-split">
         <Scene size="split" name="teacherWelcome" label="A teacher welcoming a student at the school door" />
         <div className="site-split-text">
-          <p className="site-kicker">For schools</p>
-          <h2>Every student, accounted for.</h2>
-          <p>Know who is on board and confirm each pickup and drop-off. Staff are ready at the door for every student.</p>
+          <h2>For schools</h2>
+          <p>
+            Start each day knowing who is on board and where they are. SafeTurns gives your school clear updates, so there
+            are fewer surprises when a driver or student does not show up.
+          </p>
           <AudienceButtons to="/schools" />
         </div>
       </section>
@@ -198,21 +220,21 @@ export function PublicCompaniesPage() {
     <>
       <Hero
         eyebrow="For companies"
-        title="Run every route with confidence."
-        lead="Plan routes, guide drivers, and keep families informed. All in one place."
+        title="Run your transportation day in one place."
+        lead="SafeTurns gives your team a clear daily schedule, driver and student updates, and payroll tools, all in one app. Fewer phone calls, less paperwork, and more time to grow your business."
       >
         <DemoRequest audience="company" />
       </Hero>
       <section className="site-wide">
         <Scene size="hero" name="fleet" label="A fleet of accessible vans and a driver" />
       </section>
-      <section className="site-section">
+      <section className="site-section" id="benefits">
         <h2>Less stress for your team.</h2>
         <Cards
           items={[
-            { title: 'Rider needs', text: 'Wheelchair, medical, and care notes, ready for each driver.', icon: 'profile' },
-            { title: 'Every assignment', text: 'Drivers, monitors, vans, and students, matched in one place.', icon: 'together' },
-            { title: 'Fewer calls', text: 'Schools and parents see updates on their own.', icon: 'calls' },
+            { title: 'Clear daily routes and schedules', icon: 'route' },
+            { title: 'Driver, monitor, and student check-ins', icon: 'check' },
+            { title: 'Payroll and tracking in one place', icon: 'list' },
           ]}
         />
       </section>
@@ -225,21 +247,21 @@ export function PublicSchoolsPage() {
     <>
       <Hero
         eyebrow="For schools"
-        title="Know every student is on the way."
-        lead="See who is on board and confirm each pickup and drop-off. Be ready at the door."
+        title="Every student, accounted for."
+        lead="Mornings and afternoons should feel calm, not like a guessing game. SafeTurns lets your school see when a student is missing and keeps your front office up to date, so your staff can spend their energy on the children. Fewer surprises, and a lot fewer panicked phone calls."
       >
         <DemoRequest audience="school" />
       </Hero>
       <section className="site-wide">
         <Scene size="hero" name="staffGreeting" label="School staff greeting students at drop-off" />
       </section>
-      <section className="site-section">
+      <section className="site-section" id="benefits">
         <h2>Clear, from the front office.</h2>
         <Cards
           items={[
-            { title: 'Who is on board', text: 'A simple list of every rider, checked in.', icon: 'list' },
-            { title: 'Pickup and drop-off', text: 'Confirm each student in a tap.', icon: 'check' },
-            { title: 'One place', text: 'Every route and every contact, together.', icon: 'school' },
+            { title: 'Know when a student is missing', icon: 'bell' },
+            { title: 'Clear updates for the front office', icon: 'school' },
+            { title: 'Fewer surprises each morning and afternoon', icon: 'calm' },
           ]}
         />
       </section>
