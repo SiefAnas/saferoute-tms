@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import './public.css'
 
@@ -12,6 +12,19 @@ const NAV = [
   { to: '/contact', label: 'Contact us' },
 ]
 
+// The public site's own light / dark choice: light unless the visitor switched. Kept apart from the
+// signed-in app's theme (lib/theme.ts), so switching here never changes the app.
+type SiteTheme = 'light' | 'dark'
+const SITE_THEME_KEY = 'safeturns-site-theme'
+
+function readSiteTheme(): SiteTheme {
+  try {
+    return localStorage.getItem(SITE_THEME_KEY) === 'dark' ? 'dark' : 'light'
+  } catch {
+    return 'light'
+  }
+}
+
 // The shield-with-a-turn-arrow mark from the design.
 function Mark() {
   return (
@@ -23,25 +36,84 @@ function Mark() {
   )
 }
 
+function Logo() {
+  return (
+    <Link to="/" className="site-logo" aria-label="SafeTurns home">
+      <Mark />
+      <span>SafeTurns</span>
+    </Link>
+  )
+}
+
+function MenuButton({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="site-round site-burger"
+      aria-label={open ? 'Close menu' : 'Open menu'}
+      aria-expanded={open}
+      aria-controls="site-drawer"
+      onClick={onClick}
+    >
+      <span />
+      <span />
+      <span />
+    </button>
+  )
+}
+
 // Shell for the public website at the site root (public.css). Log in goes to the existing /login page.
 export function PublicLayout() {
   const { pathname, hash } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [headerHidden, setHeaderHidden] = useState(false)
+  const [theme, setTheme] = useState<SiteTheme>(readSiteTheme)
+  const lastY = useRef(0)
 
-  // A new page starts at the top with the phone menu closed (#demo links scroll themselves).
+  // A new page starts at the top with the menu closed (#demo links scroll themselves).
   useEffect(() => {
     setMenuOpen(false)
+    setHeaderHidden(false)
     if (!hash) window.scrollTo(0, 0)
   }, [pathname, hash])
 
+  // Scrolling down hides the top menu; scrolling up brings it back.
+  useEffect(() => {
+    function onScroll() {
+      const y = window.scrollY
+      if (Math.abs(y - lastY.current) < 6) return
+      setHeaderHidden(y > lastY.current && y > 80)
+      lastY.current = y
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    try {
+      localStorage.setItem(SITE_THEME_KEY, next)
+    } catch {
+      // Not saved (private window): the switch still works for this visit.
+    }
+  }
+
   return (
-    <div className="site">
-      <header className="site-header">
+    <div className="site" data-site-theme={theme}>
+      <header className="site-header" data-hidden={headerHidden && !menuOpen}>
         <div className="site-header-inner">
-          <Link to="/" className="site-logo" aria-label="SafeTurns home">
-            <Mark />
-            <span>SafeTurns</span>
-          </Link>
+          <div className="site-header-start">
+            <MenuButton open={menuOpen} onClick={() => setMenuOpen((o) => !o)} />
+            <Logo />
+          </div>
           <nav className="site-nav" aria-label="Main">
             {NAV.map((n) => (
               <NavLink key={n.to} to={n.to} end>
@@ -50,32 +122,43 @@ export function PublicLayout() {
             ))}
           </nav>
           <div className="site-header-actions">
+            <button
+              type="button"
+              className="site-round"
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              onClick={toggleTheme}
+            >
+              <span className="site-theme-dot" />
+            </button>
             <Link to="/login" className="site-btn site-btn-small">
               Log in
             </Link>
-            <button
-              type="button"
-              className="site-menu-button"
-              aria-label="Menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((o) => !o)}
-            >
-              <span />
-              <span />
-            </button>
           </div>
         </div>
       </header>
+
       {menuOpen && (
-        <nav className="site-mobile-menu" aria-label="Main">
-          {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} end>
-              {n.label}
-            </NavLink>
-          ))}
-          <Link to="/login">Log in</Link>
-        </nav>
+        <>
+          <div className="site-drawer-backdrop" onClick={() => setMenuOpen(false)} />
+          <aside id="site-drawer" className="site-drawer" aria-label="Menu">
+            <div className="site-drawer-top">
+              <MenuButton open onClick={() => setMenuOpen(false)} />
+              <Logo />
+            </div>
+            <nav aria-label="Pages">
+              {NAV.map((n) => (
+                <NavLink key={n.to} to={n.to} end>
+                  {n.label}
+                </NavLink>
+              ))}
+            </nav>
+            <Link to="/login" className="site-btn">
+              Log in
+            </Link>
+          </aside>
+        </>
       )}
+
       <main>
         <Outlet />
         {pathname !== '/contact' && (
@@ -91,12 +174,18 @@ export function PublicLayout() {
         )}
       </main>
       <footer className="site-footer">
-        <div className="site-logo">
-          <Mark />
-          <span>SafeTurns</span>
+        <div className="site-footer-brand">
+          <div className="site-logo">
+            <Mark />
+            <span>SafeTurns</span>
+          </div>
+          <p>Every ride. Every child. Safely tracked.</p>
         </div>
         <nav aria-label="Footer">
-          <Link to="/contact">Contact us</Link>
+          {NAV.map((n) => (
+            <Link key={n.to} to={n.to}>{n.label}</Link>
+          ))}
+          <Link to="/login">Log in</Link>
           <Link to="/terms">Terms of Use</Link>
           <Link to="/privacy">Privacy Policy</Link>
         </nav>
