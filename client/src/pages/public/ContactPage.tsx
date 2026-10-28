@@ -31,9 +31,10 @@ export function ContactPage() {
 
   return (
     <>
-      <h1>Contact us</h1>
+      <h1>Let's talk.</h1>
+      <p>Tell us a little about you. We will get back to you soon.</p>
       {done ? (
-        <p role="status">Thank you. Your message was sent and we will reply by email.</p>
+        <p role="status">Thank you. We got your message and will reply soon.</p>
       ) : (
         <form onSubmit={handleSubmit} aria-label="Contact us">
           <p>
