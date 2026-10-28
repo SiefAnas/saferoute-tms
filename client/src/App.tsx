@@ -15,6 +15,9 @@ import { MonitorLayout } from './layouts/MonitorLayout'
 import { ConfirmEmailChangePage } from './pages/account/ConfirmEmailChangePage'
 import { LegalPage } from './pages/legal/LegalPage'
 import { UndoClosurePage } from './pages/company/UndoClosurePage'
+import { PublicLayout } from './pages/public/PublicLayout'
+import { AboutPage, HomePage, MissionPage, PublicCompaniesPage, PublicParentsPage, PublicSchoolsPage } from './pages/public/PublicPages'
+import { ContactPage } from './pages/public/ContactPage'
 
 // Each role's screens load on demand, so a driver's phone never downloads the admin pages.
 const DriverTodayPage = lazy(() => import('./pages/driver/DriverTodayPage').then((m) => ({ default: m.DriverTodayPage })))
@@ -210,7 +213,16 @@ function App() {
           </Route>
         </Route>
 
-        <Route path="/" element={<RootRedirect />} />
+        {/* Public website at the site root. Login stays at /login. */}
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/mission" element={<MissionPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/companies" element={<PublicCompaniesPage />} />
+          <Route path="/schools" element={<PublicSchoolsPage />} />
+          <Route path="/parents" element={<PublicParentsPage />} />
+        </Route>
         <Route path="*" element={<RootRedirect />} />
       </Routes>
     </Suspense>

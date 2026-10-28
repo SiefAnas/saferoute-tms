@@ -29,6 +29,7 @@ const fleetRoutes = require('./routes/fleet');
 const signinReminderRoutes = require('./routes/signinReminders');
 const staffLinkRoutes = require('./routes/staffLinks');
 const staffFormRoutes = require('./routes/staffForm');
+const publicSiteRoutes = require('./routes/publicSite');
 
 function createApp() {
   const app = express();
@@ -88,6 +89,7 @@ function createApp() {
   app.use('/staff-links', staffLinkRoutes.links);
   app.use('/staff-submissions', staffLinkRoutes.submissions);
   app.use('/staff-form', staffFormRoutes);
+  app.use('/public', publicSiteRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'not found' }));
 
