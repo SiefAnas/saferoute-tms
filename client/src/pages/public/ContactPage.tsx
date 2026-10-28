@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { api, ApiError } from '../../lib/api'
-import { Scene } from './Illustrations'
+import { Photo } from './Photo'
 
 type Topic = 'business' | 'support'
 
@@ -40,7 +40,7 @@ export function ContactPage() {
           <span>Business questions: <a href="mailto:admin@safeturns.com">admin@safeturns.com</a></span>
           <span>Technical support: <a href="mailto:support@safeturns.com">support@safeturns.com</a></span>
         </div>
-        <Scene size="card" name="contact" label="An envelope and a chat bubble" />
+        <Photo size="card" file="contact-desk" alt="A notebook, pen and cup of coffee on a desk" />
       </div>
       <div className="site-form-card site-rise site-rise-2">
         {done ? (
