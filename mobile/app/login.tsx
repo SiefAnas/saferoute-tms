@@ -18,9 +18,10 @@ export default function LoginScreen() {
   const colors = useColors()
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { signIn, expiredMessage, clearExpiredMessage } = useAuth()
+  const { signIn, unlockWithBiometric, biometric, consumeAutoUnlock, expiredMessage, clearExpiredMessage } = useAuth()
 
-  const [email, setEmail] = useState('')
+  // With biometric on, the account is known: fill it in for when the password is asked for.
+  const [email, setEmail] = useState(biometric.email ?? '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -37,6 +38,27 @@ export default function LoginScreen() {
   }, [busy])
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !busy
+
+  // The app was just opened with biometric on: go straight to the scan.
+  useEffect(() => {
+    if (consumeAutoUnlock()) void unlock()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function unlock() {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    clearExpiredMessage()
+    try {
+      const user = await unlockWithBiometric()
+      if (user) router.replace(user.must_change_password ? '/set-password' : destinationForRole(user.role))
+    } catch (err) {
+      setError(messageFor(err, 'Could not sign in. Please try again.'))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function submit() {
     if (!canSubmit) return
@@ -128,6 +150,9 @@ export default function LoginScreen() {
         {error ? <ActionError message={error} /> : null}
 
         <Button label="Sign in" busy={busy} busyLabel="Signing in…" disabled={!canSubmit} onPress={submit} />
+        {biometric.canUnlock ? (
+          <Button label={`Unlock with ${biometric.title}`} variant="outline" disabled={busy} onPress={unlock} />
+        ) : null}
         {busy && slow ? (
           <Text size={13} color={colors.muted} style={{ textAlign: 'center' }} accessibilityLiveRegion="polite">
             {SLOW_MESSAGE}
