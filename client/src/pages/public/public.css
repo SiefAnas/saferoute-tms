@@ -187,6 +187,7 @@
 .site-footer-brand { display: flex; flex-direction: column; gap: 12px; color: var(--ink); }
 .site-footer-brand p { color: var(--muted); }
 .site-footer nav { display: flex; flex-wrap: wrap; gap: 12px 22px; max-width: 560px; }
+.site-footer-copyright { flex-basis: 100%; font-size: 12px; }
 
 /* ---- Forms ---- */
 .site-contact {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { COPYRIGHT } from '../../components/Copyright'
 import './public.css'
 
 const NAV = [
@@ -139,6 +140,7 @@ export function PublicLayout() {
           <Link to="/terms">Terms of Use</Link>
           <Link to="/privacy">Privacy Policy</Link>
         </nav>
+        <p className="site-footer-copyright">{COPYRIGHT}</p>
       </footer>
     </div>
   )
