@@ -17,6 +17,10 @@ export interface AuthUser {
   // must send the user to "set your password" first; the API refuses everything else
   // (403 PASSWORD_CHANGE_REQUIRED) until they do. API_CONTRACT.md "Auth".
   must_change_password?: boolean
+  // True until the user agrees to the current Terms of Use and Privacy Policy (POST
+  // /legal/accept). After the password change; the API refuses everything else with 403
+  // LEGAL_ACCEPTANCE_REQUIRED until then.
+  legal_pending?: boolean
 }
 
 export interface LoginResponse {

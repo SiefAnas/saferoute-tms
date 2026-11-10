@@ -49,6 +49,11 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   if (res.status === 403 && (body as { code?: string } | null)?.code === 'PASSWORD_CHANGE_REQUIRED') {
     window.dispatchEvent(new Event('saferoute:password-change-required'))
   }
+  // Has not agreed to the current Terms of Use / Privacy Policy (first sign-in, or a new
+  // version): ProtectedRoute sends the user to /accept-terms.
+  if (res.status === 403 && (body as { code?: string } | null)?.code === 'LEGAL_ACCEPTANCE_REQUIRED') {
+    window.dispatchEvent(new Event('saferoute:legal-required'))
+  }
 
   if (!res.ok) {
     const message = (body as { error?: string } | null)?.error ?? res.statusText

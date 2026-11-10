@@ -79,4 +79,57 @@ async function recordAcceptances(client, userId, versions, ip) {
   }
 }
 
-module.exports = { DOCUMENTS, LEGAL_DIR, parseFrontmatter, loadLegalDocuments, getLegalDocument, currentVersions, assertLegalAccepted, recordAcceptances };
+// SQL for "this user has not yet accepted the current version of every document", for a user
+// row aliased `alias`. Versions come from the server's own copy (currentVersions), as bind
+// parameters starting at $<firstParam>, in DOCUMENTS order. Used by authenticate (the gate) and
+// by login/change-password (legal_pending in the session payload).
+function legalPendingSql(alias, firstParam) {
+  const pairs = DOCUMENTS.map((d, i) => `(la.document = '${d}' AND la.version = $${firstParam + i})`).join(' OR ');
+  return `(SELECT count(DISTINCT la.document) FROM legal_acceptances la WHERE la.user_id = ${alias}.id AND (${pairs})) < ${DOCUMENTS.length}`;
+}
+function legalPendingParams() {
+  const current = currentVersions();
+  return DOCUMENTS.map((d) => current[d]);
+}
+
+async function isLegalPending(db, userId) {
+  const { rows } = await db.query(`SELECT ${legalPendingSql('u', 2)} AS pending FROM users u WHERE u.id = $1`, [userId, ...legalPendingParams()]);
+  return Boolean(rows[0]?.pending);
+}
+
+// Gate switch. Always on, except LEGAL_GATE=off, which only the test kit sets (test/lib/
+// testkit.cjs): the suites' fixtures sign users in directly without an acceptance row. The
+// suite that tests the gate (55-legal-gate) sets LEGAL_GATE=on before loading the kit.
+function legalGateEnabled() {
+  return process.env.LEGAL_GATE !== 'off';
+}
+
+// POST /legal/accept: a signed-in user agrees to the current Terms and Privacy Policy (the
+// first-sign-in screen, or after a new version is published). body = { terms, privacy }, the
+// versions the screen showed; an outdated version is a 409 like at signup. Records only what is
+// missing, so a double tap doesn't write duplicate rows.
+async function acceptCurrentLegal(db, userId, body, ip) {
+  const versions = assertLegalAccepted(body);
+  const { rows } = await db.query('SELECT document, version FROM legal_acceptances WHERE user_id = $1', [userId]);
+  for (const d of DOCUMENTS) {
+    if (rows.some((r) => r.document === d && r.version === versions[d])) continue;
+    await db.query('INSERT INTO legal_acceptances (user_id, document, version, ip) VALUES ($1, $2, $3, $4)', [userId, d, versions[d], ip ?? null]);
+  }
+  return { ok: true, legal_pending: false, versions };
+}
+
+module.exports = {
+  DOCUMENTS,
+  LEGAL_DIR,
+  parseFrontmatter,
+  loadLegalDocuments,
+  getLegalDocument,
+  currentVersions,
+  assertLegalAccepted,
+  recordAcceptances,
+  legalPendingSql,
+  legalPendingParams,
+  isLegalPending,
+  legalGateEnabled,
+  acceptCurrentLegal,
+};

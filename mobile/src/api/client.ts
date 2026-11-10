@@ -39,6 +39,9 @@ export interface ApiDeps {
   // Called on a 403 PASSWORD_CHANGE_REQUIRED: the account is on a temporary password and must set
   // its own before anything else (same rule the website follows).
   onPasswordChangeRequired?: () => void
+  // Called on a 403 LEGAL_ACCEPTANCE_REQUIRED: the user has to agree to the current Terms of Use
+  // and Privacy Policy first (first sign-in, or a new version).
+  onLegalRequired?: () => void
   fetchImpl?: typeof fetch
   // Render can spin the API down; the first call after a quiet period is slow, so this is
   // generous on purpose. Better a long spinner than a false "no connection".
@@ -100,6 +103,7 @@ export function createApi(deps: ApiDeps): Api {
     // credentials" (or an expired temporary password) and must not clear an existing session.
     if (res.status === 401 && !isLogin) deps.onUnauthorized({ code: errorBody?.code, message: errorBody?.error })
     if (res.status === 403 && errorBody?.code === 'PASSWORD_CHANGE_REQUIRED') deps.onPasswordChangeRequired?.()
+    if (res.status === 403 && errorBody?.code === 'LEGAL_ACCEPTANCE_REQUIRED') deps.onLegalRequired?.()
 
     if (!res.ok) {
       throw new ApiError(res.status, errorBody?.error ?? fallbackMessage(res.status))

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Alert, AppState, Platform } from 'react-native'
 import { useQueryClient } from '@tanstack/react-query'
-import { api, ApiError, NetworkError, setAuthToken, setPasswordChangeRequiredHandler, setUnauthorizedHandler } from '@/api'
+import { api, ApiError, NetworkError, setAuthToken, setLegalRequiredHandler, setPasswordChangeRequiredHandler, setUnauthorizedHandler } from '@/api'
 import type { AuthUser, LoginResponse, MeResponse } from '@/api/types'
 import { unregisterThisDevice } from '@/features/notifications/push'
 import { biometricToken } from './biometric'
@@ -47,6 +47,9 @@ interface AuthValue {
   // Set a new password (the first-login change from a temporary password). The server signs
   // out older tokens and returns a fresh one, which replaces the session.
   changePassword: (currentPassword: string, newPassword: string) => Promise<AuthUser>
+  // "I agree" on the first-sign-in agreement screen: records the versions shown (POST
+  // /legal/accept) and clears legal_pending on this session.
+  acceptLegal: (versions: { terms: string; privacy: string }) => Promise<AuthUser>
   signOut: () => Promise<void>
   // Set when the session ended on its own (expired token, deactivated account) rather than
   // by the user tapping Log out, or when biometric unlock didn't work, so the login screen can
@@ -177,6 +180,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return next
       })
     })
+    // The server says this user has not agreed to the current Terms / Privacy Policy: flag the
+    // session so the root layout sends them to the agreement screen.
+    setLegalRequiredHandler(() => {
+      setUser((u) => {
+        if (!u || u.legal_pending) return u
+        const next = { ...u, legal_pending: true }
+        void saveUser(next)
+        return next
+      })
+    })
   }, [teardown])
 
   // Back to the foreground: prove the session again, so a deactivated or reset account is signed
@@ -295,6 +308,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [startSession, offerBiometric],
   )
 
+  const acceptLegal = useCallback(
+    async (versions: { terms: string; privacy: string }) => {
+      await api.post('/legal/accept', versions)
+      if (!user) throw new Error('not signed in')
+      const next = { ...user, legal_pending: false }
+      await saveUser(next)
+      setUser(next)
+      return next
+    },
+    [user],
+  )
+
   const signOut = useCallback(() => teardown(null), [teardown])
 
   const value = useMemo<AuthValue>(
@@ -310,11 +335,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return pending
       },
       changePassword,
+      acceptLegal,
       signOut,
       expiredMessage,
       clearExpiredMessage: () => setExpiredMessage(null),
     }),
-    [status, user, signIn, unlockWithBiometric, biometric, changePassword, signOut, expiredMessage],
+    [status, user, signIn, unlockWithBiometric, biometric, changePassword, acceptLegal, signOut, expiredMessage],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

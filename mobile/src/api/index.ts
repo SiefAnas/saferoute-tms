@@ -7,6 +7,7 @@ import { createApi, type UnauthorizedInfo } from './client'
 let authToken: string | null = null
 let unauthorizedHandler: (info: UnauthorizedInfo) => void = () => {}
 let passwordChangeRequiredHandler: () => void = () => {}
+let legalRequiredHandler: () => void = () => {}
 
 export function setAuthToken(token: string | null): void {
   authToken = token
@@ -20,11 +21,16 @@ export function setPasswordChangeRequiredHandler(handler: () => void): void {
   passwordChangeRequiredHandler = handler
 }
 
+export function setLegalRequiredHandler(handler: () => void): void {
+  legalRequiredHandler = handler
+}
+
 export const api = createApi({
   baseUrl: API_BASE_URL,
   getToken: async () => authToken,
   onUnauthorized: (info) => unauthorizedHandler(info),
   onPasswordChangeRequired: () => passwordChangeRequiredHandler(),
+  onLegalRequired: () => legalRequiredHandler(),
 })
 
 export { ApiError, NetworkError } from './client'

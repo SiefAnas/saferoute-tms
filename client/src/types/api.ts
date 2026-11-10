@@ -15,6 +15,10 @@ export interface AuthUser {
   // True while the account is on a temporary password: the user must set their own first
   // (POST /auth/change-password); every other endpoint answers 403 PASSWORD_CHANGE_REQUIRED.
   must_change_password?: boolean
+  // True until the user agrees to the current Terms of Use and Privacy Policy (POST
+  // /legal/accept); every other endpoint answers 403 LEGAL_ACCEPTANCE_REQUIRED. Comes after the
+  // password change when both are pending.
+  legal_pending?: boolean
 }
 
 export interface LoginResponse {

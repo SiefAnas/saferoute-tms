@@ -10,6 +10,7 @@ const { tempPasswordExpired } = require('../services/passwords');
 const { changePassword, requestPasswordReset, resetPassword, loginPayload } = require('../services/passwords');
 const { confirmEmailChange } = require('../services/account');
 const { closingError } = require('../services/closure');
+const { isLegalPending } = require('../services/legal');
 
 const router = express.Router();
 
@@ -41,7 +42,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
     // user.must_change_password: the client must send the user to "set your password" first
     // (every other endpoint answers 403 PASSWORD_CHANGE_REQUIRED until they do).
-    res.json(loginPayload(user));
+    res.json(loginPayload({ ...user, legal_pending: await isLegalPending(pool, user.id) }));
   } catch (err) {
     next(err);
   }

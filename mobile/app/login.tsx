@@ -9,7 +9,7 @@ import { Text } from '@/components/Text'
 import { ActionError, messageFor, SLOW_AFTER_MS, SLOW_MESSAGE } from '@/components/States'
 import { APP_NAME } from '@/config'
 import { Logo } from '@/components/Logo'
-import { destinationForRole } from '@/lib/roles'
+import { nextScreenFor } from '@/lib/roles'
 import { radius } from '@/theme/tokens'
 import { Field, inputStyle, PasswordInput } from '@/components/Form'
 import { useColors } from '@/theme/theme'
@@ -52,7 +52,7 @@ export default function LoginScreen() {
     clearExpiredMessage()
     try {
       const user = await unlockWithBiometric()
-      if (user) router.replace(user.must_change_password ? '/set-password' : destinationForRole(user.role))
+      if (user) router.replace(nextScreenFor(user))
     } catch (err) {
       setError(messageFor(err, 'Could not sign in. Please try again.'))
     } finally {
@@ -69,7 +69,7 @@ export default function LoginScreen() {
       const user = await signIn(email, password)
       // Replace, so Back from inside the app never returns to the login form. An account on a
       // temporary password (new, or reset by the admin) chooses its own password first.
-      router.replace(user.must_change_password ? '/set-password' : destinationForRole(user.role))
+      router.replace(nextScreenFor(user))
     } catch (err) {
       setError(messageFor(err, 'Could not sign in. Please try again.'))
     } finally {

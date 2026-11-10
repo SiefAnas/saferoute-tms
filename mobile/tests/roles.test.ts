@@ -1,4 +1,4 @@
-import { destinationForRole, isMobileRole } from '@/lib/roles'
+import { destinationForRole, isMobileRole, nextScreenFor } from '@/lib/roles'
 
 // Where each role lands after signing in. Only two roles have an app; everyone else must be
 // sent to the explanation screen rather than into a driver or parent shell they cannot use.
@@ -67,5 +67,18 @@ describe('monitor Today helpers', () => {
     const sunday = { ...base, assignment: { days_of_week: [7], shift_period: 'both' as const } }
     expect(ridesToday(sunday, new Date(2026, 8, 27))).toBe(true)
     expect(ridesToday({ ...base, assignment: null }, new Date(2026, 8, 21))).toBe(false)
+  })
+})
+
+describe('nextScreenFor', () => {
+  it('sends a temporary password to "set your password" first, even with the agreement pending', () => {
+    expect(nextScreenFor({ role: 'driver', must_change_password: true, legal_pending: true })).toBe('/set-password')
+  })
+  it('then to the Terms / Privacy agreement', () => {
+    expect(nextScreenFor({ role: 'driver', must_change_password: false, legal_pending: true })).toBe('/accept-terms')
+  })
+  it('then to the role home', () => {
+    expect(nextScreenFor({ role: 'driver', legal_pending: false })).toBe('/(driver)/today')
+    expect(nextScreenFor({ role: 'parent' })).toBe('/(parent)/students')
   })
 })

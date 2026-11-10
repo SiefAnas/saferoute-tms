@@ -3,7 +3,7 @@ import { Copyright } from '../../components/Copyright'
 import { Logo } from '../../components/Logo'
 import { ApiError } from '../../lib/api'
 import { LEGAL_DOCS, useLegalDoc, type LegalDocId } from '../../lib/legal'
-import type { Inline } from '../../lib/markdown'
+import type { Block, Inline } from '../../lib/markdown'
 import { useAuth } from '../../lib/auth'
 import { ROLE_HOME } from '../../lib/roleHome'
 
@@ -29,6 +29,47 @@ function Text({ parts }: { parts: Inline[] }) {
           <span key={i}>{p.text}</span>
         ),
       )}
+    </>
+  )
+}
+
+// The parsed document as elements (headings, paragraphs, lists, quotes). Shared by the public
+// pages and the first-sign-in agreement screen (AcceptTermsPage).
+export function LegalBlocks({ blocks }: { blocks: Block[] }) {
+  return (
+    <>
+      {blocks.map((b, i) => {
+        if (b.kind === 'heading') {
+          const cls = b.level === 1 ? 'text-[26px] font-bold text-ink' : b.level === 2 ? 'pt-2 text-[18px] font-semibold text-ink' : 'text-[15px] font-semibold text-ink'
+          const H = `h${b.level}` as 'h1' | 'h2' | 'h3'
+          return (
+            <H key={i} className={cls}>
+              <Text parts={b.text} />
+            </H>
+          )
+        }
+        if (b.kind === 'list')
+          return (
+            <ul key={i} className="flex list-disc flex-col gap-1 pl-6">
+              {b.items.map((it, j) => (
+                <li key={j}>
+                  <Text parts={it} />
+                </li>
+              ))}
+            </ul>
+          )
+        if (b.kind === 'quote')
+          return (
+            <blockquote key={i} className="rounded-row border-l-4 border-amber bg-caution-bg px-4 py-3 text-caution-fg">
+              <Text parts={b.text} />
+            </blockquote>
+          )
+        return (
+          <p key={i}>
+            <Text parts={b.text} />
+          </p>
+        )
+      })}
     </>
   )
 }
@@ -64,38 +105,7 @@ export function LegalPage({ doc }: { doc: LegalDocId }) {
             Version {d.version}
             {d.effective && <> · effective {d.effective}</>}
           </p>
-          {d.blocks.map((b, i) => {
-            if (b.kind === 'heading') {
-              const cls = b.level === 1 ? 'text-[26px] font-bold text-ink' : b.level === 2 ? 'pt-2 text-[18px] font-semibold text-ink' : 'text-[15px] font-semibold text-ink'
-              const H = (`h${b.level}` as 'h1' | 'h2' | 'h3')
-              return (
-                <H key={i} className={cls}>
-                  <Text parts={b.text} />
-                </H>
-              )
-            }
-            if (b.kind === 'list')
-              return (
-                <ul key={i} className="flex list-disc flex-col gap-1 pl-6">
-                  {b.items.map((it, j) => (
-                    <li key={j}>
-                      <Text parts={it} />
-                    </li>
-                  ))}
-                </ul>
-              )
-            if (b.kind === 'quote')
-              return (
-                <blockquote key={i} className="rounded-row border-l-4 border-amber bg-caution-bg px-4 py-3 text-caution-fg">
-                  <Text parts={b.text} />
-                </blockquote>
-              )
-            return (
-              <p key={i}>
-                <Text parts={b.text} />
-              </p>
-            )
-          })}
+          <LegalBlocks blocks={d.blocks} />
             </>
           )}
         </article>

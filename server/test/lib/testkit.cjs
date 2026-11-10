@@ -1,6 +1,10 @@
 // Shared test-harness helpers: spin up an isolated embedded PostgreSQL per suite,
 // run the real `migrate:up` CLI against it, and a tiny pass/fail recorder in the
 // same style used throughout the Step 1-3 live verification.
+// Every suite loads this kit. Their fixtures create users without a Terms/Privacy acceptance row,
+// so the first-sign-in agreement gate (services/legal.js) is off unless a suite turns it on.
+if (!process.env.LEGAL_GATE) process.env.LEGAL_GATE = 'off';
+
 const path = require('node:path');
 const net = require('node:net');
 const { rmSync, readFileSync, writeFileSync, existsSync } = require('node:fs');
