@@ -1,7 +1,7 @@
 {
   "name": "safeturns-web",
   "private": true,
-  "author": "Anas Sief",
+  "author": "SafeTurns LLC",
   "version": "0.0.0",
   "type": "module",
   "scripts": {

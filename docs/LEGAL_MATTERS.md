@@ -28,7 +28,7 @@ started. No paying customers yet. No signed contracts yet.
 
 ### Who the company is
 
-Anas Sief, sole founder, Massachusetts. LLC not yet formed. Operating from
+SafeTurns LLC, a Massachusetts limited liability company (sole founder Anas Sief). Operating from
 Massachusetts, intending to expand regionally and then nationally.
 
 ### What personal data the system holds
@@ -79,7 +79,7 @@ About school staff:
 
 ### What has not been done
 
-- No privacy policy, no terms of use, no parent notice, no school data agreement
+- Terms of Use and Privacy Policy v1.0 published (2026-11-10, drafted without counsel); no parent notice, no school data agreement
 - No written information security program
 - No data retention policy
 - No breach notification plan

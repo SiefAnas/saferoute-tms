@@ -1,6 +1,6 @@
 # SafeTurns
 
-© 2026 Anas Sief. All rights reserved.
+© 2026 SafeTurns LLC. All rights reserved.
 
 SafeTurns is a multi-tenant school transportation management system: transport companies run
 drivers, monitors, vans and routes; schools confirm pickups and drop-offs; parents follow their

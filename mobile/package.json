@@ -46,7 +46,7 @@
     "export:android": "expo export --platform android --output-dir dist-android",
     "doctor": "expo-doctor"
   },
-  "author": "Anas Sief",
+  "author": "SafeTurns LLC",
   "private": true,
   "overrides": {
     "react-dom": "19.2.3"
