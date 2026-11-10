@@ -13,6 +13,8 @@ interface AuthContextValue {
   // Replace the session with a fresh token + user (after changing the password, the server
   // signs out older tokens and returns a new one).
   setSession: (res: LoginResponse) => void
+  // After POST /legal/accept: the same session, no longer pending.
+  markLegalAccepted: () => void
   logout: () => void
 }
 
@@ -91,7 +93,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('saferoute:password-change-required', flag)
   }, [])
 
-  return <AuthContext.Provider value={{ user, token, login, setSession, logout }}>{children}</AuthContext.Provider>
+  // The server says this session must agree to the Terms / Privacy Policy first (lib/api.ts).
+  useEffect(() => {
+    function flag() {
+      setUser((u) => {
+        if (!u || u.legal_pending) return u
+        const next = { ...u, legal_pending: true }
+        localStorage.setItem(USER_KEY, JSON.stringify(next))
+        return next
+      })
+    }
+    window.addEventListener('saferoute:legal-required', flag)
+    return () => window.removeEventListener('saferoute:legal-required', flag)
+  }, [])
+
+  const markLegalAccepted = useCallback(() => {
+    setUser((u) => {
+      if (!u) return u
+      const next = { ...u, legal_pending: false }
+      localStorage.setItem(USER_KEY, JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  return (
+    <AuthContext.Provider value={{ user, token, login, setSession, markLegalAccepted, logout }}>{children}</AuthContext.Provider>
+  )
 }
 
 // A one-time message for the login page after the app signs someone out on purpose (e.g. "your

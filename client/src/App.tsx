@@ -14,6 +14,7 @@ import { DriverLayout } from './layouts/DriverLayout'
 import { MonitorLayout } from './layouts/MonitorLayout'
 import { ConfirmEmailChangePage } from './pages/account/ConfirmEmailChangePage'
 import { LegalPage } from './pages/legal/LegalPage'
+import { AcceptTermsPage } from './pages/legal/AcceptTermsPage'
 import { UndoClosurePage } from './pages/company/UndoClosurePage'
 import { PublicLayout } from './pages/public/PublicLayout'
 import { AboutPage, HomePage, MissionPage, PublicCompaniesPage, PublicParentsPage, PublicSchoolsPage } from './pages/public/PublicPages'
@@ -138,6 +139,7 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
+        <Route path="/accept-terms" element={<AcceptTermsPage />} />
         <Route path="/setup-account" element={<SetupAccountPage />} />
         <Route path="/staff-form" element={<StaffFormPage />} />
         <Route path="/confirm-email-change" element={<ConfirmEmailChangePage />} />

@@ -47,8 +47,8 @@ async function main() {
         : bad(`frontmatter: ${JSON.stringify({ terms, privacy })}`);
       for (const doc of ['terms', 'privacy']) {
         const text = fs.readFileSync(path.join(LEGAL_DIR, `${doc}.md`), 'utf8');
-        (/This document is being prepared/.test(text) && /not yet open to the public/.test(text) && /This page is a notice/.test(text) && !/PLACEHOLDER/.test(text))
-          ? ok(`${doc}.md is an honest 'being prepared' notice, no filler`) : bad(`${doc}.md does not read as the being-prepared notice`);
+        (/SafeTurns LLC/.test(text) && /support@safeturns\.com/.test(text) && !/being prepared|PLACEHOLDER|TODO|\[insert/i.test(text))
+          ? ok(`${doc}.md is the full document from SafeTurns LLC, no placeholder text`) : bad(`${doc}.md still reads as a placeholder or names the wrong party`);
       }
       const LEGAL = { terms: terms.version, privacy: privacy.version };
       eq('the old client copy is gone (one source of truth)', fs.existsSync(path.resolve(__dirname, '..', '..', 'client', 'src', 'legal')), false);

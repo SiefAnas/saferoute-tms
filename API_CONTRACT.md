@@ -126,13 +126,20 @@ Response `200`:
   "user": {
     "id": "83acb1ae-…", "email": "driver@company.com", "full_name": "Luis Ortega",
     "role": "driver", "tenantType": "company", "tenantId": "3f1c…",
-    "must_change_password": false
+    "must_change_password": false,
+    "legal_pending": false
   }
 }
 ```
 - `must_change_password: true` = the account is on a temporary password (new, or reset by the
   admin). Send the user to "set your password" (`POST /auth/change-password`) before anything
   else: every other endpoint answers `403 {"error":…, "code":"PASSWORD_CHANGE_REQUIRED"}`.
+- `legal_pending: true` = the user has not agreed to the current Terms of Use and Privacy Policy
+  (first sign-in, or a new version was published). After the password change (it comes first),
+  show both documents (`GET /legal/terms`, `GET /legal/privacy`) with an "I agree" button and a
+  "Decline and sign out" button, and send `POST /legal/accept` on agree. Until then every other
+  endpoint answers `403 {"error":…, "code":"LEGAL_ACCEPTANCE_REQUIRED"}`; `GET /auth/me` and
+  `POST /auth/change-password` stay open.
 - `role`: `driver | parent | company_admin | school_admin | school_staff`.
   `tenantType`: `company` (driver, parent, company_admin) or `school`.
 - Errors: `400` missing fields, `401 {"error":"invalid credentials"}` (wrong email/password or
@@ -153,8 +160,16 @@ Response `200`:
   the platform's secure storage (Keychain / EncryptedSharedPreferences).
 
 ### `GET /auth/me`
-Response `200`: `{ "user": { "userId", "role", "tenantType", "tenantId", "orgClaimStatus", "emailVerifiedAt", "mustChangePassword" } }`
-(note: different shape from login's `user`). Works while a password change is pending.
+Response `200`: `{ "user": { "userId", "role", "tenantType", "tenantId", "orgClaimStatus", "emailVerifiedAt", "mustChangePassword", "legalPending" } }`
+(note: different shape from login's `user`). Works while a password change or the Terms /
+Privacy agreement is pending.
+
+### `POST /legal/accept` (logged in, also while the agreement is pending)
+Body `{ "terms": "<version>", "privacy": "<version>" }`: the versions the screen showed (from
+`GET /legal/:document`). `200 { "ok": true, "legal_pending": false, "versions": {…} }`. `400` a
+version missing, `409` a version is not the current one (reload the documents and ask again),
+`403 PASSWORD_CHANGE_REQUIRED` if the temporary password has not been replaced yet. Records one
+row per document with the request IP; agreeing twice writes nothing new.
 
 ### Logout
 Client-side only: delete the stored token. There is no server logout / revocation endpoint.
@@ -166,7 +181,8 @@ number and a special character (`400` otherwise).
 ### `POST /auth/change-password` (logged in, also while a change is pending)
 Body `{ "currentPassword": "…", "newPassword": "…" }`. For the first-login change,
 `currentPassword` is the temporary password. `200` → same shape as login (`token` + `user` with
-`must_change_password: false`); store the new token, older ones stop working. `400` wrong
+`must_change_password: false`, and `legal_pending` as it now stands); store the new token, older
+ones stop working. `400` wrong
 current password, weak new password, or new = current.
 
 ### `POST /auth/forgot-password` (public)

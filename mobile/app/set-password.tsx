@@ -7,7 +7,7 @@ import { Button } from '@/components/Button'
 import { Text } from '@/components/Text'
 import { ActionError, messageFor } from '@/components/States'
 import { Field, PasswordInput } from '@/components/Form'
-import { destinationForRole } from '@/lib/roles'
+import { nextScreenFor } from '@/lib/roles'
 import { useColors } from '@/theme/theme'
 
 const RULES = 'At least 8 characters, with an uppercase letter, a lowercase letter, a number and a special character.'
@@ -26,7 +26,7 @@ export default function SetPasswordScreen() {
   const [busy, setBusy] = useState(false)
 
   if (status === 'signedOut' || !user) return <Redirect href="/login" />
-  if (!user.must_change_password) return <Redirect href={destinationForRole(user.role)} />
+  if (!user.must_change_password) return <Redirect href={nextScreenFor(user)} />
 
   const canSubmit = current.length > 0 && next.length > 0 && confirm.length > 0 && !busy
 
@@ -40,7 +40,7 @@ export default function SetPasswordScreen() {
     setBusy(true)
     try {
       const updated = await changePassword(current, next)
-      router.replace(destinationForRole(updated.role))
+      router.replace(nextScreenFor(updated))
     } catch (err) {
       setError(messageFor(err, 'Could not save your password. Please try again.'))
     } finally {

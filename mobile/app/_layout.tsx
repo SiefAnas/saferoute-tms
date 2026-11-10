@@ -59,7 +59,7 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
 
   const ready = fontsReady && status !== 'loading'
   // Push registration and tap handling, once someone is fully signed in.
-  usePushSetup(ready && status === 'signedIn' && !user?.must_change_password)
+  usePushSetup(ready && status === 'signedIn' && !user?.must_change_password && !user?.legal_pending)
 
   const onLayout = useCallback(() => {
     if (ready) void SplashScreen.hideAsync()
@@ -70,7 +70,7 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
   useEffect(() => {
     if (status !== 'signedOut') return
     const group = segments[0]
-    if (group === '(driver)' || group === '(parent)' || group === '(monitor)' || group === '(company)' || group === '(school)' || group === 'unsupported' || group === 'set-password' || group === 'notifications') {
+    if (group === '(driver)' || group === '(parent)' || group === '(monitor)' || group === '(company)' || group === '(school)' || group === 'unsupported' || group === 'set-password' || group === 'accept-terms' || group === 'notifications') {
       router.replace('/login')
     }
   }, [status, segments, router])
@@ -82,6 +82,13 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
     if (segments[0] !== 'set-password') router.replace('/set-password')
   }, [status, user?.must_change_password, segments, router])
 
+  // Then the Terms of Use / Privacy Policy agreement (first sign-in, or a new version): nothing
+  // else until the user agrees or signs out. The server refuses every other call anyway.
+  useEffect(() => {
+    if (status !== 'signedIn' || user?.must_change_password || !user?.legal_pending) return
+    if (segments[0] !== 'accept-terms') router.replace('/accept-terms')
+  }, [status, user?.must_change_password, user?.legal_pending, segments, router])
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }} onLayout={onLayout}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -92,6 +99,7 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="reset-password" />
           <Stack.Screen name="set-password" />
+          <Stack.Screen name="accept-terms" />
           <Stack.Screen name="unsupported" />
           <Stack.Screen name="notifications" />
           <Stack.Screen name="(driver)" />

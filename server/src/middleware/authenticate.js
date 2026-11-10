@@ -9,7 +9,11 @@
 //    PASSWORD_CHANGE_REQUIRED everywhere except the routes mounted with
 //    authenticate.allowPasswordChange (GET /auth/me, POST /auth/change-password).
 //  - (account-settings) users of a company that is closing get 401 ACCOUNT_CLOSING.
+//  - a user who has not accepted the current Terms of Use and Privacy Policy gets 403
+//    LEGAL_ACCEPTANCE_REQUIRED on the same routes (after the password change, which comes
+//    first). The allowPasswordChange routes, plus POST /legal/accept, stay open.
 const pool = require('../db/pool');
+const { legalPendingSql, legalPendingParams, legalGateEnabled } = require('../services/legal');
 const { verifyJwt } = require('../auth/jwt');
 const { tenantTypeForRole } = require('../db/scoped');
 const { tempPasswordExpired } = require('../services/passwords');
@@ -35,12 +39,13 @@ async function check(req, res, next, allowPasswordChange) {
               u.must_change_password, u.password_changed_at, u.temp_password_expires_at,
               COALESCE(c.claim_status, s.claim_status) AS org_claim_status,
               c.billing_status AS company_billing_status, c.closure_purge_at AS company_closure_purge_at,
-              c.timezone AS company_timezone
+              c.timezone AS company_timezone,
+              ${legalPendingSql('u', 2)} AS legal_pending
          FROM users u
          LEFT JOIN companies c ON c.id = u.company_id
          LEFT JOIN schools   s ON s.id = u.school_id
         WHERE u.id = $1`,
-      [claims.sub]
+      [claims.sub, ...legalPendingParams()]
     );
     const user = rows[0];
     if (!user || !user.is_active) {
@@ -61,6 +66,10 @@ async function check(req, res, next, allowPasswordChange) {
     if (user.must_change_password && !allowPasswordChange) {
       return res.status(403).json({ error: 'set a new password before continuing', code: 'PASSWORD_CHANGE_REQUIRED' });
     }
+    const legalPending = legalGateEnabled() && Boolean(user.legal_pending);
+    if (legalPending && !allowPasswordChange) {
+      return res.status(403).json({ error: 'agree to the Terms of Use and Privacy Policy before continuing', code: 'LEGAL_ACCEPTANCE_REQUIRED' });
+    }
 
     const tenantType = tenantTypeForRole(user.role);
     const tenantId = tenantType === 'company' ? user.company_id : user.school_id;
@@ -74,6 +83,7 @@ async function check(req, res, next, allowPasswordChange) {
       orgClaimStatus: user.org_claim_status,
       emailVerifiedAt: user.email_verified_at,
       mustChangePassword: user.must_change_password,
+      legalPending,
       // The company's IANA zone (company users only): decides its business date.
       companyTimeZone: user.company_timezone ?? null,
     };

@@ -16,6 +16,7 @@ const { tenantTypeForRole } = require('../db/scoped');
 const { sendInBackground } = require('../mail/mailer');
 const { assertValidEmail, assertPasswordStrength } = require('../validate');
 const { appUrl } = require('../config');
+const { isLegalPending, legalGateEnabled } = require('./legal');
 
 const RESET_TTL_MINUTES = 60;
 const TEMP_PASSWORD_DAYS = 7;
@@ -75,6 +76,9 @@ function loginPayload(user) {
       tenantType,
       tenantId,
       must_change_password: user.must_change_password,
+      // Still has to agree to the current Terms / Privacy Policy (services/legal.js): the client
+      // shows the agreement screen, after the password change if both are pending.
+      legal_pending: legalGateEnabled() && Boolean(user.legal_pending),
     },
   };
 }
@@ -90,7 +94,7 @@ async function changePassword(req, { currentPassword, newPassword } = {}) {
     throw new HttpError(400, 'current password is incorrect');
   }
   await setPassword(pool, user.id, newPassword, { mustChange: false });
-  return loginPayload({ ...user, must_change_password: false });
+  return loginPayload({ ...user, must_change_password: false, legal_pending: await isLegalPending(pool, user.id) });
 }
 
 // "Forgot password". Always the same answer, whether or not the email is registered, active,
